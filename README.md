@@ -35,10 +35,4 @@ options:
   --dng            Converts RAW to dng type
   --tif            Converts RAW to tif type
 ```
-### Requirements:
-1. Adobe DNG Converter--you need to set an environment variable to tell the script where the converter is. See the file config.env for an example on MacOS.
-2. If you are running on a mac, you can set your path with:
-   ```
-   source config.env
-   ```
-3. 
+
