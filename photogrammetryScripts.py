@@ -31,6 +31,12 @@ convertprocessor.add_argument("imagedirectory", help="Directory of raw files to 
 convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.")
 convertprocessor.set_defaults(func=convert_raw_to_format)
 
+transferparser = subparsers.add_parser("transfer", help="transfers files to a network drive from the specified folder.")
+transferparser.add_argument("--p", help="Prunes every Nth file from Camera X, as specified in the config.json.")
+transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
+transferparser.set_defaults(func=transfer_to_network_folder)
+
+
 args = parser.parse_args()
 if hasattr(args,"func"):
     args.func(args)
