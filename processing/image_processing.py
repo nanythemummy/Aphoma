@@ -2,25 +2,14 @@ import rawpy, subprocess, imageio
 from os import path
 from sys import platform
 from pathlib import Path
+from util import util
 
-def getConfigForPlatform(config):
-    #In the json config, differing options for platform should folllow the format:
-    #optionname:{
-    #platformname:platformval
-    #}
-    #where possible platforms are Mac, Win, Linux.
-    #The dictionary passed in here ought to be "optionname"
-    if platform.startswith("linux"):
-        return(config["Linux"])
-    elif platform == "darwin":
-        return(config["Mac"])
-    else:
-        return(config["Win"])
+
     
 def convertCR2toDNG(input,output,config):
     outputcmd = f"-d \"{output}/\""
     print(outputcmd)
-    converterpath = getConfigForPlatform(config["processing"]["DNG Converter"])
+    converterpath = util.getConfigForPlatform(config["processing"]["DNG Converter"])
     subprocess.run([converterpath,"-d",output,"-c", input])
 
 def convertCR2toTIF(input,output,config):
