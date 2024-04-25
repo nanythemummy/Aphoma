@@ -13,6 +13,7 @@
         "transfer":
         {
             "networkdrive":"\\\\Photogrammetry3\\Photogrammetry",
+            "networkdrive2":"\\\\serenity\\Imaging_Scratch\\Conservation\\CN0055 Kish ceramics",
             "host":"Photogrammetry3"
         }
     }
