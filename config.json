@@ -15,6 +15,21 @@
             "networkdrive":"\\\\Photogrammetry3\\Photogrammetry",
             "networkdrive2":"\\\\serenity\\Imaging_Scratch\\Conservation\\CN0055 Kish ceramics",
             "host":"Photogrammetry3"
+
+        },
+        "ortery":
+        {
+            "pics_per_revolution":24,
+            "pics_per_cam":[{"1":24},
+                            {"2":24},
+                            {"3":24},
+                            {"4":24},
+                            {"5":12},
+                            {"6":24},
+                            {"7":24},
+                            {"8":24},
+                            {"9":24},
+                            {"10":12}]
         }
     }
 }
