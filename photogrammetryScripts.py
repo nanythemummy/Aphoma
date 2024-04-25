@@ -18,7 +18,7 @@ def convert_raw_to_format(args):
                         image_processing.convertCR2toTIF(os.path.join(f),outputdir)
 
 
-parser = argparse.ArgumentParser(prog="Photogrammetry Automation")
+parser = argparse.ArgumentParser(prog="photogrammetryScripts")
 subparsers = parser.add_subparsers(help="Sub-command help")
 convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
 convertprocessor.add_argument("--dng",help="Converts to dng type", action="store_true")
