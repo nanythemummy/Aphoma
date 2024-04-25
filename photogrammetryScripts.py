@@ -1,7 +1,7 @@
 from processing import image_processing
-import os.path
-import argparse
+import os.path, json, argparse
 
+config = {}
 def convert_raw_to_format(args):
     inputdir = args.imagedirectory
     outputdir = args.outputdirectory
@@ -13,9 +13,13 @@ def convert_raw_to_format(args):
             if os.path.isfile(f):
                 if f.name.endswith(".CR2"): #CANON CAMERA!
                     if args.dng:
-                        image_processing.convertCR2toDNG(os.path.join(f),outputdir)
+                        image_processing.convertCR2toDNG(os.path.join(f),outputdir, config["processing"])
                     if args.tif:
-                        image_processing.convertCR2toTIF(os.path.join(f),outputdir)
+                        image_processing.convertCR2toTIF(os.path.join(f),outputdir, config["processing"])
+
+def load_config():
+    with open('config.json') as f:
+        config=json.load(f)
 
 
 parser = argparse.ArgumentParser(prog="Photogrammetry Automation")
@@ -26,6 +30,7 @@ convertprocessor.add_argument("--tif", help = "Convert to tif type", action="sto
 convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.")
 convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.")
 convertprocessor.set_defaults(func=convert_raw_to_format)
+
 args = parser.parse_args()
 if hasattr(args,"func"):
     args.func(args)

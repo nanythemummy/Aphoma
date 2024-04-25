@@ -1,0 +1,19 @@
+{
+    "config":
+    {
+        "processing":
+        {
+            "DNG_Converter":
+            {
+                "Mac":"/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter",
+                "Win":"C:\\Program Files\\Adobe\\Adobe DNG Converter",
+                "Linux":""
+            }
+        },
+        "transfer":
+        {
+            "networkdrive":"\\\\Photogrammetry3\\Photogrammetry",
+            "host":"Photogrammetry3"
+        }
+    }
+}
