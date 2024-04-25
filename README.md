@@ -3,9 +3,15 @@ Experimental  Scripts for use in a Museum or Archaeology
 ## Setup:
 1. Install Adobe DNG Converter. You can find it here: https://helpx.adobe.com/camera-raw/digital-negative.html
 2. Setup a virtual environment:
+  UNIX
   ```
   python3 -m venv venv
   source venv/bin/activate
+  ```
+  WINDOWS
+  ```
+  python -m venv venv
+  venv\scripts\activate.bat
   ```
 3. DNG Converter needs to be an env variable. Find it on your computer and change the path in config.env
   ```
