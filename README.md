@@ -1,7 +1,7 @@
 # museumcode
 Experimental  Scripts for use in a Museum or Archaeology
 ## Setup:
-1. Install Adobe DNG Converter. You can find it here: https://helpx.adobe.com/camera-raw/digital-negative.html
+1. Install Adobe DNG Converter. You can find it here: https://helpx.adobe.com/camera-raw/digital-negative.html, if you want to use the DNG conversion command.
 2. Setup a virtual environment:
   UNIX
   ```
@@ -13,11 +13,6 @@ Experimental  Scripts for use in a Museum or Archaeology
   python -m venv venv
   venv\scripts\activate.bat
   ```
-3. DNG Converter needs to be an env variable. Find it on your computer and change the path in config.env
-  ```
-  source config.env
-  ```
-
 4.  Install requirements.txt
   ```
   pip install -r requirements.txt
@@ -43,6 +38,10 @@ options:
 ```
 
 ## Converters:
+### Configuration:
+Install Adobe's DNG converter( see above), and configure the path for it.
+- **processing:DNG_Converter** This is the path to the DNG converter exec. If you are using windows, either escape the backslashes or type it like you would a unix path and let python sort it out.
+  
 To convert a folder of images from RAW to another type, run the following command, where the destination format is specified with a flag.
 ```
 python photogrammetryScripts.py convert --dng ./samples/raw ./samples/dng
