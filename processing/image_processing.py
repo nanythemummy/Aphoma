@@ -1,15 +1,18 @@
 import rawpy, subprocess, imageio
-from os import environ, path
+from os import path
+from sys import platform
 from pathlib import Path
+from util import util
 
 
-def convertCR2toDNG(input,output):
+    
+def convertCR2toDNG(input,output,config):
     outputcmd = f"-d \"{output}/\""
     print(outputcmd)
-    converterpath = environ.get('DNG_CONVERTER')
+    converterpath = util.getConfigForPlatform(config["processing"]["DNG Converter"])
     subprocess.run([converterpath,"-d",output,"-c", input])
 
-def convertCR2toTIF(input,output):
+def convertCR2toTIF(input,output,config):
     fn = Path(input).stem
     with rawpy.imread(input) as raw:
         rgb = raw.postprocess(use_camera_wb=True)
