@@ -7,12 +7,15 @@ import os.path, json, argparse
 
 
 def transfer_to_network_folder(args):
+
     inputdir = args.imagedirectory
     jobname = args.jobname
-    filestocopy = [os.path.join(inputdir,f) for f in os.listdir(inputdir) if f.endswith("cr2")]
+    def getFileCreationTime(item):
+        return os.path.getctime(item)
+    fs=[os.path.join(inputdir,f) for f in os.listdir(inputdir) if f.endswith("cr2")]
+    filestocopy = sorted(fs,key=getFileCreationTime)
     if args.p: #if the pics need to be pruned...
        filestocopy= transferscripts.pruneOrteryPics(filestocopy,config["ortery"])
-
     transferscripts.transferToNetworkDirectory(jobname, filestocopy,config["transfer"]["networkdrive"])
 
 def convert_raw_to_format(args):

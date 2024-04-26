@@ -1,5 +1,5 @@
 import shutil
-import os.path
+import os.path, math
 
 #this script is for transfering files from the ortery computer to the network drive.
 def transferToNetworkDirectory(jobname, filestocopy, transferdir, prune=False):
@@ -16,11 +16,25 @@ def transferToNetworkDirectory(jobname, filestocopy, transferdir, prune=False):
         shutil.copy(f,destpath)
 
 def pruneOrteryPics(filestocopy, orteryconfig):
+
     picsperrevolution=orteryconfig["pics_per_revolution"]
     desirednumbers=orteryconfig["pics_per_cam"]
     expectedfiles = len(desirednumbers)*picsperrevolution
-    filestocopy.sort()
     if(len(filestocopy)!=expectedfiles):
         print(f"Cannot prune: the expected number of files was {expectedfiles}, but there were really {len(filestocopy)} files in the folder.")
         return filestocopy
-    print(filestocopy)
+    finallist = []
+    print("Pruning pics according to specifications per camera in the config.json file.")
+    for i,k in enumerate(desirednumbers.keys()):
+        temp = []
+        if desirednumbers[k]==0:
+            continue;
+        fractiontoremove = (picsperrevolution-desirednumbers[k])/picsperrevolution
+        for j in range(0,picsperrevolution):
+            if (j*fractiontoremove)%1==0:
+                finallist.append(filestocopy[i*picsperrevolution+j])
+    return finallist
+
+        
+        
+
