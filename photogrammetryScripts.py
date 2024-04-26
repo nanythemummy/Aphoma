@@ -24,9 +24,10 @@ def convert_raw_to_format(args):
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
     with os.scandir(inputdir) as it: #scans through a given directory, returning an interator.
+        print(inputdir)
         for f in it:
             if os.path.isfile(f):
-                if f.name.endswith(".CR2"): #CANON CAMERA!
+                if f.name.upper().endswith(".CR2"): #CANON CAMERA!
                     if args.dng:
                         image_processing.convertCR2toDNG(os.path.join(f),outputdir, config["processing"])
                     if args.tif:

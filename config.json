@@ -6,7 +6,7 @@
             "DNG_Converter":
             {
                 "Mac":"/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter",
-                "Win":"C:\\Program Files\\Adobe\\Adobe DNG Converter",
+                "Win":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
                 "Linux":""
             }
         },
