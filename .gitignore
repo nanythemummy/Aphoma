@@ -2,3 +2,4 @@ venv/
 samples/
 *.pyc
 __pycache__/
+~$*
