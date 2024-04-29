@@ -1,13 +1,19 @@
 from processing import image_processing
 from transfer import transferscripts
+from photogrammetry import MetashapeTools
 import os.path, json, argparse
 
-#This script mainly takes input and arguments from the command line and delegate them elsewhere.
+#This script mainly takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
 
-
+def build_model(args):
+    """Wrapper script for using automating the use of agisoft metashape from the command line."""
+    job = args.jobname
+    photoinput = args.photos
+    outputdir = args.outputdirectory
+    MetashapeTools.build_basic_model(photoinput,outputdir,job)
 def transfer_to_network_folder(args):
-
+    """Wrapper script for running the transfer functions from the command line."""
     inputdir = args.imagedirectory
     jobname = args.jobname
     def getFileCreationTime(item):
@@ -19,6 +25,7 @@ def transfer_to_network_folder(args):
     transferscripts.transferToNetworkDirectory(jobname, filestocopy,config["transfer"]["networkdrive"])
 
 def convert_raw_to_format(args):
+    """wrapper script for using the RAW image conversion fucntions via the command line."""
     inputdir = args.imagedirectory
     outputdir = args.outputdirectory
     if not os.path.exists(outputdir):
@@ -34,6 +41,7 @@ def convert_raw_to_format(args):
                         image_processing.convertCR2toTIF(os.path.join(f),outputdir, config["processing"])
 
 def load_config():
+    """Loads the configuration values in config.json and stores them in a dictionary."""
     with open('config.json') as f:
         return json.load(f)["config"]
    
@@ -55,9 +63,15 @@ transferparser.add_argument("jobname", help="The name of this job. This translat
 transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
 transferparser.set_defaults(func=transfer_to_network_folder)
 
+photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
+photogrammetryparser.add_argument("jobname", help="The name of the project")
+photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
+photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
+photogrammetryparser.set_defaults(func=build_model)
 
 args = parser.parse_args()
 if hasattr(args,"func"):
     args.func(args)
-else:  
+else:
     parser.print_help()
+
