@@ -17,11 +17,12 @@ Experimental  Scripts for use in a Museum or Archaeology
   ```
   pip install -r requirements.txt
 ## Metashape
-These scripts run metashape in headless mode via the python module. They require that the metashape wheel be manually installed and then activated with the product key.
+These scripts run metashape in headless mode via the python module. They require that the metashape wheel be manually installed and then activated with the product key. It is not in requirements.txt
 Instructions can be found here:
 https://agisoft.freshdesk.com/support/solutions/articles/31000148930-how-to-install-metashape-stand-alone-python-module
-1. Download the Standalone Python Wheel from the metashape site.
+1. Download the Standalone Python Wheel from the metashape site. https://www.agisoft.com/downloads/installer/
 2. ``` pip install c:\path\to\wheel\wheel.whl ```
+3. Install the requirements text requirements as normal.
 
 ## Transfer
 This code facilitates the use of a seperate scanning workstation and photogrammetry workstation. It is meant to automate the workflow between the two.
