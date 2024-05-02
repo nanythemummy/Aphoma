@@ -5,6 +5,9 @@ import os.path, json, argparse
 #This script mainly takes input and arguments from the command line and delegate them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
 
+def color_process(args):
+    if args.g:
+        image_processing.getGrayFromCard(args.inputimage)
 
 def transfer_to_network_folder(args):
 
@@ -55,6 +58,10 @@ transferparser.add_argument("jobname", help="The name of this job. This translat
 transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
 transferparser.set_defaults(func=transfer_to_network_folder)
 
+colorprocess  = subparsers.add_parser("color", help="Color Processing Functions")
+colorprocess.add_argument("inputimage", help="image to process")
+colorprocess.add_argument("--g", help="given a color card, find a gray square and return the average rgb of the pixels", action="store_true")
+colorprocess.set_defaults(func=color_process)
 
 args = parser.parse_args()
 if hasattr(args,"func"):
