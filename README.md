@@ -17,6 +17,7 @@ Experimental  Scripts for use in a Museum or Archaeology
   ```
   pip install -r requirements.txt
 ```
+
 ## Metashape
 These scripts run metashape in headless mode via the python module. They require that the metashape wheel be manually installed and then activated with the product key. It is not in requirements.txt
 Instructions can be found here:
@@ -67,4 +68,19 @@ options:
   --dng            Converts RAW to dng type
   --tif            Converts RAW to tif type
 ```
+## Watcher
+The watcher script is intended to be run on a computer which waits for pictures to show up in a folder and then builds models with them. It just runs in the background on that computer and waits for a manifest file entitled "Files_to_Process.txt" to appear in the directory specified in the config.json or on the command line. When the file appears, it makes a project directory in the configurable location, exports the RAW files to Tiffs, and builds a model.
 
+### Configuration
+- **listen_directory** This is the full path to the directory where the watcher should be listening for the manifest. Give a unix or Windows style directory, but if you use a Windows directory, escape the backslashes. If the user inputs a directory on the command line, the command line option will override this configuration.
+- **project_base** the base directory which contains your model projects. Each new model project will be built out in this directory/projectname
+
+```
+usage: photogrammetryScripts watch [-h] inputdir
+
+positional arguments:
+  inputdir    Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.
+
+options:
+  -h, --help  show this help message and exit
+```
