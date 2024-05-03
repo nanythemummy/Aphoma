@@ -35,6 +35,14 @@
         {
             "listen_directory":"",
             "project_base":"e:\\automation"
+        },
+        "photogrammetry":
+        {
+            "error_thresholds":{
+                "reconstruction_uncertainty":15,
+                "projection_accuracy":5,
+                "reprojection_error":0.3
+            }
         }
     }
 }
