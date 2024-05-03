@@ -1,5 +1,6 @@
 from sys import platform
 
+
 def getConfigForPlatform(config):
     #In the json config, differing options for platform should folllow the format:
     #optionname:{
@@ -13,3 +14,5 @@ def getConfigForPlatform(config):
         return(config["Mac"])
     else:
         return(config["Win"])
+    
+

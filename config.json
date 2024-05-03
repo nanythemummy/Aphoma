@@ -30,6 +30,11 @@
                             "8":24,
                             "9":24,
                             "10":24}
+        },
+        "watcher":
+        {
+            "listen_directory":"",
+            "project_base":"e:\\automation"
         }
     }
 }
