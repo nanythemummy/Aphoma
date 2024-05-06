@@ -33,7 +33,8 @@
         },
         "metashape":
         {
-
+            "mask_path":"C:\\Users\\keajohnston\\Documents\\Projects\\Rollouts\\Meroitic Fineware 29176\\Photogrammetry\\Masks",
+            "mask_ext":"tif"
         }
     }
 }
