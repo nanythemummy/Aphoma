@@ -16,7 +16,7 @@ Experimental  Scripts for use in a Museum or Archaeology
 4.  Install requirements.txt
   ```
   pip install -r requirements.txt
-```
+  ```
 ## Metashape
 These scripts run metashape in headless mode via the python module. They require that the metashape wheel be manually installed and then activated with the product key. It is not in requirements.txt
 Instructions can be found here:
