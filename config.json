@@ -31,10 +31,21 @@
                             "9":24,
                             "10":24}
         },
-        "metashape":
+        "watcher":
         {
+            "listen_directory":"",
+            "project_base":"e:\\automation"
+        },
+        "photogrammetry":
+        {
+            "error_thresholds":{
+                "reconstruction_uncertainty":15,
+                "projection_accuracy":5,
+                "reprojection_error":0.3
+            },
             "mask_path":"C:\\Users\\keajohnston\\Documents\\Projects\\Rollouts\\Meroitic Fineware 29176\\Photogrammetry\\Masks",
             "mask_ext":"tif"
+
         }
     }
 }
