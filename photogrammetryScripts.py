@@ -150,12 +150,12 @@ transferparser.add_argument("jobname", help="The name of this job. This translat
 transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
 transferparser.set_defaults(func=transfer_to_network_folder)
 
-<<<<<<< HEAD
+
 colorprocess  = subparsers.add_parser("color", help="Color Processing Functions")
 colorprocess.add_argument("inputimage", help="image to process")
 colorprocess.add_argument("--g", help="given a color card, find a gray square and return the average rgb of the pixels", action="store_true")
 colorprocess.set_defaults(func=color_process)
-=======
+
 photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
 photogrammetryparser.add_argument("jobname", help="The name of the project")
 photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
@@ -165,7 +165,7 @@ photogrammetryparser.set_defaults(func=build_model)
 watcherprocessor = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
 watcherprocessor.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
 watcherprocessor.set_defaults(func=watch_and_process)      
->>>>>>> 755850d6b17e40cc104c05c9ad46d7850d6071c5
+
 
 args = parser.parse_args()
 if hasattr(args,"func"):
