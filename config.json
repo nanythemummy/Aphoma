@@ -38,10 +38,15 @@
         },
         "photogrammetry":
         {
+            "mask_path": "E:\\Photogrammetry\\Kish_157068\\Masks",
+            "mask_ext":"tif",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,
-                "reprojection_error":0.3
+                "reprojection_error":0.3,
+                "reprojection_max_selection":0.1,
+                "projection_accuracy_max_selection":0.5,
+                "reconstruction_accuracy_max_selection":0.5
             }
         }
     }
