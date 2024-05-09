@@ -44,9 +44,10 @@
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,
                 "reprojection_error":0.3,
-                "reprojection_max_selection":0.1,
+                "reprojection_max_selection_per_iteration":0.1,
+                "reprojection_max_selection":0.5,
                 "projection_accuracy_max_selection":0.5,
-                "reconstruction_accuracy_max_selection":0.5
+                "reconstruction_uncertainty_max_selection":0.5
             }
         }
     }
