@@ -1,6 +1,6 @@
 from processing import image_processing
 from transfer import transferscripts
-from photogrammetry import MetashapeTools
+
 import os.path, json, argparse
 import time
 from watchdog.observers import Observer
@@ -46,29 +46,35 @@ def watch_and_process(args):
 
 #This script contains the full automation flow and is triggered by the watche
 def build_model_from_manifest(manifest):
-    filestoprocess=[]
-    parentdir= os.path.abspath(os.path.join(manifest,os.pardir))
-    projname = parentdir.split(os.sep)[-1] #forward slash should work since os.path functions convert windows-style paths to unix-style.
-    with open(manifest,"r") as f:
-        filestoprocess = f.read().split(",")
-    #if the configured project directory doesn't exist, make it.
-    project_base =os.path.join(config["watcher"]["project_base"])
-    if not os.path.exists(project_base):
-        os.mkdir(project_base)
-    #setup project directories.
-    project_folder = os.path.join(project_base,projname)
-    tiffolder = os.path.join(project_folder,"tiff")
-    outputfolder = os.path.join(project_folder,"output")
-    if not os.path.exists(project_folder):
-        os.mkdir(project_folder)
-        os.mkdir(tiffolder)
-        os.mkdir(outputfolder)
-    #export Camera RAW files to Tiffs
-    for f in filestoprocess:
-        ext = os.path.splitext(f)[1].upper()
-        if ext  ==".CR2":
-            image_processing.convertCR2toTIF(f,tiffolder,config["processing"])
-    MetashapeTools.build_basic_model(tiffolder,project_folder,projname)
+    try:
+        from photogrammetry import MetashapeTools
+        filestoprocess=[]
+        parentdir= os.path.abspath(os.path.join(manifest,os.pardir))
+        projname = parentdir.split(os.sep)[-1] #forward slash should work since os.path functions convert windows-style paths to unix-style.
+        with open(manifest,"r") as f:
+            filestoprocess = f.read().split(",")
+        #if the configured project directory doesn't exist, make it.
+        project_base =os.path.join(config["watcher"]["project_base"])
+        if not os.path.exists(project_base):
+            os.mkdir(project_base)
+        #setup project directories.
+        project_folder = os.path.join(project_base,projname)
+        tiffolder = os.path.join(project_folder,"tiff")
+        outputfolder = os.path.join(project_folder,"output")
+        if not os.path.exists(project_folder):
+            os.mkdir(project_folder)
+            os.mkdir(tiffolder)
+            os.mkdir(outputfolder)
+        #export Camera RAW files to Tiffs
+        for f in filestoprocess:
+            ext = os.path.splitext(f)[1].upper()
+            if ext  ==".CR2":
+                image_processing.convertCR2toTIF(f,tiffolder,config["processing"])
+        MetashapeTools.build_basic_model(tiffolder,project_folder,projname)
+    except ImportError as e:
+        print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
+        raise e
+        
 
 
 
@@ -77,11 +83,15 @@ def build_model_from_manifest(manifest):
     
 
 def build_model(args):
-    """Wrapper script for using automating the use of agisoft metashape from the command line."""
-    job = args.jobname
-    photoinput = args.photos
-    outputdir = args.outputdirectory
-    MetashapeTools.build_basic_model(photoinput,outputdir,job)
+    try:
+        from photogrammetry import MetashapeTools
+        job = args.jobname
+        photoinput = args.photos
+        outputdir = args.outputdirectory
+        MetashapeTools.build_basic_model(photoinput,outputdir,job)
+    except ImportError as e:
+        print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
+        raise e
 
 #this script is for transfering files from the ortery computer to the network drive. As a final step, it leaves a manifest of the files it copied as a 
 #Comma seperated list entitled "Files_To_Process.txt." This file will be used as a signal that the sending is complete by any machine listening for changes on the folder.
