@@ -10,7 +10,11 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
+<<<<<<< HEAD
             "args":["color","--g","c:\\Users\\kjohnston\\Desktop\\IMG_5357.tif"]
+=======
+            "args":["watch","e:\\Photogrammetry\\"]
+>>>>>>> 755850d6b17e40cc104c05c9ad46d7850d6071c5
         }
     ]
 }

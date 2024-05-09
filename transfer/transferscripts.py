@@ -1,20 +1,20 @@
 import shutil
 import os.path, math
 
-#this script is for transfering files from the ortery computer to the network drive.
-def transferToNetworkDirectory(jobname, filestocopy, transferdir, prune=False):
+
+def transferToNetworkDirectory(destpath, filestocopy):
     
-    #transfer image files in directory to the networkdrive with a subfolder called jobname.
-    if not os.path.exists(transferdir):
-        print(f"Invalid network directory in config.json: either {transferdir} does not exist, or you do not have permission to use it.")
-        return
-    destpath = os.path.join(transferdir, jobname)
-    if not os.path.exists(os.path.join(transferdir,jobname)):
+    #transfer image files in directory to the networkdrive 
+    if not os.path.exists(os.path.join(destpath)):
         os.mkdir(destpath)
 
     for f in filestocopy:
+        print(f"Transfering {f}")
         shutil.copy(f,destpath)
 
+
+    
+#removes pics from a set of pictures such that the desired number in the configuration file is reached.
 def pruneOrteryPics(filestocopy, orteryconfig):
 
     picsperrevolution=orteryconfig["pics_per_revolution"]
