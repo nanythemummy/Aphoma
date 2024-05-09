@@ -9,12 +9,9 @@ from watchdog.events import FileSystemEventHandler
 
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
-
-<<<<<<< HEAD
 def color_process(args):
     if args.g:
         image_processing.getGrayFromCard(args.inputimage)
-=======
 #These classes are part of a filesystem watcher which watches for the 
 #appearance of a manifest file in the desired directory, then builds a model with the pictures in the manifest.
 class WatcherHandler(FileSystemEventHandler):
@@ -22,9 +19,6 @@ class WatcherHandler(FileSystemEventHandler):
     def on_any_event(event):
         if event.event_type=="created" and  event.src_path.endswith("Files_to_Process.txt"):
                 build_model_from_manifest(event.src_path)
->>>>>>> 755850d6b17e40cc104c05c9ad46d7850d6071c5
-
-        
 class Watcher:
     def __init__(self,watchdir):
        self.observer = Observer()
