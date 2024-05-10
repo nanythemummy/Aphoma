@@ -70,17 +70,11 @@ def build_model_from_manifest(manifest):
             ext = os.path.splitext(f)[1].upper()
             if ext  ==".CR2":
                 image_processing.convertCR2toTIF(f,tiffolder,config["processing"])
-        MetashapeTools.build_basic_model(tiffolder,project_folder,projname,config["photogrammetry"])
+        MetashapeTools.buildBasicModel(tiffolder,project_folder,projname,config["photogrammetry"])
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e
         
-
-
-
-
-    
-    
 
 def build_model(args):
     try:
@@ -88,7 +82,7 @@ def build_model(args):
         job = args.jobname
         photoinput = args.photos
         outputdir = args.outputdirectory
-        MetashapeTools.build_basic_model(photoinput,outputdir,job, config["photogrammetry"])
+        MetashapeTools.buildBasicModel(photoinput,outputdir,job, config["photogrammetry"])
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e

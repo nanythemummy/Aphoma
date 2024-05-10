@@ -1,7 +1,7 @@
 import os
 import Metashape
 
-def build_basic_model(photodir, outputdir, projectname, config):
+def buildBasicModel(photodir, outputdir, projectname, config):
     """Builds a model using the photos in the directory specified."""
     #Open a new document
     projectpath = os.path.join(outputdir,projectname+".psx")
@@ -63,7 +63,7 @@ def optimizeCameras(chunk, final_optimization=False):
                           adaptive_fitting=False,
                           tiepoint_covariance=False)
 
-#Performs the 
+#Performs the error reduction/optimization algorithm as described by Neffra Matthews and Noble,Tommy. "In the Round Tutorial", 2018. 
 def refineSparseCloud(doc,chunk,config):
     #copied from the script RefineSparseCloud.py     
     chunk.optimizeCameras()
