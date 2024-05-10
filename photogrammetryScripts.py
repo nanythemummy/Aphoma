@@ -82,7 +82,10 @@ def build_model(args):
         job = args.jobname
         photoinput = args.photos
         outputdir = args.outputdirectory
-        MetashapeTools.buildBasicModel(photoinput,job,outputdir, config["photogrammetry"])
+        if not args.r: #if we are not running the test-reorient code....
+            MetashapeTools.buildBasicModel(photoinput,job,outputdir, config["photogrammetry"])
+        else:
+            MetashapeTools.testReoirient(os.path.join(outputdir,job+".psx"))
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e
@@ -154,6 +157,7 @@ photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for
 photogrammetryparser.add_argument("jobname", help="The name of the project")
 photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
 photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
+photogrammetryparser.add_argument("-r", help="This function tests the scripts for reorientation.",action="store_true")
 photogrammetryparser.set_defaults(func=build_model)
 
 watcherprocessor = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")

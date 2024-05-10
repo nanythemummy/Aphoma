@@ -1,6 +1,6 @@
 import os
 import Metashape
-import shutil
+import math
 
 def buildBasicModel(photodir, projectname, projectdir, config):
     """Builds a model using the photos in the directory specified."""
@@ -150,6 +150,31 @@ def removeAboveErrorThreshold(chunk, filtertype,max_error,max_points):
             removed_above_threshold=(v<=max_error)
             break
     return removed_above_threshold
+
+def testReoirient(psxpath):
+    doc = Metashape.Document()
+    doc.open(path=psxpath)
+    reorientModel(doc)
+    
+
+def reorientModel(doc):
+    generateBoundingBox(doc.chunks[0])#for now, assume we will use a one-chunk model.
+    doc.save()
+def generateBoundingBox(chunk):
+    model = chunk.model
+    if not model:
+        print("Generate a model before orienting it.")
+        return
+    verts = [a for a in model.vertices]
+    verts.sort(key=(lambda e: e.coord.x))
+    width = abs(verts[len(verts)-1].coord.x - verts[0].coord.x)
+    verts.sort(key=(lambda e: e.coord.y))
+    height = abs(verts[len(verts)-1].coord.y - verts[0].coord.y)
+    verts.sort(key=(lambda e: e.coord.z))
+    depth = abs(verts[len(verts)-1].coord.z - verts[0].coord.z)
+    chunk.region.size=Metashape.Vector([float(width),float(height),float(depth)])
+
+
 
 
 
