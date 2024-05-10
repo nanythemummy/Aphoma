@@ -2,10 +2,16 @@ import os
 import Metashape
 import shutil
 
-def buildBasicModel(photodir, outputdir, projectname, config):
+def buildBasicModel(photodir, projectname, projectdir, config):
     """Builds a model using the photos in the directory specified."""
     #Open a new document
-    projectpath = os.path.join(outputdir,projectname+".psx")
+    projectpath = os.path.join(projectdir,projectname+".psx")
+    outputpath = os.path.join(projectdir,config["output_path"])
+    maskpath = None
+    if config["mask_path"] and os.path.exists(os.path.join(projectdir,config["mask_path"])):
+        maskpath = os.path.join(projectdir,config["mask_path"])
+    if not os.path.exists(outputpath):
+        os.mkdir(outputpath)
     doc = Metashape.Document()
     try:
         if os.path.exists(projectpath):
@@ -27,18 +33,15 @@ def buildBasicModel(photodir, outputdir, projectname, config):
                     chunk.addPhotos(os.path.join(photodir,i))
             doc.save()
             #add masks if they exist.
-            maskKeypoints=False
-            if config["mask_path"]:
-                mp = os.path.join(config["mask_path"])
+            if maskpath:
                 ext = config["mask_ext"]
-                template = f"{mp}{os.sep}{{filename}}.{ext}"
+                template = f"{maskpath}{os.sep}{{filename}}.{ext}"
                 chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
-                maskKeypoints=True
             chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
                             generic_preselection=True,
                             reference_preselection=True,
                             reference_preselection_mode=Metashape.ReferencePreselectionMode.ReferencePreselectionSource,
-                            filter_mask=maskKeypoints,
+                            filter_mask=(maskpath!=None),
                             mask_tiepoints=False,
                             filter_stationary_points=True,
                             tiepoint_limit=0,
@@ -52,14 +55,21 @@ def buildBasicModel(photodir, outputdir, projectname, config):
             chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
             chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData)
             doc.save()
+        #build texture
+        if not chunk.model.textures:
+            chunk.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
+            chunk.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
+        doc.save()
+        print("Finished! Now exporting")
+        chunk.exportModel(os.path.join(projectdir,projectname+".obj"))
         
+
     except Exception as e:
         #maybe if metashape leaves a lock on the file, go nuke it in the .files subfolder.
         #There doesn't seem to be a clean way to close
-        filesfolder = os.path.join(outputdir,projectname+".files")
+        filesfolder = os.path.join(projectdir,projectname+".files")
         if os.path.exists(os.path.join(filesfolder,"lock")):
             os.remove(os.path.join(filesfolder,"lock"))          
-        #the document.
         raise e
 
     

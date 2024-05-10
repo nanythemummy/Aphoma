@@ -38,8 +38,9 @@
         "photogrammetry":
         {
             "sparse_cloud_quality":1,
-            "model_quality":4,
-            "mask_path": "E:\\Photogrammetry\\Kish_157068\\Masks",
+            "model_quality":2,
+            "mask_path": "Masks",
+            "output_path":"Output",
             "mask_ext":"png",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
@@ -49,7 +50,9 @@
                 "reprojection_max_selection":0.5,
                 "projection_accuracy_max_selection":0.5,
                 "reconstruction_uncertainty_max_selection":0.5
-            }
+            },
+            "texture_size":4096,
+            "texture_count":1
         }
     }
 }
