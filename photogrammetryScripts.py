@@ -9,7 +9,9 @@ from watchdog.events import FileSystemEventHandler
 
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
-
+def color_process(args):
+    if args.g:
+        image_processing.getGrayFromCard(args.inputimage)
 #These classes are part of a filesystem watcher which watches for the 
 #appearance of a manifest file in the desired directory, then builds a model with the pictures in the manifest.
 class WatcherHandler(FileSystemEventHandler):
@@ -17,8 +19,6 @@ class WatcherHandler(FileSystemEventHandler):
     def on_any_event(event):
         if event.event_type=="created" and  event.src_path.endswith("Files_to_Process.txt"):
                 build_model_from_manifest(event.src_path)
-
-        
 class Watcher:
     def __init__(self,watchdir):
        self.observer = Observer()
@@ -70,17 +70,11 @@ def build_model_from_manifest(manifest):
             ext = os.path.splitext(f)[1].upper()
             if ext  ==".CR2":
                 image_processing.convertCR2toTIF(f,tiffolder,config["processing"])
-        MetashapeTools.build_basic_model(tiffolder,project_folder,projname)
+        MetashapeTools.buildBasicModel(tiffolder,projname, project_folder,config["photogrammetry"])
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e
         
-
-
-
-
-    
-    
 
 def build_model(args):
     try:
@@ -88,7 +82,7 @@ def build_model(args):
         job = args.jobname
         photoinput = args.photos
         outputdir = args.outputdirectory
-        MetashapeTools.build_basic_model(photoinput,outputdir,job)
+        MetashapeTools.buildBasicModel(photoinput,job,outputdir, config["photogrammetry"])
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e
@@ -150,6 +144,12 @@ transferparser.add_argument("jobname", help="The name of this job. This translat
 transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
 transferparser.set_defaults(func=transfer_to_network_folder)
 
+
+colorprocess  = subparsers.add_parser("color", help="Color Processing Functions")
+colorprocess.add_argument("inputimage", help="image to process")
+colorprocess.add_argument("--g", help="given a color card, find a gray square and return the average rgb of the pixels", action="store_true")
+colorprocess.set_defaults(func=color_process)
+
 photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
 photogrammetryparser.add_argument("jobname", help="The name of the project")
 photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
@@ -159,6 +159,7 @@ photogrammetryparser.set_defaults(func=build_model)
 watcherprocessor = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
 watcherprocessor.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
 watcherprocessor.set_defaults(func=watch_and_process)      
+
 
 args = parser.parse_args()
 if hasattr(args,"func"):
