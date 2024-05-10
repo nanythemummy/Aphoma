@@ -13,7 +13,6 @@
         "transfer":
         {
             "networkdrive":"\\\\Photogrammetry3\\Photogrammetry",
-            "networkdrive2":"\\\\serenity\\Imaging_Scratch\\Conservation\\CN0055 Kish ceramics",
             "host":"Photogrammetry3"
 
         },
@@ -38,8 +37,10 @@
         },
         "photogrammetry":
         {
+            "sparse_cloud_quality":1,
+            "model_quality":4,
             "mask_path": "E:\\Photogrammetry\\Kish_157068\\Masks",
-            "mask_ext":"tif",
+            "mask_ext":"png",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,

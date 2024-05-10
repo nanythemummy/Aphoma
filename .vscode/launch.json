@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
 
-            "args":["watch","e:\\Photogrammetry\\"]
+            "args":["photogrammetry", "kish_api", "E:\\Photogrammetry\\Kish_157068\\TIF","E:\\Photogrammetry\\Kish_157068\\"]
 
         }
     ]
