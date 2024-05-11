@@ -1,4 +1,4 @@
-from_target,to_target,distance_m,,,,m
+from_target,to_target,distance_m (+/- 0.00005m),
 40,60,0.58528,,,,
 40,61,0.53926,,,,
 40,62,0.49290,,,,
