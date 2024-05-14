@@ -13,7 +13,6 @@
         "transfer":
         {
             "networkdrive":"\\\\Photogrammetry3\\Photogrammetry",
-            "networkdrive2":"\\\\serenity\\Imaging_Scratch\\Conservation\\CN0055 Kish ceramics",
             "host":"Photogrammetry3"
 
         },
@@ -38,14 +37,22 @@
         },
         "photogrammetry":
         {
+            "sparse_cloud_quality":1,
+            "model_quality":2,
+            "mask_path": "Masks",
+            "output_path":"Output",
+            "mask_ext":"png",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,
-                "reprojection_error":0.3
+                "reprojection_error":0.3,
+                "reprojection_max_selection_per_iteration":0.1,
+                "reprojection_max_selection":0.5,
+                "projection_accuracy_max_selection":0.5,
+                "reconstruction_uncertainty_max_selection":0.5
             },
-            "mask_path":"C:\\Users\\keajohnston\\Documents\\Projects\\Rollouts\\Meroitic Fineware 29176\\Photogrammetry\\Masks",
-            "mask_ext":"tif"
-
+            "texture_size":4096,
+            "texture_count":1
         }
     }
 }

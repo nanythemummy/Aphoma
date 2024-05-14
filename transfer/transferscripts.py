@@ -9,6 +9,7 @@ def transferToNetworkDirectory(destpath, filestocopy):
         os.mkdir(destpath)
 
     for f in filestocopy:
+        print(f"Transfering {f}")
         shutil.copy(f,destpath)
 
 
