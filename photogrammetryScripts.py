@@ -123,7 +123,10 @@ def convert_raw_to_format(args):
                         image_processing.convertCR2toDNG(os.path.join(f),outputdir, config["processing"])
                     if args.tif:
                         image_processing.convertCR2toTIF(os.path.join(f),outputdir, config["processing"])
-
+                    if args.jpg:
+                        image_processing.convertToJPG(os.path.join(f),outputdir)
+                elif f.name.upper().endswith("TIF") and args.jpg:
+                    image_processing.convertToJPG(os.path.join(f),outputdir)
 def load_config():
     """Loads the configuration values in config.json and stores them in a dictionary."""
     with open('config.json') as f:
@@ -135,8 +138,9 @@ config = load_config()
 parser = argparse.ArgumentParser(prog="photogrammetryScripts")
 subparsers = parser.add_subparsers(help="Sub-command help")
 convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
-convertprocessor.add_argument("--dng",help="Converts to dng type", action="store_true")
-convertprocessor.add_argument("--tif", help = "Convert to tif type", action="store_true")
+convertprocessor.add_argument("--dng",help="Converts RAW to dng type", action="store_true")
+convertprocessor.add_argument("--tif", help = "Convert RAW to tif type", action="store_true")
+convertprocessor.add_argument("--jpg", help="Converts TIF to jpg.", action="store_true")
 convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
 convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
 convertprocessor.set_defaults(func=convert_raw_to_format)

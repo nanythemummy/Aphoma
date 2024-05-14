@@ -4,6 +4,7 @@ from os import path
 from sys import platform
 from pathlib import Path
 from util import util
+
 import cv2
 
     
@@ -17,6 +18,20 @@ def convertCR2toTIF(input,output,config):
     with rawpy.imread(input) as raw:
         rgb = raw.postprocess(use_camera_wb=True)
         imageio.imsave(path.join(output,fn+".tif"),rgb)
+
+def convertToJPG(input, output):
+    fn = Path(input).stem #get the filename.
+    ext = path.splitext(input)[1].upper()
+    if ext==".TIF":
+        try:
+            f=cv2.imread(input)
+            cv2.imwrite(path.join(output,fn+".jpg"),f,[int(cv2.IMWRITE_JPEG_QUALITY),100])
+        except Exception as e:
+            raise e
+    elif ext ==".CR2":
+        with rawpy.imread(input) as f:
+            processedimage = f.postprocess(use_camera_wb=True)
+            imageio.save(path.join(output,fn+".jpg"),processedimage)
 
 def getWhiteBalance(rawpath):
     with rawpy.imread(rawpath) as raw:
