@@ -65,11 +65,7 @@ def buildBasicModel(photodir, projectname, projectdir, config):
         
 
     except Exception as e:
-        #maybe if metashape leaves a lock on the file, go nuke it in the .files subfolder.
-        #There doesn't seem to be a clean way to close
-        filesfolder = os.path.join(projectdir,projectname+".files")
-        if os.path.exists(os.path.join(filesfolder,"lock")):
-            os.remove(os.path.join(filesfolder,"lock"))          
+
         raise e
 
     
