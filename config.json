@@ -41,7 +41,7 @@
             "model_quality":2,
             "mask_path": "Masks",
             "output_path":"Output",
-            "mask_ext":"png",
+            "mask_ext":"tif",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,
@@ -54,32 +54,7 @@
             "texture_size":4096,
             "texture_count":1,
             "export_as":"obj",
-            "markers":
-            {
-                "pallette_1":{
-                    "type":"12bit",
-                    "scalebars":[
-                        {
-                        "points":[60,61],
-                        "distance":2,
-                        "units":"cm"
-                        },
-                        {
-                        "points":[51,52],
-                        "distance":2,
-                        "units":"cm"
-                        }
-                    ],
-                    "axes":{
-                        "xpos":[],
-                        "xneg":[],
-                        "ypos":[],
-                        "yneg":[],
-                        "zpos":[],
-                        "zneg":[]
-                    }
-                }
-            }
+            "pallette":"pallette_1"
         }
 
     }

@@ -1,6 +1,9 @@
 import os
 import Metashape
-import math
+import argparse
+import json
+import ModelHelpers
+from os import path
 
 def buildBasicModel(photodir, projectname, projectdir, config):
     """Builds a model using the photos in the directory specified."""
@@ -48,13 +51,23 @@ def buildBasicModel(photodir, projectname, projectdir, config):
                             reset_matches=False
             )
             chunk.alignCameras()
-        doc.save()
-        refineSparseCloud(doc, chunk, config)
+            doc.save()
+        
         #build model.
         if not chunk.model:
+            refineSparseCloud(doc, chunk, config)
+            doc.save()
             chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
             chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData)
             doc.save()
+        #detect markers
+        if config["pallette"]:
+            pallette = ModelHelpers.loadPallettes()[config["pallette"]]
+            ModelHelpers.detectMarkers(chunk,pallette["type"])
+            doc.save()
+            if "scalebars" in pallette.keys():
+                ModelHelpers.buildScalebarsFromList(chunk,pallette["scalebars"])
+                doc.save()
         #build texture
         if not chunk.model.textures:
             chunk.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
@@ -65,7 +78,6 @@ def buildBasicModel(photodir, projectname, projectdir, config):
         
 
     except Exception as e:
-
         raise e
 
     
@@ -147,31 +159,87 @@ def removeAboveErrorThreshold(chunk, filtertype,max_error,max_points):
             break
     return removed_above_threshold
 
-def testReoirient(psxpath):
-    doc = Metashape.Document()
-    doc.open(path=psxpath)
-    reorientModel(doc)
-    
-
-def reorientModel(doc):
-    generateBoundingBox(doc.chunks[0])#for now, assume we will use a one-chunk model.
+def reorientModel(doc,config):
+    #rotateBoundingBoxToMarkers(doc.chunks[0])
+    objectAndRegionToWorldCenter(doc.chunks[0])
+    resizeBoundingBox(doc.chunks[0])#for now, assume we will use a one-chunk model.
     doc.save()
-def generateBoundingBox(chunk):
+
+def rotateBoundingBoxToMarkers(chunk):
+    pass
+def objectAndRegionToWorldCenter(chunk):
+    assert(chunk.model)
+    model = chunk.model
+    vertices = model.vertices
+    T = chunk.transform.matrix
+    s = chunk.transform.matrix.scale()
+    step = int(min(1E4, len(vertices)) / 1E4) + 1 #magic number.
+    sum = Metashape.Vector([0,0,0])
+    N = 0
+    for i in range(0, len(vertices), step):
+        sum += vertices[i].coord
+        N += 1
+    avg = sum / N
+    chunk.region.center = avg
+    M = Metashape.Matrix().Diag([s,s,s,1])
+    origin = (-1) * M.mulp(chunk.region.center)
+    chunk.transform.matrix  = Metashape.Matrix().Translation(origin) * (s * Metashape.Matrix().Rotation(T.rotation()))
+
+def resizeBoundingBox(chunk):
     model = chunk.model
     if not model:
         print("Generate a model before orienting it.")
         return
-    verts = [a for a in model.vertices]
-    verts.sort(key=(lambda e: e.coord.x))
+    verts = sorted(model.vertices,key=(lambda e: e.coord.x))
     width = abs(verts[len(verts)-1].coord.x - verts[0].coord.x)
+
     verts.sort(key=(lambda e: e.coord.y))
     height = abs(verts[len(verts)-1].coord.y - verts[0].coord.y)
+
     verts.sort(key=(lambda e: e.coord.z))
     depth = abs(verts[len(verts)-1].coord.z - verts[0].coord.z)
     chunk.region.size=Metashape.Vector([float(width),float(height),float(depth)])
 
 
 
+if __name__=="__main__":
+    def loadConfigFile(configpath):
+        cfg = {}
+        with open(path.abspath(args.config)) as f:
+            cfg = json.load(f)
+        return cfg["config"]
+    def commandBuildModel(args):
+        cfg = loadConfigFile(args.config)
+        buildBasicModel(args.photos,args.jobname,args.outputdirectory,cfg["photogrammetry"])
+    
+    def orientModel(args):
+        cfg = loadConfigFile(args.config)
+        doc = Metashape.Document()
+        if os.path.exists(args.psxpath):
+            doc.open(path=args.psxpath)
+        reorientModel(doc,cfg["photogrammetry"])
+
+    parser = argparse.ArgumentParser(prog="MetashapeTools")
+    subparsers = parser.add_subparsers(help="Sub-command help")
+    
+    buildparser = subparsers.add_parser("build", help="Build the model in the given psx file.")
+    orientparser = subparsers.add_parser("orient", help="Orients a model on origin, and rotates it into position if markers are present.")
+
+    buildparser.add_argument("jobname", help="The name of the project")
+    buildparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
+    buildparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
+    buildparser.add_argument("config", help="The location of config.json")
+    buildparser.set_defaults(func=commandBuildModel)
+
+    orientparser.add_argument("psxpath", help="psx file to load")
+    orientparser.add_argument("config", help="The location of config.json")
+    orientparser.set_defaults(func=orientModel)
+
+    args = parser.parse_args()
+    if hasattr(args,"func"):
+        args.func(args)
+    else:
+        parser.print_help()
 
 
 

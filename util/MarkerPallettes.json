@@ -1,0 +1,26 @@
+{
+"pallettes":
+    {
+        "pallette_1":{
+            "type":"12bit",
+            "scalebars":[
+                {
+                "points":[60,61],
+                "distance":2.0,
+                "units":"cm"
+                },
+                {
+                "points":[51,52],
+                "distance":2.0,
+                "units":"cm"
+                }
+            ],
+            "axes":{
+                "xpos":[64,63,62,61,60],
+                "xneg":[44,43,42,41,40],
+                "zpos":[74,73,72,71,70],
+                "zneg":[54,53,52,51,50]
+            }
+        }
+    }
+}
