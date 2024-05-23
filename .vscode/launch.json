@@ -21,9 +21,9 @@
             "program": "${file}",
             "console": "integratedTerminal",
 
-            "args":["build", "Fineware_E21484", "E:\\Photogrammetry\\Meroitic Fineware E21484\\TIF","E:\\Photogrammetry\\Meroitic Fineware E21484\\","config.json"]
+            "args":["build", "E24065", "G:\\Meroitic Fineware E24065\\TIF","G:\\Meroitic Fineware E24065","config.json"]
 
-        }
+        },
         {
             "name": "Python Debugger: MetashapeTools-TranslationTest",
             "type": "debugpy",

@@ -15,6 +15,7 @@ def loadPallettes():
     with open (path.join("util/MarkerPallettes.json")) as f:
         pallettes = json.load(f)
     return pallettes["pallettes"]
+
 def setChunkAccuracy(chunk):
      # set accuracy values for markers and scale bars in the chunk
     chunk.tiepoint_accuracy = 0.25 # pixels WHAT ARE THESE MAGIC NUMBERS?

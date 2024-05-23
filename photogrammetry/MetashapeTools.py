@@ -3,6 +3,7 @@ import Metashape
 import argparse
 import json
 import ModelHelpers
+import numpy, math
 from os import path
 
 def buildBasicModel(photodir, projectname, projectdir, config):
@@ -63,11 +64,14 @@ def buildBasicModel(photodir, projectname, projectdir, config):
         #detect markers
         if config["pallette"]:
             pallette = ModelHelpers.loadPallettes()[config["pallette"]]
-            ModelHelpers.detectMarkers(chunk,pallette["type"])
-            doc.save()
+            if not chunk.markers:
+                ModelHelpers.detectMarkers(chunk,pallette["type"])
+                doc.save()
             if "scalebars" in pallette.keys():
                 ModelHelpers.buildScalebarsFromList(chunk,pallette["scalebars"])
                 doc.save()
+            
+            reorientModel(doc,config)
         #build texture
         if not chunk.model.textures:
             chunk.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
@@ -163,10 +167,49 @@ def reorientModel(doc,config):
     #rotateBoundingBoxToMarkers(doc.chunks[0])
     objectAndRegionToWorldCenter(doc.chunks[0])
     resizeBoundingBox(doc.chunks[0])#for now, assume we will use a one-chunk model.
+    upaxis = findUpAxisFromMarkers(doc.chunks[0],config)
+    AlignMarkersToY(doc.chunks[0],upaxis)
     doc.save()
 
-def rotateBoundingBoxToMarkers(chunk):
-    pass
+def findUpAxisFromMarkers(chunk,config):
+    pallette = ModelHelpers.loadPallettes()[config["pallette"]]
+    if not chunk.markers:
+        print("No marker pallette defined or markers detected. Cannot detect orientation from pallette.")
+        return
+    xaxis = []
+    zaxis = []
+    for m in chunk.markers:
+        lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
+        if lookforlabel in pallette["axes"]["xpos"] or lookforlabel in pallette["axes"]["xneg"]:
+            xaxis.append(m.position)
+        elif lookforlabel in pallette["axes"]["zpos"] or lookforlabel in pallette["axes"]["zneg"]:
+            zaxis.append(m.position)
+        if len(xaxis)>=2 and len(zaxis)>=2:
+            break
+    ux = (xaxis[1]-xaxis[0])
+    uz = (zaxis[1]-zaxis[0])
+    yaxis = Metashape.Vector.cross(ux,uz)
+    yaxis.normalize()
+    return yaxis
+
+def AlignMarkersToY(chunk,vec): #takes a vector and aligns it with the y axis. fully expect to rewrite this as I get better at the math.
+    translate = chunk.transform.matrix
+    scale = chunk.transform.matrix.scale()
+    worldspace = Metashape.Matrix.Diag([scale,scale,scale,1])
+    vecinworldspace = worldspace.mulv(vec)
+    theta_x = math.atan(vecinworldspace.z/vecinworldspace.y) *180.0/math.pi
+    theta_z = math.atan(vecinworldspace.x/vecinworldspace.y) *180.0/math.pi
+    zrot = Metashape.Matrix([[numpy.cos(theta_z), -1*numpy.sin(theta_z),0,0],
+                     [numpy.sin(theta_z),numpy.cos(theta_z),0,0],
+                     [0,0,1,0],
+                     [0,0,0,1]])
+    xrot = Metashape.Matrix([[1,0,0,0],
+                     [0,numpy.cos(theta_x),-1*numpy.sin(theta_x),0],
+                     [0,numpy.sin(theta_x),numpy.cos(theta_x),0],
+                     [0,0,0,1]])
+    rotmat = xrot*zrot
+    chunk.transform.matrix*=rotmat
+
 def objectAndRegionToWorldCenter(chunk):
     assert(chunk.model)
     model = chunk.model
