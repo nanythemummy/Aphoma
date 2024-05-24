@@ -165,13 +165,14 @@ def removeAboveErrorThreshold(chunk, filtertype,max_error,max_points):
 
 def reorientModel(doc,config):
     #rotateBoundingBoxToMarkers(doc.chunks[0])
-    objectAndRegionToWorldCenter(doc.chunks[0])
+
     resizeBoundingBox(doc.chunks[0])#for now, assume we will use a one-chunk model.
-    upaxis = findUpAxisFromMarkers(doc.chunks[0],config)
-    AlignMarkersToY(doc.chunks[0],upaxis)
+    translateCoordinateSystemToBoundingBox(doc.chunks[0])
+    axes = findAxesFromMarkers(doc.chunks[0],config)
+    AlignMarkersToY(doc.chunks[0],axes[1])
     doc.save()
 
-def findUpAxisFromMarkers(chunk,config):
+def findAxesFromMarkers(chunk,config):
     pallette = ModelHelpers.loadPallettes()[config["pallette"]]
     if not chunk.markers:
         print("No marker pallette defined or markers detected. Cannot detect orientation from pallette.")
@@ -190,15 +191,15 @@ def findUpAxisFromMarkers(chunk,config):
     uz = (zaxis[1]-zaxis[0])
     yaxis = Metashape.Vector.cross(ux,uz)
     yaxis.normalize()
-    return yaxis
+    return [ux.normalize(),yaxis,uz.normalize()]
 
 def AlignMarkersToY(chunk,vec): #takes a vector and aligns it with the y axis. fully expect to rewrite this as I get better at the math.
-    translate = chunk.transform.matrix
-    scale = chunk.transform.matrix.scale()
-    worldspace = Metashape.Matrix.Diag([scale,scale,scale,1])
-    vecinworldspace = worldspace.mulv(vec)
-    theta_x = math.atan(vecinworldspace.z/vecinworldspace.y) *180.0/math.pi
-    theta_z = math.atan(vecinworldspace.x/vecinworldspace.y) *180.0/math.pi
+    transmat = chunk.transform.matrix
+    scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
+    scalematrix = Metashape.Matrix.Diag([scale,scale,scale,1])
+
+    theta_x = math.atan(vec.z/vec.y) 
+    theta_z = math.atan(vec.x/vec.y) 
     zrot = Metashape.Matrix([[numpy.cos(theta_z), -1*numpy.sin(theta_z),0,0],
                      [numpy.sin(theta_z),numpy.cos(theta_z),0,0],
                      [0,0,1,0],
@@ -208,7 +209,24 @@ def AlignMarkersToY(chunk,vec): #takes a vector and aligns it with the y axis. f
                      [0,numpy.sin(theta_x),numpy.cos(theta_x),0],
                      [0,0,0,1]])
     rotmat = xrot*zrot
-    chunk.transform.matrix*=rotmat
+    chunk.transform.matrix=chunk.transform.matrix*rotmat
+
+def translateCoordinateSystemToBoundingBox(chunk):
+    #This is cribbed from the script here:  https://github.com/agisoft-llc/metashape-scripts
+    rotmat = chunk.region.rot
+    regioncenter = chunk.region.center
+    if chunk.transform.matrix:
+        transmat = chunk.transform.matrix
+        scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
+        scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
+    else:
+        scalematrix = Metashape.Matrix().Diag([1,1,1,1]) #scale of 1
+    newtransmat = Metashape.Matrix([[rotmat[0,0],rotmat[0,1],rotmat[0,2],regioncenter[0]],
+                                    [rotmat[1,0],rotmat[1,1],rotmat[1,2], regioncenter[1]],
+                                    [rotmat[2,0],rotmat[2,1],rotmat[2,2],regioncenter[2]],
+                                    [0,0,0,1]])
+
+    chunk.transform.matrix= scalematrix*newtransmat.inv()
 
 def objectAndRegionToWorldCenter(chunk):
     assert(chunk.model)
