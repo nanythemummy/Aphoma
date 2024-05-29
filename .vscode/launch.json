@@ -21,7 +21,8 @@
             "program": "${file}",
             "console": "integratedTerminal",
 
-            "args":["build", "E24065", "G:\\Meroitic Fineware E24065\\TIF","G:\\Meroitic Fineware E24065","config.json"]
+            "args":["build", "E22373", "D:\\Meroitic Fineware E33272\\TIF","D:\\Meroitic Fineware E22373","config.json"]
+
 
         },
         {
@@ -31,7 +32,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
 
-            "args":["orient", "E:\\Photogrammetry\\Meroitic Fineware E21484\\Fineware_E21484.psx","config.json"]
+            "args":["orient", "C:\\Users\\keajohnston\\Documents\\Projects\\Rollouts\\Meroitic Fineware E21484\\Meroitic Fineware E21484.psx","config.json"]
 
         }
     ]

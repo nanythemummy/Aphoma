@@ -35,8 +35,8 @@ def convertUnitToMeters(unit,val):
 def buildScalebarsFromList(chunk,scalebardefinitions):
     setChunkAccuracy(chunk)
     for definition in scalebardefinitions:
-        name1=f"target {definition["points"][0]}"
-        name2=f"target {definition["points"][1]}"
+        name1=f"target {definition['points'][0]}"
+        name2=f"target {definition['points'][1]}"
         marker1=marker2=None
         for marker in chunk.markers:
             if marker.label == name1:
@@ -58,6 +58,7 @@ def buildScalebarsFromList(chunk,scalebardefinitions):
             scalebar.reference.accuracy = 1.0e-5
             scalebar.reference.enabled = True
     chunk.updateTransform()        
+
 
 def detectMarkers(chunk, type):
     setChunkAccuracy(chunk)

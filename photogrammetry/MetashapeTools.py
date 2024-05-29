@@ -6,7 +6,7 @@ import ModelHelpers
 import numpy, math
 from os import path
 
-def buildBasicModel(photodir, projectname, projectdir, config):
+def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
     """Builds a model using the photos in the directory specified."""
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
@@ -22,26 +22,27 @@ def buildBasicModel(photodir, projectname, projectdir, config):
             doc.open(path=projectpath)
         doc.save(path=projectpath)
         #add  a new chunk
-        chunk=None
+        current_chunk=None
         if len(doc.chunks)==0:
-            chunk = doc.addChunk()
+            current_chunk = doc.addChunk()
+            current_chunk.label=projectname
         else:
-            chunk=doc.chunks[0]
+            current_chunk=doc.chunks[0]
         #add the photos in the specified directory to that chunk.
         #don't add cameras if chunk already has them. If you want to build a new model, go delete the old one and rerun. 
         #Only add masks if adding new photos (for now.)
-        if len(chunk.cameras)==0:
+        if len(current_chunk.cameras)==0:
             images = os.listdir(photodir)
             for i in images:
                 if os.path.splitext(i)[1] in [".jpg", ".tiff",".tif"]:
-                    chunk.addPhotos(os.path.join(photodir,i))
+                    current_chunk.addPhotos(os.path.join(photodir,i))
             doc.save()
             #add masks if they exist.
             if maskpath:
                 ext = config["mask_ext"]
                 template = f"{maskpath}{os.sep}{{filename}}.{ext}"
-                chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
-            chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
+                current_chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
+            current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
                             generic_preselection=True,
                             reference_preselection=True,
                             reference_preselection_mode=Metashape.ReferencePreselectionMode.ReferencePreselectionSource,
@@ -51,40 +52,45 @@ def buildBasicModel(photodir, projectname, projectdir, config):
                             tiepoint_limit=0,
                             reset_matches=False
             )
-            chunk.alignCameras()
+            current_chunk.alignCameras()
             doc.save()
         
         #build model.
-        if not chunk.model:
-            refineSparseCloud(doc, chunk, config)
+        if not current_chunk.model:
+            refineSparseCloud(doc, current_chunk, config)
             doc.save()
-            chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
-            chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData)
+            current_chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
+            current_chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData)
             doc.save()
         #detect markers
-        if config["pallette"]:
+        if config["pallette"] and len(current_chunk.markers)==0:
             pallette = ModelHelpers.loadPallettes()[config["pallette"]]
             if not chunk.markers:
                 ModelHelpers.detectMarkers(chunk,pallette["type"])
                 doc.save()
             if "scalebars" in pallette.keys():
-                ModelHelpers.buildScalebarsFromList(chunk,pallette["scalebars"])
+                ModelHelpers.buildScalebarsFromList(current_chunk,pallette["scalebars"])
                 doc.save()
-            
-            reorientModel(doc,config)
+           
         #build texture
-        if not chunk.model.textures:
-            chunk.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
-            chunk.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
-        doc.save()
-        print("Finished! Now exporting")
-        chunk.exportModel(os.path.join(projectdir,projectname+".obj"))
-        
 
+        if decimate and len(doc.chunks)<2:
+            newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
+            newchunk.label = f"{current_chunk.label} lowpoly 50K"
+            newchunk.decimateModel(replace_asset=True,face_count=50000)
+
+        for c in doc.chunks:
+            if not c.model.textures:
+                c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
+                c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
+                doc.save()
+            reorientModel(c,config)
+            doc.save()
+            print("Finished! Now exporting chunk {c.label}")
+            labelname = c.label.replace(" ","")
+            c.exportModel(f"{os.path.join(projectdir,labelname)}_OBJ.obj")
     except Exception as e:
-        raise e
-
-    
+        print(e)
 
 #runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
 #which ought to occur on the final iteration of a process.
@@ -163,14 +169,10 @@ def removeAboveErrorThreshold(chunk, filtertype,max_error,max_points):
             break
     return removed_above_threshold
 
-def reorientModel(doc,config):
-    #rotateBoundingBoxToMarkers(doc.chunks[0])
+def reorientModel(chunk,config):
+    axes = findAxesFromMarkers(chunk,config)
+    AlignMarkersToAxes(chunk,axes)
 
-    resizeBoundingBox(doc.chunks[0])#for now, assume we will use a one-chunk model.
-    translateCoordinateSystemToBoundingBox(doc.chunks[0])
-    axes = findAxesFromMarkers(doc.chunks[0],config)
-    AlignMarkersToY(doc.chunks[0],axes[1])
-    doc.save()
 
 def findAxesFromMarkers(chunk,config):
     pallette = ModelHelpers.loadPallettes()[config["pallette"]]
@@ -190,77 +192,30 @@ def findAxesFromMarkers(chunk,config):
     ux = (xaxis[1]-xaxis[0])
     uz = (zaxis[1]-zaxis[0])
     yaxis = Metashape.Vector.cross(ux,uz)
+    ux.normalize()
+    uz.normalize()
     yaxis.normalize()
-    return [ux.normalize(),yaxis,uz.normalize()]
+    return [ux,yaxis,uz]
 
-def AlignMarkersToY(chunk,vec): #takes a vector and aligns it with the y axis. fully expect to rewrite this as I get better at the math.
+def AlignMarkersToAxes(chunk,axes): #takes a vector and aligns it with the y axis. fully expect to rewrite this as I get better at the math.
     transmat = chunk.transform.matrix
-    scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
-    scalematrix = Metashape.Matrix.Diag([scale,scale,scale,1])
-
-    theta_x = math.atan(vec.z/vec.y) 
-    theta_z = math.atan(vec.x/vec.y) 
-    zrot = Metashape.Matrix([[numpy.cos(theta_z), -1*numpy.sin(theta_z),0,0],
-                     [numpy.sin(theta_z),numpy.cos(theta_z),0,0],
-                     [0,0,1,0],
-                     [0,0,0,1]])
-    xrot = Metashape.Matrix([[1,0,0,0],
-                     [0,numpy.cos(theta_x),-1*numpy.sin(theta_x),0],
-                     [0,numpy.sin(theta_x),numpy.cos(theta_x),0],
-                     [0,0,0,1]])
-    rotmat = xrot*zrot
-    chunk.transform.matrix=chunk.transform.matrix*rotmat
-
-def translateCoordinateSystemToBoundingBox(chunk):
-    #This is cribbed from the script here:  https://github.com/agisoft-llc/metashape-scripts
-    rotmat = chunk.region.rot
     regioncenter = chunk.region.center
-    if chunk.transform.matrix:
-        transmat = chunk.transform.matrix
-        scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
-        scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
-    else:
-        scalematrix = Metashape.Matrix().Diag([1,1,1,1]) #scale of 1
-    newtransmat = Metashape.Matrix([[rotmat[0,0],rotmat[0,1],rotmat[0,2],regioncenter[0]],
-                                    [rotmat[1,0],rotmat[1,1],rotmat[1,2], regioncenter[1]],
-                                    [rotmat[2,0],rotmat[2,1],rotmat[2,2],regioncenter[2]],
-                                    [0,0,0,1]])
-
-    chunk.transform.matrix= scalematrix*newtransmat.inv()
-
-def objectAndRegionToWorldCenter(chunk):
-    assert(chunk.model)
-    model = chunk.model
-    vertices = model.vertices
-    T = chunk.transform.matrix
-    s = chunk.transform.matrix.scale()
-    step = int(min(1E4, len(vertices)) / 1E4) + 1 #magic number.
-    sum = Metashape.Vector([0,0,0])
-    N = 0
-    for i in range(0, len(vertices), step):
-        sum += vertices[i].coord
-        N += 1
-    avg = sum / N
-    chunk.region.center = avg
-    M = Metashape.Matrix().Diag([s,s,s,1])
-    origin = (-1) * M.mulp(chunk.region.center)
-    chunk.transform.matrix  = Metashape.Matrix().Translation(origin) * (s * Metashape.Matrix().Rotation(T.rotation()))
-
-def resizeBoundingBox(chunk):
-    model = chunk.model
-    if not model:
-        print("Generate a model before orienting it.")
-        return
-    verts = sorted(model.vertices,key=(lambda e: e.coord.x))
-    width = abs(verts[len(verts)-1].coord.x - verts[0].coord.x)
-
-    verts.sort(key=(lambda e: e.coord.y))
-    height = abs(verts[len(verts)-1].coord.y - verts[0].coord.y)
-
-    verts.sort(key=(lambda e: e.coord.z))
-    depth = abs(verts[len(verts)-1].coord.z - verts[0].coord.z)
-    chunk.region.size=Metashape.Vector([float(width),float(height),float(depth)])
-
+    scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
+    scale*=1000.0 #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
+    scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
+    newaxes = Metashape.Matrix([[axes[0].x,axes[0].y, axes[0].z,0],
+                   [axes[1].x,axes[1].y,axes[1].z,0],
+                   [axes[2].x, axes[2].y,axes[2].z,0],
+                   [0,0,0,1]])
+    newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
+                                       [0,1,0,regioncenter[1]],
+                                       [0,0,1,regioncenter[2]],
+                                       [0,0,0,1]])
+    chunk.transform.matrix=scalematrix*newaxes
+    print(f"resetting axes: {chunk.transform.matrix}")
+    chunk.transform.matrix *=newtranslation.inv()
+    print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
+    chunk.resetRegion()
 
 
 if __name__=="__main__":
@@ -278,7 +233,7 @@ if __name__=="__main__":
         doc = Metashape.Document()
         if os.path.exists(args.psxpath):
             doc.open(path=args.psxpath)
-        reorientModel(doc,cfg["photogrammetry"])
+        reorientModel(doc.chunks[0],cfg["photogrammetry"])
 
     parser = argparse.ArgumentParser(prog="MetashapeTools")
     subparsers = parser.add_subparsers(help="Sub-command help")
