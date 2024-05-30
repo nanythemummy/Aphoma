@@ -3,7 +3,8 @@ import Metashape
 import argparse
 import json
 import ModelHelpers
-import numpy, math
+import traceback
+import math
 from os import path
 
 def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
@@ -65,8 +66,8 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
         #detect markers
         if config["pallette"] and len(current_chunk.markers)==0:
             pallette = ModelHelpers.loadPallettes()[config["pallette"]]
-            if not chunk.markers:
-                ModelHelpers.detectMarkers(chunk,pallette["type"])
+            if not current_chunk.markers:
+                ModelHelpers.detectMarkers(current_chunk,pallette["type"])
                 doc.save()
             if "scalebars" in pallette.keys():
                 ModelHelpers.buildScalebarsFromList(current_chunk,pallette["scalebars"])
@@ -91,6 +92,7 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
             c.exportModel(f"{os.path.join(projectdir,labelname)}_OBJ.obj")
     except Exception as e:
         print(e)
+        print(traceback.format_exc)
 
 #runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
 #which ought to occur on the final iteration of a process.
