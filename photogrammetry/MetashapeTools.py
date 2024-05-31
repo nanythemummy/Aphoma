@@ -13,7 +13,7 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config["output_path"])
     maskpath = None
-    if config["mask_path"] and os.path.exists(os.path.join(projectdir,config["mask_path"])):
+    if "mask_path" in config.keys() and os.path.exists(os.path.join(projectdir,config["mask_path"])):
         maskpath = os.path.join(projectdir,config["mask_path"])
     if not os.path.exists(outputpath):
         os.mkdir(outputpath)
@@ -55,7 +55,6 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
             )
             current_chunk.alignCameras()
             doc.save()
-        
         #build model.
         if not current_chunk.model:
             refineSparseCloud(doc, current_chunk, config)
@@ -64,22 +63,19 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
             current_chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData)
             doc.save()
         #detect markers
-        if config["pallette"] and len(current_chunk.markers)==0:
+        if "pallette" in config.keys():
             pallette = ModelHelpers.loadPallettes()[config["pallette"]]
             if not current_chunk.markers:
                 ModelHelpers.detectMarkers(current_chunk,pallette["type"])
                 doc.save()
-            if "scalebars" in pallette.keys():
+            if "scalebars" in pallette.keys() and not current_chunk.scalebars:
                 ModelHelpers.buildScalebarsFromList(current_chunk,pallette["scalebars"])
-                doc.save()
-           
+                doc.save()         
         #build texture
-
         if decimate and len(doc.chunks)<2:
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
             newchunk.label = f"{current_chunk.label} lowpoly 50K"
             newchunk.decimateModel(replace_asset=True,face_count=50000)
-
         for c in doc.chunks:
             if not c.model.textures:
                 c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
@@ -87,9 +83,12 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
                 doc.save()
             reorientModel(c,config)
             doc.save()
-            print("Finished! Now exporting chunk {c.label}")
+            print(f"Finished! Now exporting chunk {c.label}")
             labelname = c.label.replace(" ","")
-            c.exportModel(f"{os.path.join(projectdir,labelname)}_OBJ.obj")
+            ext = config["export_as"]
+            c.exportModel(path=f"{os.path.join(projectdir,labelname)}_{ext.upper()}.{ext}",
+                        texture_format = Metashape.ImageFormat.ImageFormatPNG,
+                        embed_texture=(ext=="ply") )
     except Exception as e:
         print(e)
         print(traceback.format_exc)
