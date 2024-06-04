@@ -1,14 +1,19 @@
 import os
 import Metashape
+import argparse
+import json
+import photogrammetry.ModelHelpers as ModelHelpers
+import traceback
 import math
+from os import path
 
-def buildBasicModel(photodir, projectname, projectdir, config):
+def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
     """Builds a model using the photos in the directory specified."""
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config["output_path"])
     maskpath = None
-    if config["mask_path"] and os.path.exists(os.path.join(projectdir,config["mask_path"])):
+    if "mask_path" in config.keys() and os.path.exists(os.path.join(projectdir,config["mask_path"])):
         maskpath = os.path.join(projectdir,config["mask_path"])
     if not os.path.exists(outputpath):
         os.mkdir(outputpath)
@@ -18,26 +23,27 @@ def buildBasicModel(photodir, projectname, projectdir, config):
             doc.open(path=projectpath)
         doc.save(path=projectpath)
         #add  a new chunk
-        chunk=None
+        current_chunk=None
         if len(doc.chunks)==0:
-            chunk = doc.addChunk()
+            current_chunk = doc.addChunk()
+            current_chunk.label=projectname
         else:
-            chunk=doc.chunks[0]
+            current_chunk=doc.chunks[0]
         #add the photos in the specified directory to that chunk.
         #don't add cameras if chunk already has them. If you want to build a new model, go delete the old one and rerun. 
         #Only add masks if adding new photos (for now.)
-        if len(chunk.cameras)==0:
+        if len(current_chunk.cameras)==0:
             images = os.listdir(photodir)
             for i in images:
                 if os.path.splitext(i)[1] in [".jpg", ".tiff",".tif"]:
-                    chunk.addPhotos(os.path.join(photodir,i))
+                    current_chunk.addPhotos(os.path.join(photodir,i))
             doc.save()
             #add masks if they exist.
             if maskpath:
                 ext = config["mask_ext"]
                 template = f"{maskpath}{os.sep}{{filename}}.{ext}"
-                chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
-            chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
+                current_chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
+            current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
                             generic_preselection=True,
                             reference_preselection=True,
                             reference_preselection_mode=Metashape.ReferencePreselectionMode.ReferencePreselectionSource,
@@ -47,32 +53,45 @@ def buildBasicModel(photodir, projectname, projectdir, config):
                             tiepoint_limit=0,
                             reset_matches=False
             )
-            chunk.alignCameras()
-        doc.save()
-        refineSparseCloud(doc, chunk, config)
-        #build model.
-        if not chunk.model:
-            chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
-            chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData)
+            current_chunk.alignCameras()
             doc.save()
+        #build model.
+        if not current_chunk.model:
+            refineSparseCloud(doc, current_chunk, config)
+            doc.save()
+            current_chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
+            current_chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData)
+            doc.save()
+        #detect markers
+        if "pallette" in config.keys():
+            pallette = ModelHelpers.loadPallettes()[config["pallette"]]
+            if not current_chunk.markers:
+                ModelHelpers.detectMarkers(current_chunk,pallette["type"])
+                doc.save()
+            if "scalebars" in pallette.keys() and not current_chunk.scalebars:
+                ModelHelpers.buildScalebarsFromList(current_chunk,pallette["scalebars"])
+                doc.save()         
         #build texture
-        if not chunk.model.textures:
-            chunk.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
-            chunk.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
-        doc.save()
-        print("Finished! Now exporting")
-        chunk.exportModel(os.path.join(projectdir,projectname+".obj"))
-        
-
+        if decimate and len(doc.chunks)<2:
+            newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
+            newchunk.label = f"{current_chunk.label} lowpoly 50K"
+            newchunk.decimateModel(replace_asset=True,face_count=50000)
+        for c in doc.chunks:
+            if not c.model.textures:
+                c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
+                c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
+                doc.save()
+            reorientModel(c,config)
+            doc.save()
+            print(f"Finished! Now exporting chunk {c.label}")
+            labelname = c.label.replace(" ","")
+            ext = config["export_as"]
+            c.exportModel(path=f"{os.path.join(projectdir,labelname)}_{ext.upper()}.{ext}",
+                        texture_format = Metashape.ImageFormat.ImageFormatPNG,
+                        embed_texture=(ext=="ply") )
     except Exception as e:
-        #maybe if metashape leaves a lock on the file, go nuke it in the .files subfolder.
-        #There doesn't seem to be a clean way to close
-        filesfolder = os.path.join(projectdir,projectname+".files")
-        if os.path.exists(os.path.join(filesfolder,"lock")):
-            os.remove(os.path.join(filesfolder,"lock"))          
-        raise e
-
-    
+        print(e)
+        print(traceback.format_exc)
 
 #runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
 #which ought to occur on the final iteration of a process.
@@ -151,31 +170,93 @@ def removeAboveErrorThreshold(chunk, filtertype,max_error,max_points):
             break
     return removed_above_threshold
 
-def testReoirient(psxpath):
-    doc = Metashape.Document()
-    doc.open(path=psxpath)
-    reorientModel(doc)
-    
+def reorientModel(chunk,config):
+    axes = findAxesFromMarkers(chunk,config)
+    #AlignMarkersToAxes(chunk,axes)
 
-def reorientModel(doc):
-    generateBoundingBox(doc.chunks[0])#for now, assume we will use a one-chunk model.
-    doc.save()
-def generateBoundingBox(chunk):
-    model = chunk.model
-    if not model:
-        print("Generate a model before orienting it.")
+
+def findAxesFromMarkers(chunk,config):
+    pallette = ModelHelpers.loadPallettes()[config["pallette"]]
+    if not chunk.markers:
+        print("No marker pallette defined or markers detected. Cannot detect orientation from pallette.")
         return
-    verts = [a for a in model.vertices]
-    verts.sort(key=(lambda e: e.coord.x))
-    width = abs(verts[len(verts)-1].coord.x - verts[0].coord.x)
-    verts.sort(key=(lambda e: e.coord.y))
-    height = abs(verts[len(verts)-1].coord.y - verts[0].coord.y)
-    verts.sort(key=(lambda e: e.coord.z))
-    depth = abs(verts[len(verts)-1].coord.z - verts[0].coord.z)
-    chunk.region.size=Metashape.Vector([float(width),float(height),float(depth)])
+    xaxis = []
+    zaxis = []
+    for m in chunk.markers:
+        lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
+        if lookforlabel in pallette["axes"]["xpos"] or lookforlabel in pallette["axes"]["xneg"]:
+            xaxis.append(m.position)
+        elif lookforlabel in pallette["axes"]["zpos"] or lookforlabel in pallette["axes"]["zneg"]:
+            zaxis.append(m.position)
+        if len(xaxis)>=2 and len(zaxis)>=2:
+            break
+    ux = (xaxis[1]-xaxis[0])
+    uz = (zaxis[1]-zaxis[0])
+    yaxis = Metashape.Vector.cross(ux,uz)
+    ux.normalize()
+    uz.normalize()
+    yaxis.normalize()
+    return [ux,yaxis,uz]
+
+def AlignMarkersToAxes(chunk,axes): #takes a vector and aligns it with the y axis. fully expect to rewrite this as I get better at the math.
+    transmat = chunk.transform.matrix
+    regioncenter = chunk.region.center
+    scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
+    scale*=1000.0 #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
+    scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
+    newaxes = Metashape.Matrix([[axes[0].x,axes[0].y, axes[0].z,0],
+                   [axes[1].x,axes[1].y,axes[1].z,0],
+                   [axes[2].x, axes[2].y,axes[2].z,0],
+                   [0,0,0,1]])
+    newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
+                                       [0,1,0,regioncenter[1]],
+                                       [0,0,1,regioncenter[2]],
+                                       [0,0,0,1]])
+    chunk.transform.matrix=scalematrix*newaxes
+    print(f"resetting axes: {chunk.transform.matrix}")
+    chunk.transform.matrix *=newtranslation.inv()
+    print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
+    chunk.resetRegion()
 
 
+if __name__=="__main__":
+    def loadConfigFile(configpath):
+        cfg = {}
+        with open(path.abspath(args.config)) as f:
+            cfg = json.load(f)
+        return cfg["config"]
+    def commandBuildModel(args):
+        cfg = loadConfigFile(args.config)
+        buildBasicModel(args.photos,args.jobname,args.outputdirectory,cfg["photogrammetry"])
+    
+    def orientModel(args):
+        cfg = loadConfigFile(args.config)
+        doc = Metashape.Document()
+        if os.path.exists(args.psxpath):
+            doc.open(path=args.psxpath)
+        reorientModel(doc.chunks[0],cfg["photogrammetry"])
 
+    parser = argparse.ArgumentParser(prog="MetashapeTools")
+    subparsers = parser.add_subparsers(help="Sub-command help")
+    
+    buildparser = subparsers.add_parser("build", help="Build the model in the given psx file.")
+    orientparser = subparsers.add_parser("orient", help="Orients a model on origin, and rotates it into position if markers are present.")
+
+    buildparser.add_argument("jobname", help="The name of the project")
+    buildparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
+    buildparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
+    buildparser.add_argument("config", help="The location of config.json")
+    buildparser.set_defaults(func=commandBuildModel)
+
+    orientparser.add_argument("psxpath", help="psx file to load")
+    orientparser.add_argument("config", help="The location of config.json")
+    orientparser.set_defaults(func=orientModel)
+
+    args = parser.parse_args()
+    if hasattr(args,"func"):
+        args.func(args)
+    else:
+        parser.print_help()
 
 
 

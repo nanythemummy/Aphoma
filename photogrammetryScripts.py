@@ -44,7 +44,7 @@ def watch_and_process(args):
     watcher = Watcher(inputdir)
     watcher.run()
 
-#This script contains the full automation flow and is triggered by the watche
+#This script contains the full automation flow and is triggered by the watcher
 def build_model_from_manifest(manifest):
     try:
         from photogrammetry import MetashapeTools
@@ -61,15 +61,20 @@ def build_model_from_manifest(manifest):
         project_folder = os.path.join(project_base,projname)
         tiffolder = os.path.join(project_folder,"tiff")
         outputfolder = os.path.join(project_folder,"output")
+        maskfolder = os.path.join(project_base,"masks")
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
             os.mkdir(tiffolder)
             os.mkdir(outputfolder)
+            os.mkdir(maskfolder)
         #export Camera RAW files to Tiffs
         for f in filestoprocess:
             ext = os.path.splitext(f)[1].upper()
             if ext  ==".CR2":
                 image_processing.convertCR2toTIF(f,tiffolder,config["processing"])
+        
+        image_processing.buildMasks(tiffolder,maskfolder,config["processing"])
+
         MetashapeTools.buildBasicModel(tiffolder,projname, project_folder,config["photogrammetry"])
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
@@ -82,10 +87,13 @@ def build_model(args):
         job = args.jobname
         photoinput = args.photos
         outputdir = args.outputdirectory
-        if not args.r: #if we are not running the test-reorient code....
-            MetashapeTools.buildBasicModel(photoinput,job,outputdir, config["photogrammetry"])
-        else:
-            MetashapeTools.testReoirient(os.path.join(outputdir,job+".psx"))
+        if not args.nomasks:
+            maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
+            if not os.path.exists(maskpath):
+                os.mkdir(maskpath)
+            image_processing.buildMasks(photoinput,maskpath,config["processing"])
+        MetashapeTools.buildBasicModel(photoinput,job,outputdir, config["photogrammetry"])
+
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e
@@ -108,6 +116,14 @@ def transfer_to_network_folder(args):
     with open(manifest,"w") as f:
         f.write(",".join(filestocopy))
 
+
+def build_masks(args):
+    """Wrapper script for building masks from contents of a folder using a photoshop droplet."""
+    config = load_config()
+    input = args.inputdir
+    output = args.outputdir
+    image_processing.buildMasks(input,output,config["processing"])
+
 def convert_raw_to_format(args):
     """wrapper script for using the RAW image conversion fucntions via the command line."""
     inputdir = args.imagedirectory
@@ -123,7 +139,10 @@ def convert_raw_to_format(args):
                         image_processing.convertCR2toDNG(os.path.join(f),outputdir, config["processing"])
                     if args.tif:
                         image_processing.convertCR2toTIF(os.path.join(f),outputdir, config["processing"])
-
+                    if args.jpg:
+                        image_processing.convertToJPG(os.path.join(f),outputdir)
+                elif f.name.upper().endswith("TIF") and args.jpg:
+                    image_processing.convertToJPG(os.path.join(f),outputdir)
 def load_config():
     """Loads the configuration values in config.json and stores them in a dictionary."""
     with open('config.json') as f:
@@ -135,8 +154,9 @@ config = load_config()
 parser = argparse.ArgumentParser(prog="photogrammetryScripts")
 subparsers = parser.add_subparsers(help="Sub-command help")
 convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
-convertprocessor.add_argument("--dng",help="Converts to dng type", action="store_true")
-convertprocessor.add_argument("--tif", help = "Convert to tif type", action="store_true")
+convertprocessor.add_argument("--dng",help="Converts RAW to dng type", action="store_true")
+convertprocessor.add_argument("--tif", help = "Convert RAW to tif type", action="store_true")
+convertprocessor.add_argument("--jpg", help="Converts TIF to jpg.", action="store_true")
 convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
 convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
 convertprocessor.set_defaults(func=convert_raw_to_format)
@@ -157,12 +177,17 @@ photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for
 photogrammetryparser.add_argument("jobname", help="The name of the project")
 photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
 photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-photogrammetryparser.add_argument("-r", help="This function tests the scripts for reorientation.",action="store_true")
+photogrammetryparser.add_argument("--nomasks", help = "Skip the mask generation step.", action = "store_true")
 photogrammetryparser.set_defaults(func=build_model)
 
 watcherprocessor = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
 watcherprocessor.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
 watcherprocessor.set_defaults(func=watch_and_process)      
+
+maskprocessor = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
+maskprocessor.add_argument("inputdir", help="Photos to mask")
+maskprocessor.add_argument("outputdir",help="location to store masks")   
+maskprocessor.set_defaults(func=build_masks);
 
 
 args = parser.parse_args()

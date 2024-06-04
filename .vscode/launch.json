@@ -5,13 +5,34 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File",
+            "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "kish_api", "E:\\Photogrammetry\\Kish_157068\\TIF","E:\\Photogrammetry\\Kish_157068\\" ,"-r"]
+            "args":["photogrammetry", "flowerpot", "E:\\Photogrammetry\\flowerpot\\photos","E:\\Photogrammetry\\flowerpot\\metashape" ,"-r"]
+
+        },
+        {
+            "name": "Python Debugger: MetashapeTools",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+
+            "args":["build", "E22373", "D:\\Meroitic Fineware E33272\\TIF","D:\\Meroitic Fineware E22373","config.json"]
+
+
+        },
+        {
+            "name": "Python Debugger: MetashapeTools-TranslationTest",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+
+            "args":["orient", "C:\\Users\\keajohnston\\Documents\\Projects\\Rollouts\\Meroitic Fineware E21484\\Meroitic Fineware E21484.psx","config.json"]
 
         }
     ]
