@@ -44,7 +44,7 @@ def watch_and_process(args):
     watcher = Watcher(inputdir)
     watcher.run()
 
-#This script contains the full automation flow and is triggered by the watche
+#This script contains the full automation flow and is triggered by the watcher
 def build_model_from_manifest(manifest):
     try:
         from photogrammetry import MetashapeTools
@@ -61,15 +61,20 @@ def build_model_from_manifest(manifest):
         project_folder = os.path.join(project_base,projname)
         tiffolder = os.path.join(project_folder,"tiff")
         outputfolder = os.path.join(project_folder,"output")
+        maskfolder = os.path.join(project_base,"masks")
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
             os.mkdir(tiffolder)
             os.mkdir(outputfolder)
+            os.mkdir(maskfolder)
         #export Camera RAW files to Tiffs
         for f in filestoprocess:
             ext = os.path.splitext(f)[1].upper()
             if ext  ==".CR2":
                 image_processing.convertCR2toTIF(f,tiffolder,config["processing"])
+        
+        image_processing.buildMasks(tiffolder,maskfolder,config["processing"])
+
         MetashapeTools.buildBasicModel(tiffolder,projname, project_folder,config["photogrammetry"])
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
@@ -82,6 +87,11 @@ def build_model(args):
         job = args.jobname
         photoinput = args.photos
         outputdir = args.outputdirectory
+        if not args.nomasks:
+            maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
+            if not os.path.exists(maskpath):
+                os.mkdir(maskpath)
+            image_processing.buildMasks(photoinput,maskpath,config["processing"])
         MetashapeTools.buildBasicModel(photoinput,job,outputdir, config["photogrammetry"])
 
     except ImportError as e:
@@ -167,6 +177,7 @@ photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for
 photogrammetryparser.add_argument("jobname", help="The name of the project")
 photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
 photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
+photogrammetryparser.add_argument("--nomasks", help = "Skip the mask generation step.", action = "store_true")
 photogrammetryparser.set_defaults(func=build_model)
 
 watcherprocessor = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")

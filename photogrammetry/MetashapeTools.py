@@ -2,7 +2,7 @@ import os
 import Metashape
 import argparse
 import json
-import ModelHelpers
+import photogrammetry.ModelHelpers as ModelHelpers
 import traceback
 import math
 from os import path
