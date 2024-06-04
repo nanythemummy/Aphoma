@@ -172,7 +172,7 @@ def removeAboveErrorThreshold(chunk, filtertype,max_error,max_points):
 
 def reorientModel(chunk,config):
     axes = findAxesFromMarkers(chunk,config)
-    AlignMarkersToAxes(chunk,axes)
+    #AlignMarkersToAxes(chunk,axes)
 
 
 def findAxesFromMarkers(chunk,config):

@@ -106,6 +106,14 @@ def transfer_to_network_folder(args):
     with open(manifest,"w") as f:
         f.write(",".join(filestocopy))
 
+
+def build_masks(args):
+    """Wrapper script for building masks from contents of a folder using a photoshop droplet."""
+    config = load_config()
+    input = args.inputdir
+    output = args.outputdir
+    image_processing.buildMasks(input,output,config["processing"])
+
 def convert_raw_to_format(args):
     """wrapper script for using the RAW image conversion fucntions via the command line."""
     inputdir = args.imagedirectory
@@ -164,6 +172,11 @@ photogrammetryparser.set_defaults(func=build_model)
 watcherprocessor = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
 watcherprocessor.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
 watcherprocessor.set_defaults(func=watch_and_process)      
+
+maskprocessor = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
+maskprocessor.add_argument("inputdir", help="Photos to mask")
+maskprocessor.add_argument("outputdir",help="location to store masks")   
+maskprocessor.set_defaults(func=build_masks);
 
 
 args = parser.parse_args()

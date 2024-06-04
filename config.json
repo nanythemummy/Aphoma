@@ -8,6 +8,18 @@
                 "Mac":"/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter",
                 "Win":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
                 "Linux":""
+            },
+            "Masking_Droplet":
+            {
+                "Win":".\\util\\MakeMasks.exe",
+                "Mac":"",
+                "Linux":""
+            },
+            "Droplet_Output":
+            {
+                "Win":"C:\\tempmasks",
+                "Mac":"/tempmasks",
+                "Linux":"/tempmasks"
             }
         },
         "transfer":
@@ -53,8 +65,8 @@
             },
             "texture_size":4096,
             "texture_count":1,
-            "export_as":"ply",
-            "pallette":"large_axes_pallette"
+            "export_as":"OBJ",
+            "pallette":"small_axes_pallette"
         }
 
     }
