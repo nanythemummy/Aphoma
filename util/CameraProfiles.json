@@ -1,0 +1,19 @@
+{
+    "cameras":
+    {
+        "ISACM_Photolab_Camera":
+        {
+            "maker":"Canon",
+            "model":"Canon EOS 5D Mark II"
+        }
+    },
+    "lenses":
+    {
+        "ISACM_Photolab_Lens_70mm":
+        {
+            "maker":"Canon",
+            "model":"Canon EF 24-70mm"
+        }
+    }
+
+}
