@@ -40,23 +40,24 @@ def processImage(filepath, output, config):
     exif = getExifData(filepath)
     tifname = convertCR2toTIF(filepath,output,config)
     outputfile = f"{Path(filepath).stem}_corrected.TIF"
-    img = cv2.imread(tifname)
+    img = imageio.imread(tifname)
     newimg = lensProfileCorrection(img,config,exif)
     imageio.imwrite(os.path.join(output,outputfile), newimg)
 
 
 def lensProfileCorrection(tifhandle,config,exif): #pass a camera raw file.
-    
+    #do lens profile correction This code was borrowed from here: https://pypi.org/project/lensfunpy/
+
     clprofile = util.getCameraLensProfiles(config["Camera"],config["Lens"])
     lensdb = lensfunpy.Database()
     #both of these return a list, the first item of which should be our camera. If not, we need to be more specific.
     cam = lensdb.find_cameras(clprofile["camera"]["maker"],clprofile["camera"]["model"])[0]
     lens = lensdb.find_lenses(cam,clprofile["lens"]["maker"],clprofile["lens"]["model"])[0]
-    
     #get data needed for calc from exif data
     focal_length = exif["FocalLength"] if "FocalLength" in exif.keys() else 0
     aperture = exif["FNumber"] if "FNumber" in exif.keys() else 0
-    distance = 1.0 #this is usually the distance when I'm photographing small stuff.
+    assert focal_length !=0 and aperture !=0
+    distance = 1.0 #can't think of a great way to calculate this so I'm going to hardcode it.
     img_width = tifhandle.shape[1]
     img_height = tifhandle.shape[0]
     modifier = lensfunpy.Modifier(lens,cam.crop_factor,img_width,img_height)
@@ -64,7 +65,11 @@ def lensProfileCorrection(tifhandle,config,exif): #pass a camera raw file.
     modifier.initialize(focal_length,aperture,distance,pixel_format = tifhandle.dtype.type )
     undist_coords = modifier.apply_geometry_distortion()
     newimg = cv2.remap(tifhandle,undist_coords, None, cv2.INTER_LANCZOS4)
+    if not modifier.apply_color_modification(newimg):
+        print("Failed to remove vignetting.")
+    
     return newimg
+
     
     #get information on picture from exif data
 
