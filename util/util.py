@@ -19,7 +19,7 @@ def getCameraLensProfiles(cameraprofile,lensprofile):
     setupinfo = {"lens":None,
                  "camera":None}
     profiles = {}
-    with open("CameraProfiles.json") as f:
+    with open("util/CameraProfiles.json") as f:
         profiles= json.load(f)
     if cameraprofile in profiles["cameras"].keys():
         setupinfo["camera"] = profiles["cameras"][cameraprofile]

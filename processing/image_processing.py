@@ -5,6 +5,7 @@ import subprocess
 import imageio
 import rawpy
 import lensfunpy
+import numpy
 import cv2
 from PIL import Image as PILImage
 from PIL import ExifTags
@@ -34,12 +35,38 @@ def buildMasks( imagefolder, outputpath, config):
                 shutil.move(oldpath,os.path.join(maskdir,filename))
     shutil.rmtree(dropletoutput)
 
-def lensProfileCorrection(filepath,config):
-    clprofile = util.getCameraLensProfiles(config["camera"],config["lens"])
+def processImage(filepath, output, config):
+    #takes a camera raw file, applies lens distortion correction, converts to TIF
+    exif = getExifData(filepath)
+    tifname = convertCR2toTIF(filepath,output,config)
+    outputfile = f"{Path(filepath).stem}_corrected.TIF"
+    img = cv2.imread(tifname)
+    newimg = lensProfileCorrection(img,config,exif)
+    imageio.imwrite(os.path.join(output,outputfile), newimg)
+
+
+def lensProfileCorrection(tifhandle,config,exif): #pass a camera raw file.
+    
+    clprofile = util.getCameraLensProfiles(config["Camera"],config["Lens"])
     lensdb = lensfunpy.Database()
     #both of these return a list, the first item of which should be our camera. If not, we need to be more specific.
     cam = lensdb.find_cameras(clprofile["camera"]["maker"],clprofile["camera"]["model"])[0]
     lens = lensdb.find_lenses(cam,clprofile["lens"]["maker"],clprofile["lens"]["model"])[0]
+    
+    #get data needed for calc from exif data
+    focal_length = exif["FocalLength"] if "FocalLength" in exif.keys() else 0
+    aperture = exif["FNumber"] if "FNumber" in exif.keys() else 0
+    distance = 1.0 #this is usually the distance when I'm photographing small stuff.
+    img_width = tifhandle.shape[1]
+    img_height = tifhandle.shape[0]
+    modifier = lensfunpy.Modifier(lens,cam.crop_factor,img_width,img_height)
+    print(f"focal_length = {focal_length}, aperture ={aperture}, distance={distance}, cam:{cam}, lens:{lens}")
+    modifier.initialize(focal_length,aperture,distance,pixel_format = tifhandle.dtype.type )
+    undist_coords = modifier.apply_geometry_distortion()
+    newimg = cv2.remap(tifhandle,undist_coords, None, cv2.INTER_LANCZOS4)
+    return newimg
+    
+    #get information on picture from exif data
 
 def convertCR2toDNG(input,output,config):
     outputcmd = f"-d \"{output}/\""
@@ -66,31 +93,32 @@ def getExifData(filename):
             else:
                 tagname = ExifTags.TAGS.get(code,code)
                 exif[tagname]=val
-    
-
     return exif           
 
 
 def convertCR2toTIF(input,output,config):
     fn = Path(input).stem
+    outputname = os.path.join(output,fn+".tif")
     with rawpy.imread(input) as raw:
         rgb = raw.postprocess(use_camera_wb=True)
-        imageio.imsave(os.path.join(output,fn+".tif"),rgb)
+        imageio.imsave(outputname,rgb)
+    return outputname
 
 def convertToJPG(input, output):
     fn = Path(input).stem #get the filename.
     ext = os.path.splitext(input)[1].upper()
+    outputname = os.path.join(output,fn+".jpg")
     if ext==".TIF":
         try:
             f=cv2.imread(input)
-            cv2.imwrite(os.path.join(output,fn+".jpg"),f,[int(cv2.IMWRITE_JPEG_QUALITY),100])
+            cv2.imwrite(outputname,f,[int(cv2.IMWRITE_JPEG_QUALITY),100])
         except Exception as e:
             raise e
     elif ext ==".CR2":
         with rawpy.imread(input) as f:
             processedimage = f.postprocess(use_camera_wb=True)
-            imageio.save(os.path.join(output,fn+".jpg"),processedimage)
-
+            imageio.save(outputname,processedimage)
+    return outputname
 def getWhiteBalance(rawpath):
     with rawpy.imread(rawpath) as raw:
         return raw.camera_whitebalance
