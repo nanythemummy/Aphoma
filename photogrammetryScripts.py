@@ -64,7 +64,7 @@ def build_model_from_manifest(manifest):
         project_folder = os.path.join(project_base,projname)
         tiffolder = os.path.join(project_folder,"tiff")
         outputfolder = os.path.join(project_folder,"output")
-        maskfolder = os.path.join(project_base,"masks")
+        maskfolder = os.path.join(project_folder, config["photogrammetry"]["mask_path"])
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
             os.mkdir(tiffolder)
