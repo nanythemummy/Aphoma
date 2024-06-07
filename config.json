@@ -21,8 +21,8 @@
                 "Mac":"/tempmasks",
                 "Linux":"/tempmasks"
             },
-            "Camera":"ISACM_Photolab_Camera",
-            "Lens":"ISACM_Photolab_Lens_70mm"
+            "Camera":"Ortery Camera",
+            "Lens":"Ortery Camera Lens"
 
         },
         "transfer":
