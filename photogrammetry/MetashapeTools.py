@@ -81,7 +81,7 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
                 c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
                 c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
                 doc.save()
-            reorientModel(c,config)
+            #reorientModel(c,config)
             doc.save()
             print(f"Finished! Now exporting chunk {c.label}")
             labelname = c.label.replace(" ","")
@@ -91,7 +91,7 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
                         embed_texture=(ext=="ply") )
     except Exception as e:
         print(e)
-        print(traceback.format_exc)
+        print(traceback.format_exc())
 
 #runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
 #which ought to occur on the final iteration of a process.
@@ -172,7 +172,7 @@ def removeAboveErrorThreshold(chunk, filtertype,max_error,max_points):
 
 def reorientModel(chunk,config):
     axes = findAxesFromMarkers(chunk,config)
-    #AlignMarkersToAxes(chunk,axes)
+    AlignMarkersToAxes(chunk,axes)
 
 
 def findAxesFromMarkers(chunk,config):
@@ -202,18 +202,20 @@ def AlignMarkersToAxes(chunk,axes): #takes a vector and aligns it with the y axi
     transmat = chunk.transform.matrix
     regioncenter = chunk.region.center
     scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
-    scale*=1000.0 #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
+    #scale*=1000.0 #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
     scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
     newaxes = Metashape.Matrix([[axes[0].x,axes[0].y, axes[0].z,0],
                    [axes[1].x,axes[1].y,axes[1].z,0],
                    [axes[2].x, axes[2].y,axes[2].z,0],
                    [0,0,0,1]])
-    newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
-                                       [0,1,0,regioncenter[1]],
-                                       [0,0,1,regioncenter[2]],
-                                       [0,0,0,1]])
+
     chunk.transform.matrix=scalematrix*newaxes
     print(f"resetting axes: {chunk.transform.matrix}")
+    chunk.resetRegion()
+    newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
+                                    [0,1,0,regioncenter[1]],
+                                    [0,0,1,regioncenter[2]],
+                                    [0,0,0,1]])
     chunk.transform.matrix *=newtranslation.inv()
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()

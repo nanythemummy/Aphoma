@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "flowerpot", "E:\\Photogrammetry\\flowerpot\\photos","E:\\Photogrammetry\\flowerpot\\metashape" ,"-r"]
+            "args":["photogrammetry", "E21333", "G:\\Meroitic Fineware E21333\\RAW","G:\\Meroitic Fineware E21333\\" ]
 
         },
         {

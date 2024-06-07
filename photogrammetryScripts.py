@@ -73,8 +73,7 @@ def build_model_from_manifest(manifest):
         #export Camera RAW files to Tiffs
         for f in filestoprocess:
             ext = os.path.splitext(f)[1].upper()
-            if ext  ==".CR2":
-                image_processing.convertCR2toTIF(f,tiffolder,config["processing"])
+            image_processing.processImage(f,tiffolder,config["processing"])
         
         image_processing.buildMasks(tiffolder,maskfolder,config["processing"])
 
@@ -90,12 +89,27 @@ def build_model(args):
         job = args.jobname
         photoinput = args.photos
         outputdir = args.outputdirectory
-        if not args.nomasks:
+        tifpath = os.path.join(outputdir,"TIFs")
+        maskpath = os.path.join(outputdir,"Masks")
+        if not os.path.exists(outputdir):
+            os.mkdir(outputdir)
+        if not os.path.exists(tifpath) and photoinput != tifpath:
+            os.mkdir(tifpath)
+            with os.scandir(photoinput) as it: #scans through a given directory, returning an interator.
+                for f in it:
+                    if os.path.isfile(f):
+                        if f.name.upper().endswith(".CR2"): #CANON CAMERA!
+                            image_processing.processImage(f.path,tifpath,config["processing"])
+                        elif f.name.upper().endswith(".TIF"):
+                            #user passed the tif directory and not raw files.
+                            tifpath = photoinput
+                            break
+        if not os.path.exists(maskpath) and args.nomasks==False:
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
-            image_processing.buildMasks(photoinput,maskpath,config["processing"])
-        MetashapeTools.buildBasicModel(photoinput,job,outputdir, config["photogrammetry"])
+            image_processing.buildMasks(tifpath,maskpath,config["processing"])
+        MetashapeTools.buildBasicModel(tifpath,job,outputdir, config["photogrammetry"])
 
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
@@ -169,6 +183,7 @@ transferparser.add_argument("--p", help="Prunes every Nth file from Camera X, as
 transferparser.add_argument("jobname", help="The name of this job. This translates into a subfolder on the network drive.")
 transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
 transferparser.set_defaults(func=transfer_to_network_folder)
+
 
 
 imageprocessing  = subparsers.add_parser("process", help="Color Processing Functions")

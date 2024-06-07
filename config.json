@@ -11,7 +11,7 @@
             },
             "Masking_Droplet":
             {
-                "Win":".\\util\\MakeMasks.exe",
+                "Win":"E:\\ContentSelectMask.exe",
                 "Mac":"",
                 "Linux":""
             },
@@ -56,7 +56,7 @@
             "model_quality":2,
             "mask_path": "Masks",
             "output_path":"Output",
-            "mask_ext":"png",
+            "mask_ext":"tif",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,
