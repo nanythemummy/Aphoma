@@ -1,0 +1,29 @@
+{
+    "cameras":
+    {
+        "ISACM_Photolab_Camera":
+        {
+            "maker":"Canon",
+            "model":"Canon EOS 5D Mark II"
+        },
+        "Ortery Camera":
+        {
+            "maker":"Canon",
+            "model":"Canon EOS 7D"
+        }
+    },
+    "lenses":
+    {
+        "ISACM_Photolab_Lens_70mm":
+        {
+            "maker":"Canon",
+            "model":"Canon EF 24-70mm"
+        },
+        "Ortery Camera Lens":
+        {
+            "maker":"Canon",
+            "model":"EF-S18-135mm f/3.5-5.6 IS"
+        }
+    }
+
+}

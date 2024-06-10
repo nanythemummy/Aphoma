@@ -81,8 +81,9 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
                 c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
                 c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
                 doc.save()
+        for c in doc.chunks:
+            #for now, don't save after model reorient.
             reorientModel(c,config)
-            doc.save()
             print(f"Finished! Now exporting chunk {c.label}")
             labelname = c.label.replace(" ","")
             ext = config["export_as"]
@@ -172,7 +173,7 @@ def removeAboveErrorThreshold(chunk, filtertype,max_error,max_points):
 
 def reorientModel(chunk,config):
     axes = findAxesFromMarkers(chunk,config)
-    #AlignMarkersToAxes(chunk,axes)
+    AlignMarkersToAxes(chunk,axes)
 
 
 def findAxesFromMarkers(chunk,config):
@@ -208,12 +209,14 @@ def AlignMarkersToAxes(chunk,axes): #takes a vector and aligns it with the y axi
                    [axes[1].x,axes[1].y,axes[1].z,0],
                    [axes[2].x, axes[2].y,axes[2].z,0],
                    [0,0,0,1]])
-    newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
-                                       [0,1,0,regioncenter[1]],
-                                       [0,0,1,regioncenter[2]],
-                                       [0,0,0,1]])
-    chunk.transform.matrix=scalematrix*newaxes
+
+    chunk.transform.matrix=scalematrix*newaxes #the inside out bug is with newaxes. Figure it out.
     print(f"resetting axes: {chunk.transform.matrix}")
+    chunk.resetRegion()
+    newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
+                                    [0,1,0,regioncenter[1]],
+                                    [0,0,1,regioncenter[2]],
+                                    [0,0,0,1]])
     chunk.transform.matrix *=newtranslation.inv()
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()
