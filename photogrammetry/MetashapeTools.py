@@ -91,7 +91,7 @@ def buildBasicModel(photodir, projectname, projectdir, config, decimate = True):
                         embed_texture=(ext=="ply") )
     except Exception as e:
         print(e)
-        print(traceback.format_exc)
+        print(traceback.format_exc())
 
 #runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
 #which ought to occur on the final iteration of a process.
