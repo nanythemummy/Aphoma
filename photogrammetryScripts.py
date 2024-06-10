@@ -9,9 +9,12 @@ from watchdog.events import FileSystemEventHandler
 
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
-def color_process(args):
-    if args.g:
-        image_processing.getGrayFromCard(args.inputimage)
+def process_images(args):
+    config = load_config()
+    image_processing.processImage(args.inputimage,args.outputdir,config["processing"])
+
+
+
 #These classes are part of a filesystem watcher which watches for the 
 #appearance of a manifest file in the desired directory, then builds a model with the pictures in the manifest.
 class WatcherHandler(FileSystemEventHandler):
@@ -61,7 +64,7 @@ def build_model_from_manifest(manifest):
         project_folder = os.path.join(project_base,projname)
         tiffolder = os.path.join(project_folder,"tiff")
         outputfolder = os.path.join(project_folder,"output")
-        maskfolder = os.path.join(project_base,"masks")
+        maskfolder = os.path.join(project_folder, config["photogrammetry"]["mask_path"])
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
             os.mkdir(tiffolder)
@@ -70,8 +73,7 @@ def build_model_from_manifest(manifest):
         #export Camera RAW files to Tiffs
         for f in filestoprocess:
             ext = os.path.splitext(f)[1].upper()
-            if ext  ==".CR2":
-                image_processing.convertCR2toTIF(f,tiffolder,config["processing"])
+            image_processing.processImage(f,tiffolder,config["processing"])
         
         image_processing.buildMasks(tiffolder,maskfolder,config["processing"])
 
@@ -87,12 +89,27 @@ def build_model(args):
         job = args.jobname
         photoinput = args.photos
         outputdir = args.outputdirectory
-        if not args.nomasks:
+        tifpath = os.path.join(outputdir,"TIFs")
+        maskpath = os.path.join(outputdir,"Masks")
+        if not os.path.exists(outputdir):
+            os.mkdir(outputdir)
+        if not os.path.exists(tifpath) and photoinput != tifpath:
+            os.mkdir(tifpath)
+            with os.scandir(photoinput) as it: #scans through a given directory, returning an interator.
+                for f in it:
+                    if os.path.isfile(f):
+                        if f.name.upper().endswith(".CR2"): #CANON CAMERA!
+                            image_processing.processImage(f.path,tifpath,config["processing"])
+                        elif f.name.upper().endswith(".TIF"):
+                            #user passed the tif directory and not raw files.
+                            tifpath = photoinput
+                            break
+        if not os.path.exists(maskpath) and args.nomasks==False:
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
-            image_processing.buildMasks(photoinput,maskpath,config["processing"])
-        MetashapeTools.buildBasicModel(photoinput,job,outputdir, config["photogrammetry"])
+            image_processing.buildMasks(tifpath,maskpath,config["processing"])
+        MetashapeTools.buildBasicModel(tifpath,job,outputdir, config["photogrammetry"])
 
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
@@ -168,10 +185,11 @@ transferparser.add_argument("imagedirectory", help="Copies images from this dire
 transferparser.set_defaults(func=transfer_to_network_folder)
 
 
-colorprocess  = subparsers.add_parser("color", help="Color Processing Functions")
-colorprocess.add_argument("inputimage", help="image to process")
-colorprocess.add_argument("--g", help="given a color card, find a gray square and return the average rgb of the pixels", action="store_true")
-colorprocess.set_defaults(func=color_process)
+
+imageprocessing  = subparsers.add_parser("process", help="Color Processing Functions")
+imageprocessing.add_argument("inputimage", help="image to process")
+imageprocessing.add_argument("outputdir", help="Directory where the final processed image will be stored.")
+imageprocessing.set_defaults(func=process_images)
 
 photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
 photogrammetryparser.add_argument("jobname", help="The name of the project")
