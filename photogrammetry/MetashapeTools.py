@@ -193,7 +193,7 @@ def findAxesFromMarkers(chunk,config):
             break
     ux = (xaxis[1]-xaxis[0])
     uz = (zaxis[1]-zaxis[0])
-    yaxis = Metashape.Vector.cross(ux,uz)
+    yaxis = Metashape.Vector.cross(uz,ux)
     ux.normalize()
     uz.normalize()
     yaxis.normalize()
