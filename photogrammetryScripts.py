@@ -35,7 +35,7 @@ class WatcherHandler(FileSystemEventHandler):
         -------------------
         event: a watchdog.event from the watchdog library.
         """
-        if event.event_type=="created" and  event.src_path.endswith("Files_to_Process.txt"):
+        if event.event_type=="modified" and  event.src_path.endswith("Files_to_Process.txt"):
                 build_model_from_manifest(event.src_path)
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
@@ -89,7 +89,7 @@ def build_model_from_manifest(manifest:str):
     filestoprocess=[]
     parentdir= os.path.abspath(os.path.join(manifest,os.pardir))
     projname = parentdir.split(os.sep)[-1] #forward slash should work since os.path functions convert windows-style paths to unix-style.
-    with open(manifest,"r") as f:
+    with open(manifest,"r",encoding="utf8") as f:
         filestoprocess = f.read().split(",")
     #if the configured project directory doesn't exist, make it.
     project_base =os.path.join(config["watcher"]["project_base"])
@@ -97,11 +97,15 @@ def build_model_from_manifest(manifest:str):
         os.mkdir(project_base)
     #setup project directories.
     project_folder = os.path.join(project_base,projname)
+    if not os.path.exists(project_folder):
+        os.mkdir(project_folder)
     raw = os.path.join(project_folder,"RAW")
+    if not os.path.exists(raw):
+        os.mkdir(raw)
     #export Camera RAW files to Tiffs
     for f in filestoprocess:
-        shutil.copyfile(f,raw)
-    build_model(projname,raw,project_base,config,False)
+        shutil.copyfile(f,os.path.join(raw,os.path.basename(f)))
+    build_model(projname,raw,project_folder,config,False)
 
         
 def build_model(jobname,inputdir,outputdir,config,nomasks=False):
@@ -272,7 +276,7 @@ watcherprocessor.set_defaults(func=watch_and_process)
 maskprocessor = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
 maskprocessor.add_argument("inputdir", help="Photos to mask")
 maskprocessor.add_argument("outputdir",help="location to store masks")   
-maskprocessor.set_defaults(func=build_masks);
+maskprocessor.set_defaults(func=build_masks)
 
 
 args = parser.parse_args()

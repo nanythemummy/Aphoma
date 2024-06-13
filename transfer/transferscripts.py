@@ -27,7 +27,7 @@ def pruneOrteryPics(filestocopy, orteryconfig):
     print("Pruning pics according to specifications per camera in the config.json file.")
     for i,k in enumerate(desirednumbers.keys()):
         if desirednumbers[k]==0:
-            continue;
+            continue
         fractiontoremove = (picsperrevolution-desirednumbers[k])/picsperrevolution
         for j in range(0,picsperrevolution):
             if (j*fractiontoremove)%1==0:
