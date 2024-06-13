@@ -1,3 +1,11 @@
+""" This module contains code that takes a 2D image and process it in prerparation for building a 
+collection of such images into a 3D Model.
+The code here does automatically, what might otherwise be done in photoshop and lightroom. 
+It removes lens distortion and vignetting, changes
+white balance, and converts the document to a tiff. The functions here are called from elsewhere: namely photogrammetryScripts.py
+Author: Kea Johnston, June 2024
+"""
+
 import os
 from pathlib import Path
 import shutil
