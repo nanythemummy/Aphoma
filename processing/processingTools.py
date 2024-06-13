@@ -3,7 +3,16 @@ import cv2
 
 #code for perspective transform inspired by Adrian Rosebrock's code here: https://pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
 
-def ptsToClockwiseRect(pts):
+def points_to_clockwise_rectangle(pts):
+    """
+    Given four points in space, try to figure out which is the top left, and which one is the bottom right etc, then return them in a list where
+    they are ordered clockwise.
+
+    Parameters:
+    pts: A numpy array of coordinates in 2d space.
+
+    returns: a numpy NDArray.
+    """
     #new array of four x,y coordinates, initialized to zero.
     rect = np.zeros((4,2),dtype="float32")
     #np sum will add the x,y vals, ie. Axis 1 of an array of 4 x,y pts.
@@ -18,8 +27,17 @@ def ptsToClockwiseRect(pts):
     rect[3]=pts[np.argmax(d)]
     return rect
 
-def perspectiveTransform(image,pts):
-    rect = ptsToClockwiseRect(pts)
+def perspective_transform(image,pts):
+    """Given four points in space, orders them in a clockwise direction and then uses cv2 to do a perspective transform on them into
+    a rectangle.
+    Parameters:
+    -------------------------
+    image: a numpy array of pixels.
+    pts: an numpy array of points.
+    
+    returns an array of pixels.
+    """
+    rect = points_to_clockwise_rectangle(pts)
     (tl, tr, br, bl) = rect #these are the points from the rectangle in order.
     #calculate the new image width which will be the 
     #maximum between the distance between the top points or the distance between the bottom ones.

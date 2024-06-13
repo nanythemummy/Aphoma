@@ -9,9 +9,17 @@ from watchdog.events import FileSystemEventHandler
 
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
+
 def process_images(args):
+    """Entry point for one-off image processing via the process command. Runs lens profile corrections and color correction
+    on an image and resaves it as a tif in the directory specified. 
+    
+    Parameters:
+    args: an argument object passed by the command line that has attributes inputimage (str) and outputdir (str)
+      
+    """
     config = load_config()
-    image_processing.processImage(args.inputimage,args.outputdir,config["processing"])
+    image_processing.process_image(args.inputimage,args.outputdir,config["processing"])
 
 
 
@@ -73,9 +81,9 @@ def build_model_from_manifest(manifest):
         #export Camera RAW files to Tiffs
         for f in filestoprocess:
             ext = os.path.splitext(f)[1].upper()
-            image_processing.processImage(f,tiffolder,config["processing"])
+            image_processing.process_image(f,tiffolder,config["processing"])
         
-        image_processing.buildMasks(tiffolder,maskfolder,config["processing"])
+        image_processing.build_masks_with_droplet(tiffolder,maskfolder,config["processing"])
 
         MetashapeTools.buildBasicModel(tiffolder,projname, project_folder,config["photogrammetry"])
     except ImportError as e:
@@ -99,7 +107,7 @@ def build_model(args):
                 for f in it:
                     if os.path.isfile(f):
                         if f.name.upper().endswith(".CR2"): #CANON CAMERA!
-                            image_processing.processImage(f.path,tifpath,config["processing"])
+                            image_processing.process_image(f.path,tifpath,config["processing"])
                         elif f.name.upper().endswith(".TIF"):
                             #user passed the tif directory and not raw files.
                             tifpath = photoinput
@@ -108,7 +116,7 @@ def build_model(args):
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
-            image_processing.buildMasks(tifpath,maskpath,config["processing"])
+            image_processing.build_masks_with_droplet(tifpath,maskpath,config["processing"])
         MetashapeTools.buildBasicModel(tifpath,job,outputdir, config["photogrammetry"])
 
     except ImportError as e:
@@ -139,7 +147,7 @@ def build_masks(args):
     config = load_config()
     input = args.inputdir
     output = args.outputdir
-    image_processing.buildMasks(input,output,config["processing"])
+    image_processing.build_masks_with_droplet(input,output,config["processing"])
 
 def convert_raw_to_format(args):
     """wrapper script for using the RAW image conversion fucntions via the command line."""
@@ -153,9 +161,9 @@ def convert_raw_to_format(args):
             if os.path.isfile(f):
                 if f.name.upper().endswith(".CR2"): #CANON CAMERA!
                     if args.dng:
-                        image_processing.convertCR2toDNG(os.path.join(f),outputdir, config["processing"])
+                        image_processing.convert_CR2_to_DNG(os.path.join(f),outputdir, config["processing"])
                     if args.tif:
-                        image_processing.convertCR2toTIF(os.path.join(f),outputdir, config["processing"])
+                        image_processing.convert_CR2_to_TIF(os.path.join(f),outputdir, config["processing"])
                     if args.jpg:
                         image_processing.convertToJPG(os.path.join(f),outputdir)
                 elif f.name.upper().endswith("TIF") and args.jpg:
