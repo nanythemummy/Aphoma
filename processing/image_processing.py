@@ -78,8 +78,19 @@ def buildMasks( imagefolder, outputpath, config):
                 shutil.move(oldpath,os.path.join(maskdir,filename))
     shutil.rmtree(dropletoutput)
 
-def processImage(filepath, output, config, gray=None):
-    #takes a camera raw file, applies lens distortion correction, converts to TIF
+def processImage(filepath: str, output: str, config: dict):
+    """Runs non-filter corrections on a file format and then exports it as a tiff
+    
+    Checks to see if a file is a canon RAW file (CR2), and converts the file to tiff. Then, opens the file and with imageio 
+    and does lens profile corrections and vignette removal. Eventually this function will also do white balance.
+    
+    Parameters
+    -------------
+    filepath : the path to an image file.
+    output : the path where you want the new tiff file to be written.
+    config : a dictionary of config values. These are found in the config.json file under "processing", which is the dict that gets passed in.
+
+    """
     exif = getExifData(filepath)
 
     if filepath.upper().endswith(".CR2"):
