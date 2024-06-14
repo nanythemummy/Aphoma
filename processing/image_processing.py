@@ -98,8 +98,8 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
-    dropletpath = util.getConfigForPlatform(config["Masking_Droplet"])
-    dropletoutput = util.getConfigForPlatform(config["Droplet_Output"])
+    dropletpath = util.get_config_for_platform(config["Masking_Droplet"])
+    dropletoutput = util.get_config_for_platform(config["Droplet_Output"])
     if not dropletpath:
         print("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
         return
@@ -155,7 +155,7 @@ def lens_profile_correction(tifhandle ,config: dict, exif: dict):
     returns: an array of modified pixels.
     """
     #do lens profile correction This code was borrowed from here: https://pypi.org/project/lensfunpy/
-    clprofile = util.getCameraLensProfiles(config["Camera"],config["Lens"])
+    clprofile = util.get_camera_lens_profile(config["Camera"],config["Lens"])
     lensdb = lensfunpy.Database()
     #both of these return a list, the first item of which should be our camera. If not, we need to be more specific.
     cam = lensdb.find_cameras(clprofile["camera"]["maker"],clprofile["camera"]["model"])[0]
@@ -189,7 +189,7 @@ def convert_CR2_to_DNG(input,output,config):
     """
 
     outputcmd = f"-d \"{output}/\""
-    converterpath = util.getConfigForPlatform(config["DNG_Converter"])
+    converterpath = util.get_config_for_platform(config["DNG_Converter"])
     subprocess.run([converterpath,"-d",output,"-c", input], check = False)
 
 def get_exif_data(filename: str) -> dict:
