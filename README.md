@@ -1,8 +1,8 @@
 # museumcode
 Experimental  Scripts for use in a Museum or Archaeology
 ## Setup:
-1. Install Adobe DNG Converter. You can find it here: https://helpx.adobe.com/camera-raw/digital-negative.html, if you want to use the DNG conversion command.
-2. Setup a virtual environment:
+1. Install Adobe DNG Converter if you want to use the DNG conversion command.  You can find it on [Adobe's Camera Raw Page](https://helpx.adobe.com/camera-raw/digital-negative.html)
+2. Setup a virtual environment
   UNIX
   ```
   python3 -m venv venv
@@ -13,18 +13,18 @@ Experimental  Scripts for use in a Museum or Archaeology
   python -m venv venv
   venv\scripts\activate.bat
   ```
-4.  Install requirements.txt
+3.  Install the dependencies in requirements.txt
   ```
   pip install -r requirements.txt
+  ```
+4.  Download and Install the Metashape standalone python module from the [Agisoft Download Page](httpw://www.agisoft.com/downloads) Note that you must have a license for metashape professional for this to work. Note that if you are using Python 3.12, as of 6/14/2024, they have not made the module explicitly compatible with it yet. It does in fact work. You just need to rename the file from Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311-none-win_amd64 to Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64
+```
+pip install Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64
 ```
 
-## Metashape
-These scripts run metashape in headless mode via the python module. They require that the metashape wheel be manually installed and then activated with the product key. It is not in requirements.txt
-Instructions can be found here:
-https://agisoft.freshdesk.com/support/solutions/articles/31000148930-how-to-install-metashape-stand-alone-python-module
-1. Download the Standalone Python Wheel from the metashape site. https://www.agisoft.com/downloads/installer/
-2. ``` pip install c:\path\to\wheel\wheel.whl ```
-3. Install the requirements text requirements as normal.
+5. If you would like to build one mask for each photo using Photoshop's content aware masking, ensure that you have a copy of photoshop 2024 installed. If you have multiple versions of photoshop, you may want to open the latest because sometimes the droplet will open the wrong version and not the version it was made with. If you would not like to build makss this way, run the photogrammetry command with the --nomasks flag or choose one of the other masking options (TBA)
+
+6. Make a copy of config_template.json and name it config.json. Change the values in it to suit the computer you are using and the job you want to do with it.
 
 ## Transfer
 This code facilitates the use of a seperate scanning workstation and photogrammetry workstation. It is meant to automate the workflow between the two.
@@ -84,3 +84,25 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
 ```
+## Photogrammetry
+This function takes an input folder full of pictures in CR2 (NEF will probably be supported at some point) format and uses it to build a 3D model with Agisoft Metashape. It converts the files to TIF if needed and builds masks for each file. Then it adds them to one chunk in Metashape and builds a sparse cloud. It deletes potentially erroneous points, then uses the sparse cloud to create depth maps and a model. If scalebars are configured, markers are detected and scalebars are created with the configured values. If a marker pallette indicating x and z axes is used, the model is rotated such that the x and z and y on the pallette correspond with the world coordinate system. The model is centered on the origin in world space and scaled x1000 as all measurements in Metashape are in meters, whereas most objects that we are dealing with ought to be in mm. In the future, this scaling should be configurable.
+The model is then exported in the specified format to the output folder created in the proejct directory passed in on the command line.
+
+### Configuration
+ - **sparse_cloud_quality** Corresponds with the quality of the sparse cloud in metashape when you run align photos. Must be 0,1,2,4, or 8 with 1 being the highest quality.
+ - **model_quality** Corresponds with the quality of the model when building the model in metashape. Must be 1,2,4,8 or 16 with one being the highest quality.
+ - **mask_path** Subdirectory of the project directory where masks will be stored. 
+
+- **error_thresholds** Each point as a certain amount of error associated with its position. The oprimization and error reduction process removes points with error above certain thresholds and recalibrates the cameras based on the points with less error. You may find that with skinny or small models you are getting holes in your model with these settings. If this is the case, you can raise projection accuracy to 6 or reconstruction uncertainty to more towards 30 until you get the results you want. Probably best to leave the rest alone.
+                "reconstruction_uncertainty":15,
+                "projection_accuracy":5,
+                "reprojection_error":0.3,
+                "reprojection_max_selection_per_iteration":0.1,
+                "reprojection_max_selection":0.5,
+                "projection_accuracy_max_selection":0.5,
+                "reconstruction_uncertainty_max_selection":0.5
+- **texture_size** The size of the texture to export. Should be a power of 2. 4096 is the default.
+- **texture_count** how many textures to export. You can divide the texture up into several large image files if you have a large object or want a very high resolution texture.
+- **export_as** format to export. Should be obj or ply.
+- **palette** The name of the marker palette you are using. This will act as a key to the configuration of the marker palette, which is loacted in util/MarkerPalettes.json
+

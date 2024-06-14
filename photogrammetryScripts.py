@@ -125,6 +125,7 @@ def build_model(jobname,inputdir,outputdir,config,nomasks=False):
             os.mkdir(outputdir)
 
         processedpath = inputdir
+        print("Converting files if needed.")                        
         with os.scandir(inputdir) as it:
             for f in it:
                 if os.path.isfile(f):
@@ -135,11 +136,13 @@ def build_model(jobname,inputdir,outputdir,config,nomasks=False):
                         image_processing.process_image(f.path,tifpath,config['processing'])
                         processedpath = tifpath       
         if nomasks is False:
+            print("Building Masks")
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
                 image_processing.build_masks_with_droplet(processedpath,maskpath,config["processing"])         
-        MetashapeTools.buildBasicModel(processedpath,jobname,outputdir, config["photogrammetry"])
+        print("Building Model")
+        MetashapeTools.build_basic_model(processedpath,jobname,outputdir, config["photogrammetry"])
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e
@@ -255,8 +258,6 @@ transferparser.add_argument("jobname", help="The name of this job. This translat
 transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
 transferparser.set_defaults(func=transfer_to_network_folder)
 
-
-
 imageprocessing  = subparsers.add_parser("process", help="Color Processing Functions")
 imageprocessing.add_argument("inputimage", help="image to process")
 imageprocessing.add_argument("outputdir", help="Directory where the final processed image will be stored.")
@@ -269,14 +270,14 @@ photogrammetryparser.add_argument("outputdirectory", help="Where the intermediar
 photogrammetryparser.add_argument("--nomasks", help = "Skip the mask generation step.", action = "store_true")
 photogrammetryparser.set_defaults(func=build_model_cmd)
 
-watcherprocessor = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
-watcherprocessor.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-watcherprocessor.set_defaults(func=watch_and_process)      
+watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
+watcherparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+watcherparser.set_defaults(func=watch_and_process)      
 
-maskprocessor = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
-maskprocessor.add_argument("inputdir", help="Photos to mask")
-maskprocessor.add_argument("outputdir",help="location to store masks")   
-maskprocessor.set_defaults(func=build_masks)
+maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
+maskparser.add_argument("inputdir", help="Photos to mask")
+maskparser.add_argument("outputdir",help="location to store masks")   
+maskparser.set_defaults(func=build_masks)
 
 
 args = parser.parse_args()
