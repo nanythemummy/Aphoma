@@ -106,7 +106,7 @@ The model is then exported in the specified format to the output folder created 
 - **export_as** format to export. Should be obj or ply.
 - **palette** The name of the marker palette you are using. This will act as a key to the configuration of the marker palette, which is loacted in util/MarkerPalettes.json
 
-  ```
+```
 usage: photogrammetryScripts photogrammetry [-h] [--nomasks] jobname photos outputdirectory
 
 positional arguments:
