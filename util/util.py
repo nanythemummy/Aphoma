@@ -1,21 +1,36 @@
+"""Utility functions, mainly for dealing with configuration."""
 from sys import platform
 import json
 
-def getConfigForPlatform(config):
-    #In the json config, differing options for platform should folllow the format:
-    #optionname:{
-    #platformname:platformval
-    #}
-    #where possible platforms are Mac, Win, Linux.
-    #The dictionary passed in here ought to be "optionname"
-    if platform.startswith("linux"):
-        return(config["Linux"])
-    elif platform == "darwin":
-        return(config["Mac"])
-    else:
-        return(config["Win"])
+def get_config_for_platform(config):
+    """For the operations that shell out to a third party app, the paths may be fundamentally different on Windows/Mac. This function may be
+    deprecated now that each computer has its own config.json file.
     
-def getCameraLensProfiles(cameraprofile,lensprofile):
+    Anyway, basically, you pass in the config value you want, and this will get the value for the appropriate platform key from the config dictionary
+    so I don't have to repeat this block of code everywhere.
+    Parameters:
+    ----------------
+    Config: the subset of the config dictionary with configurations that might vary by platform. For example: config["processing"]["Masking_Droplet"]
+    """
+
+    if platform.startswith("linux"):
+        return config["Linux"]
+    elif platform == "darwin":
+        return config["Mac"]
+    else:
+        return config["Win"]
+
+def get_camera_lens_profile(cameraprofile,lensprofile):
+    """Gets the appropriate model and make information from the config file for ther specified camera profile. May be deprecated now that we are no longer
+    doing lens profile corrections as part of the processing.
+    
+    Parameters:
+    -----------------
+    cameraprofile: the value of config.json->processing->Camera, that is, the name of the camera profile as defined in util/cameraprofiles.json.
+    lensprofile: the value of config.json->processing->Lens, that is, the name of the lens profile as defined in util/cameraprofiles.
+
+    returns: a dictionary containing the make and model of the lens and camera.
+    """
     setupinfo = {"lens":None,
                  "camera":None}
     profiles = {}

@@ -56,7 +56,7 @@
             "model_quality":2,
             "mask_path": "Masks",
             "output_path":"Output",
-            "mask_ext":"png",
+            "mask_ext":"tif",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,
@@ -68,8 +68,8 @@
             },
             "texture_size":4096,
             "texture_count":1,
-            "export_as":"obj",
-            "pallette":"large_axes_pallette"
+            "export_as":"ply",
+            "palette":"large_axes_palette"
         }
 
     }

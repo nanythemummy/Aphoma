@@ -26,6 +26,17 @@
 
         },
         {
+            "name": "Watch",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryScripts.py",
+            "console": "integratedTerminal",
+
+            "args":["watch", "e:\\photogrammetry"]
+
+
+        },
+        {
             "name": "Python Debugger: MetashapeTools-TranslationTest",
             "type": "debugpy",
             "request": "launch",
