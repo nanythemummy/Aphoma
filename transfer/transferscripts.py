@@ -1,5 +1,8 @@
+"""Scripts to be run on the computer controlling the photography rig, in order to facilitate transfer of photos to the computer
+which will be running the processing operations."""
+
 import shutil
-import os.path, math
+import os.path
 
 
 def transferToNetworkDirectory(destpath, filestocopy):
@@ -38,7 +41,7 @@ def pruneOrteryPics(filestocopy, orteryconfig):
     picsperrevolution=orteryconfig["pics_per_revolution"]
     desirednumbers=orteryconfig["pics_per_cam"]
     expectedfiles = len(desirednumbers)*picsperrevolution
-    if(len(filestocopy)!=expectedfiles):
+    if len(filestocopy)!=expectedfiles:
         print(f"Cannot prune: the expected number of files was {expectedfiles}, but there were really {len(filestocopy)} files in the folder.")
         return filestocopy
     finallist = []
@@ -51,7 +54,3 @@ def pruneOrteryPics(filestocopy, orteryconfig):
             if (j*fractiontoremove)%1==0:
                 finallist.append(filestocopy[i*picsperrevolution+j])
     return finallist
-
-        
-        
-

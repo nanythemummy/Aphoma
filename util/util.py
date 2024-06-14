@@ -1,3 +1,4 @@
+"""Utility functions, mainly for dealing with configuration."""
 from sys import platform
 import json
 
@@ -13,12 +14,11 @@ def get_config_for_platform(config):
     """
 
     if platform.startswith("linux"):
-        return(config["Linux"])
+        return config["Linux"]
     elif platform == "darwin":
-        return(config["Mac"])
+        return config["Mac"]
     else:
-        return(config["Win"])
-    
+        return config["Win"]
 
 def get_camera_lens_profile(cameraprofile,lensprofile):
     """Gets the appropriate model and make information from the config file for ther specified camera profile. May be deprecated now that we are no longer

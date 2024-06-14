@@ -89,7 +89,7 @@ def build_model_from_manifest(manifest:str):
     filestoprocess=[]
     parentdir= os.path.abspath(os.path.join(manifest,os.pardir))
     projname = parentdir.split(os.sep)[-1] #forward slash should work since os.path functions convert windows-style paths to unix-style.
-    with open(manifest,"r",encoding="utf8") as f:
+    with open(manifest,"r",encoding="utf-8") as f:
         filestoprocess = f.read().split(",")
     #if the configured project directory doesn't exist, make it.
     project_base =os.path.join(config["watcher"]["project_base"])

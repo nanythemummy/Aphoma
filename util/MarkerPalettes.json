@@ -1,7 +1,7 @@
 {
-"pallettes":
+"palettes":
     {
-        "small_axes_pallette":{
+        "small_axes_palette":{
             "type":"12bit",
             "scalebars":[
                 {
@@ -22,7 +22,7 @@
                 "zneg":[54,53,52,51,50]
             }
         },
-        "large_axes_pallette":{
+        "large_axes_palette":{
             "type":"12bit",
             "scalebars":[
                 {

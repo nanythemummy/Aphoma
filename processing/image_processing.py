@@ -138,9 +138,9 @@ def process_image(filepath: str, output: str, config: dict):
     exif = get_exif_data(filepath)
     if filepath.upper().endswith(".CR2"):
         filepath = convert_CR2_to_TIF(filepath,output,config)
-    img = imageio.imread(filepath)
-    newimg = lens_profile_correction(img,config,exif)
-    imageio.imwrite(filepath, newimg)
+    #img = imageio.imread(filepath)
+    #newimg = lens_profile_correction(img,config,exif)
+    #imageio.imwrite(filepath, newimg)
 
 
 def lens_profile_correction(tifhandle ,config: dict, exif: dict):

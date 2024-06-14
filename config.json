@@ -68,8 +68,8 @@
             },
             "texture_size":4096,
             "texture_count":1,
-            "export_as":"obj",
-            "pallette":"large_axes_pallette"
+            "export_as":"ply",
+            "palette":"large_axes_palette"
         }
 
     }

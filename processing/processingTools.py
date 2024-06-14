@@ -1,3 +1,5 @@
+"""Utility scripts for doing color correction and other processing operations. The idea is to keep the pixel crunching in this module
+and to do the orchestration of the pixel crunching in image_processing.py"""
 import numpy as np
 import cv2
 
