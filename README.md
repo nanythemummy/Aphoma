@@ -1,5 +1,5 @@
 # museumcode
-Automated pipeline for building 3D Models with Photogrammetry, either using an ortery or pictures taken manually.
+Automated pipeline for building 3D Models with Photogrammetry, either using an ortery or pictures taken manually. It uses Metashape to build and export the models and an adobe droplet to make masks (if you happen to have photoshop.)
 ## Setup:
 1. Install Adobe DNG Converter if you want to use the DNG conversion command.  You can find it on [Adobe's Camera Raw Page](https://helpx.adobe.com/camera-raw/digital-negative.html)
 2. Setup a virtual environment
