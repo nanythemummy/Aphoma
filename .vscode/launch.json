@@ -4,6 +4,8 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
+
         {
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
@@ -35,6 +37,14 @@
             "args":["watch", "e:\\photogrammetry"]
 
 
+        },
+        {
+            "name": "ListenSend",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryScripts.py",
+            "console": "integratedTerminal",
+            "args":["listenandsend", "C:\\Users\\kjohnston\\Pictures\\temp", "Kish Ceramic 156175"]
         },
         {
             "name": "Python Debugger: MetashapeTools-TranslationTest",

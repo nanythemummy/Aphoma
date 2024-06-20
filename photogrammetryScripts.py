@@ -1,6 +1,7 @@
 from processing import image_processing
 from transfer import transferscripts
 import shutil
+import msvcrt
 import os.path, json, argparse
 import time
 from watchdog.observers import Observer
@@ -21,10 +22,32 @@ def process_images(args):
     config = load_config()
     image_processing.process_image(args.inputimage,args.outputdir,config["processing"])
 
+class Manifest:
+    def __init__(self, projectname):
+        self.sentfiles = []
+        self.projectname = projectname
+    def addFile(self, filepath):
+        self.sentfiles.append(filepath)
+    def finalize(self, outputdir):
+        outputjson = {self.projectname:self.sentfiles}
+        filenametowrite = os.path.join(outputdir,f"{self.projectname}_manifest.txt")
+        with open(filenametowrite,'w',encoding='utf-8') as f:
+            json.dump(outputjson,f)
+        return filenametowrite
 
+        
+manifest = None
+class WatcherSenderHandler(FileSystemEventHandler):
+    """Listen in the specified directory for cr2 files"""
+    @staticmethod
+    def on_any_event(event):
+        if event.event_type=="created" and event.src_path.upper().endswith(".CR2"):
+            config = load_config()["transfer"]
+            transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
+            global manifest
+            manifest.addFile(event.src_path)
 
-#T
-class WatcherHandler(FileSystemEventHandler):
+class WatcherRecipientHandler(FileSystemEventHandler):
     """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
     It extends Watchdog.FilesystemEventHandler."""
     @staticmethod
@@ -46,20 +69,54 @@ class Watcher:
     __init__(self,directory):initializes the class to watch a particular directory, configurabe in config.json.
     run(): makes a watcherHandler object and waits for it to intercept filesystem events.
     """
-    def __init__(self,watchdir:str):
+    def __init__(self,watchdir:str, isSender = False, projectname=""):
         self.observer = Observer()
         self.watched_dir = watchdir
+        self.isSender = isSender
+        self.projectname = projectname
     def run(self):
-        handler = WatcherHandler()
+
+        if not self.isSender:
+
+            handler = WatcherRecipientHandler()
+        else:
+            global manifest
+            manifest = Manifest(self.projectname)
+            handler = WatcherSenderHandler()
         self.observer.schedule(handler,self.watched_dir,recursive=True)
         self.observer.start()
         try:
-            while True:
+            listening=True
+            print("Type F to Finish.")            
+            while listening :
                 time.sleep(5)
+                if msvcrt.kbhit():
+                  ch = msvcrt.getch()
+                  if ch==b'F':
+                    listening=False
         except Exception:
             self.observer.stop()
+        self.observer.stop()
+        if  manifest and self.isSender:
+            manifestpath=manifest.finalize(".")
+            transferscripts.transferToNetworkDirectory(load_config()["transfer"]["networkdrive"],[os.path.abspath(manifestpath)])
         self.observer.join()
-                
+
+def listen_and_send(args):
+    """Listens for incoming cr2 files and sends them to the network drive to be converted to tifs and then processed"
+
+    Parameters:
+    --------------------------
+    args:Argument object from the command line with the following attributes: inputdir: a directory to listen on, in this case, the palce where
+    pics will be created by the photography software . 
+    Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
+    """
+    inputdir = args.inputdir if args.inputdir else config["watcher"]["listen_and_send_directory"]
+    if not os.path.exists(inputdir):
+        print(f"Cannot listen on a directory that does not exist: {inputdir}")
+    watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
+
+    watcher.run()
         
 def watch_and_process(args):
     """function that controls the watcher script which initializes a build when pictures and a manifest are added to a specified directory.
@@ -74,7 +131,7 @@ def watch_and_process(args):
         print("Input Directory needed if not provided in config.json. (Check Watcher:Listen_Directory)")
         return
     assert os.path.exists(inputdir) and os.path.isdir(inputdir)
-    watcher = Watcher(inputdir)
+    watcher = Watcher(inputdir, isSender=False)
     watcher.run()
 
 #This script contains the full automation flow and is triggered by the watcher
@@ -273,6 +330,11 @@ photogrammetryparser.set_defaults(func=build_model_cmd)
 watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
 watcherparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
 watcherparser.set_defaults(func=watch_and_process)      
+
+listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
+listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+listensendparser.set_defaults(func=listen_and_send)    
 
 maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
 maskparser.add_argument("inputdir", help="Photos to mask")
