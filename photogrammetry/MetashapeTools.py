@@ -93,7 +93,10 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 doc.save()
             if "scalebars" in palette.keys() and not current_chunk.scalebars:
                 ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"])
-                doc.save()         
+                doc.save() 
+        #remove blobs.
+        ModelHelpers.cleanup_blobs(current_chunk)    
+        doc.save()    
         #decimate model
         if decimate and len(doc.chunks)<2:
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)

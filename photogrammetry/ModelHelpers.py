@@ -100,7 +100,17 @@ def build_scalebars_from_list(chunk,scalebardefinitions):
             scalebar.reference.enabled = True
     chunk.updateTransform()
 
-
+def cleanup_blobs(chunk):
+    """Cleans up freestanding floating geometry that has less <= 60% of the faces of the total faces in the model.
+    
+    Parameters:
+    ---------------
+    Chunk: the metashape chunk we want to act on.
+    """
+    if chunk.model:
+        threshold = int(len(chunk.model.faces) * 0.6)
+        chunk.model.removeComponents(threshold)
+    
 def detect_markers(chunk, markertype:str):
     """Given a metashape chunk, detect the markers that occur in that chunk. These will be stored by metashape under chunk->markers
     Parameters:
