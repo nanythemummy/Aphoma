@@ -168,6 +168,7 @@ class Watcher:
                 if msvcrt.kbhit():
                     if msvcrt.getch()==b'F':
                         listening=False
+                        self.observer.stop()
         except Exception:
             self.observer.stop()
         self.observer.join()
@@ -184,7 +185,7 @@ def listen_and_send(args):
     pics will be created by the photography software . 
     Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
     """
-    inputdir =  CONFIG["watcher"]["listen_and_send_directory"]
+    inputdir =  CONFIG["watcher"]["listen_and_send"]
     if not os.path.exists(inputdir):
         print(f"Cannot listen on a directory that does not exist: {inputdir}")
     watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
