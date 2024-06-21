@@ -133,14 +133,13 @@ def process_image(filepath: str, output: str, config: dict):
     config : a dictionary of config values. These are found in the config.json file under "processing", which is the dict that gets passed in.
 
     """
+    tiffile = ""
     if not os.path.exists(output):
         os.mkdir(output)
     exif = get_exif_data(filepath)
     if filepath.upper().endswith(".CR2"):
-        filepath = convert_CR2_to_TIF(filepath,output,config)
-    #img = imageio.imread(filepath)
-    #newimg = lens_profile_correction(img,config,exif)
-    #imageio.imwrite(filepath, newimg)
+        tiffile = convert_CR2_to_TIF(filepath,output,config)
+    return tiffile
 
 
 def lens_profile_correction(tifhandle ,config: dict, exif: dict):
@@ -206,7 +205,7 @@ def get_exif_data(filename: str) -> dict:
     """
     exif = {}
     skiplist=["MakerNote","UserComment"] #These are not needed and are encoded anyway.
-    with PILImage.open(filename) as pi:
+    with PILImage.open(filename,'r') as pi:
         exif = pi.getexif()
         IFD_CODES = {i.value: i.name for i in ExifTags.IFD}
         for code, val in exif.items():

@@ -1,7 +1,14 @@
 """Utility functions, mainly for dealing with configuration."""
 from sys import platform
 import json
-
+import shutil
+import os
+def move_file_to_dest(sourcefiles:list,destpath:str):
+    if not os.path.exists(destpath):
+         os.mkdir(destpath)
+    for f in sourcefiles:
+        shutil.move(f,destpath)
+        
 def get_config_for_platform(config):
     """For the operations that shell out to a third party app, the paths may be fundamentally different on Windows/Mac. This function may be
     deprecated now that each computer has its own config.json file.

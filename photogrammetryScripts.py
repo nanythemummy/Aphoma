@@ -6,7 +6,13 @@ import os.path, json, argparse
 import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from util import util
 
+#Global Variables
+#because the callback methods are static for the watchers, we need a place to store the manifest of the files they are transfering.
+MANIFEST = None
+#This is the config file. I'm storing it in a global variable so I don't have to pass it or load it from disk constantly.
+CONFIG = {}
 
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
@@ -19,47 +25,113 @@ def process_images(args):
     args: an argument object passed by the command line that has attributes inputimage (str) and outputdir (str)
       
     """
-    config = load_config()
-    image_processing.process_image(args.inputimage,args.outputdir,config["processing"])
+    image_processing.process_image(args.inputimage,args.outputdir,CONFIG["processing"])
 
 class Manifest:
+    """Class that manages the manifest written to the disk by the listen and send script on the ortery computer. Adds files to an
+    internal list and writes them to disk when asked."""
     def __init__(self, projectname):
         self.sentfiles = []
         self.projectname = projectname
     def addFile(self, filepath):
+        """Adds a file to the manifest.
+        
+        Parameters:
+        ---------
+        filepath: the full path of the file to add.
+        """
         self.sentfiles.append(filepath)
     def finalize(self, outputdir):
+        """Writes the manifest to disk.
+        
+        Parameters:
+        ----------
+        outputdir: the place to write the manifest file.
+        returns: the path+filename that it wrote.
+        """
         outputjson = {self.projectname:self.sentfiles}
         filenametowrite = os.path.join(outputdir,f"{self.projectname}_manifest.txt")
         with open(filenametowrite,'w',encoding='utf-8') as f:
             json.dump(outputjson,f)
         return filenametowrite
 
-        
-manifest = None
+def verifyManifest(manifest:dict, basedir):
+    """Goes through a dictionary taken from a manifest file on disk and checks to see that all of
+    the RAW files are there, all the mask files have been made, and all of the tifs have been made.
+    
+    Parameters"
+    ---------------
+    manifest: A dict containing a list of files of the format projectname:[filenames]
+    basedir: the base directory to look for the rawfiles, tifs, and masks, which are in subfolders called tifs and masks.
+    
+    returns: succeeded, full_manifest, where succeeded is true if all the masks and tifs and raw files expected were found, and 
+    manifest contains each of these files and their full paths in the format {"raw":[],"tif":[],"masks":[]}"""
+    #check to see if all the masks and tifs have been made for this manifest.
+    foundallfiles=True
+    files = manifest[list(manifest.keys())[0]]
+    fullmanifest = {"raw":[],"masks":[],"tifs":[]}
+    for f in files:
+        basename_with_ext = os.path.split(f)[1]
+        basename = os.path.splitext(basename_with_ext)[0]
+        if os.path.exists(os.path.join(basedir,basename_with_ext)):
+            fullmanifest["raw"].append(os.path.join(basedir,basename_with_ext))
+            tifpath = os.path.join(basedir,"tifs")
+            if os.path.exists(os.path.join(tifpath,f"{basename}.tif")):
+                fullmanifest["tifs"].append(os.path.join(tifpath,f"{basename}.tif"))
+                maskpath = os.path.join(basedir,"masks")
+                maskext=CONFIG["photogrammetry"]["mask_ext"]
+                if os.path.exists(os.path.join(maskpath,f"{basename}.{maskext}")):
+                    fullmanifest["masks"].append(os.path.join(maskpath,f"{basename}.{maskext}"))
+                else:
+                    print(f"Warning: did not find mask for {basename_with_ext} in {maskpath}")
+                    foundallfiles &= False
+            else:
+                print(f"Warning: did not find tif for{basename_with_ext} in {tifpath}")
+                foundallfiles &= False
+        else:
+            print(f"Warning: did not find RAW file: {basename_with_ext} in {basedir}")
+            foundallfiles &= False
+    return foundallfiles,fullmanifest
+
 class WatcherSenderHandler(FileSystemEventHandler):
-    """Listen in the specified directory for cr2 files"""
+    """Listen in the specified directory for cr2 files. It extends Watchdog.FilesystemEventHandler"""
     @staticmethod
     def on_any_event(event):
+        """Event handler for any file system event. When an event of the type file created happens, if a CR2 file is created, the files will be processed and converted to TIF
+        if a manifest file is created, a model will be built based on the manifest's files.
+        Parameters:
+        -------------------
+        event: a watchdog.event from the watchdog library.
+        """
         if event.event_type=="created" and event.src_path.upper().endswith(".CR2"):
-            config = load_config()["transfer"]
+            config = CONFIG["transfer"]
             transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
-            global manifest
-            manifest.addFile(event.src_path)
+            global MANIFEST
+            MANIFEST.addFile(event.src_path)
 
 class WatcherRecipientHandler(FileSystemEventHandler):
     """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
     It extends Watchdog.FilesystemEventHandler."""
     @staticmethod
     def on_any_event(event):
-        """Event handler for any file system event. When an event of the type file created happens, this will check to see if a manifest cile called "
-        Files_to_process.txt was created. This file contains a list of image files that can be used to build a 3D Model.
+        """Event handler for any file system event. When an event of the type file created happens, if a CR2 file is created, the files will be processed and converted to TIF
+        if a manifest file is created, a model will be built based on the manifest's files.
         Parameters:
         -------------------
         event: a watchdog.event from the watchdog library.
         """
-        if event.event_type=="modified" and  event.src_path.endswith("Files_to_Process.txt"):
+        inputdir = CONFIG["watcher"]["listen_directory"]
+        if event.event_type=="modified":
+
+            if event.src_path.upper().endswith(".CR2"):
+                processedpath = os.path.join(inputdir,"tifs")
+                maskpath = os.path.join(inputdir,"masks")
+                tiffile=image_processing.process_image(event.src_path,processedpath,CONFIG["processing"])
+                image_processing.build_masks_with_droplet(tiffile, maskpath,CONFIG["processing"])
+
+            elif event.src_path.endswith("_manifest.txt"):
                 build_model_from_manifest(event.src_path)
+
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
     appearance of a manifest file in the desired directory, then builds a model with the pictures
@@ -74,33 +146,34 @@ class Watcher:
         self.watched_dir = watchdir
         self.isSender = isSender
         self.projectname = projectname
+
     def run(self):
-
+        """Manages the threads for the watcher scripts. Basically schedules threads to listen for changes to a folder on the filesystem
+        and sleeps until there is either an exception or the user presses the F key. Note that this non-blocking user input check is 
+        Windows Only and will have to be fixed to make this script mac/linux compatible. When the user hits the F key, if they are running
+        the listen_and_send scripts, it will send a manifest of the files that were transfered."""
         if not self.isSender:
-
             handler = WatcherRecipientHandler()
         else:
-            global manifest
-            manifest = Manifest(self.projectname)
+            global MANIFEST
+            MANIFEST = Manifest(self.projectname)
             handler = WatcherSenderHandler()
         self.observer.schedule(handler,self.watched_dir,recursive=True)
         self.observer.start()
         try:
             listening=True
-            print("Type F to Finish.")            
+            print("Type F to Finish.")           
             while listening :
                 time.sleep(5)
                 if msvcrt.kbhit():
-                  ch = msvcrt.getch()
-                  if ch==b'F':
-                    listening=False
+                    if msvcrt.getch()==b'F':
+                        listening=False
         except Exception:
             self.observer.stop()
-        self.observer.stop()
-        if  manifest and self.isSender:
-            manifestpath=manifest.finalize(".")
-            transferscripts.transferToNetworkDirectory(load_config()["transfer"]["networkdrive"],[os.path.abspath(manifestpath)])
         self.observer.join()
+        if  self.isSender and MANIFEST:
+            manifestpath=MANIFEST.finalize(".")
+            transferscripts.transferToNetworkDirectory(CONFIG["transfer"]["networkdrive"],[os.path.abspath(manifestpath)])
 
 def listen_and_send(args):
     """Listens for incoming cr2 files and sends them to the network drive to be converted to tifs and then processed"
@@ -111,7 +184,7 @@ def listen_and_send(args):
     pics will be created by the photography software . 
     Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
     """
-    inputdir = args.inputdir if args.inputdir else config["watcher"]["listen_and_send_directory"]
+    inputdir =  CONFIG["watcher"]["listen_and_send_directory"]
     if not os.path.exists(inputdir):
         print(f"Cannot listen on a directory that does not exist: {inputdir}")
     watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
@@ -126,43 +199,44 @@ def watch_and_process(args):
     inputdir: a directory to listen on. If this is not specified in the command line, the watcher->listen directory 
     will be used from config.json.
     """
-    inputdir = args.inputdir if args.inputdir else config["watcher"]["listen_directory"]
+    inputdir = args.inputdir if args.inputdir else CONFIG["watcher"]["listen_directory"]
     if not inputdir:
         print("Input Directory needed if not provided in config.json. (Check Watcher:Listen_Directory)")
         return
-    assert os.path.exists(inputdir) and os.path.isdir(inputdir)
     watcher = Watcher(inputdir, isSender=False)
     watcher.run()
 
 #This script contains the full automation flow and is triggered by the watcher
-def build_model_from_manifest(manifest:str):
+def build_model_from_manifest(manifestfile:str):
     """Builds a model from the files listed in a text file manifest.
 
     Parameters:
     -----------
     manifest: A path to a text file manifest with a comma seperated list of paths to image files.
     """
-    config = load_config()
     filestoprocess=[]
-    parentdir= os.path.abspath(os.path.join(manifest,os.pardir))
-    projname = parentdir.split(os.sep)[-1] #forward slash should work since os.path functions convert windows-style paths to unix-style.
-    with open(manifest,"r",encoding="utf-8") as f:
-        filestoprocess = f.read().split(",")
-    #if the configured project directory doesn't exist, make it.
-    project_base =os.path.join(config["watcher"]["project_base"])
-    if not os.path.exists(project_base):
-        os.mkdir(project_base)
-    #setup project directories.
-    project_folder = os.path.join(project_base,projname)
-    if not os.path.exists(project_folder):
-        os.mkdir(project_folder)
-    raw = os.path.join(project_folder,"RAW")
-    if not os.path.exists(raw):
-        os.mkdir(raw)
-    #export Camera RAW files to Tiffs
-    for f in filestoprocess:
-        shutil.copyfile(f,os.path.join(raw,os.path.basename(f)))
-    build_model(projname,raw,project_folder,config,False)
+    parentdir= os.path.abspath(os.path.join(manifestfile,os.pardir))
+    manifest = {}
+    with open(manifestfile,"r",encoding="utf-8") as f:
+        manifest = json.load(f)
+    projname = list(manifest.keys())[0]
+    succeeded, filestoprocess = verifyManifest(manifest, parentdir)
+    if succeeded:
+        #if the configured project directory doesn't exist, make it.
+        project_base =os.path.join(CONFIG["watcher"]["project_base"])
+        if not os.path.exists(project_base):
+            os.mkdir(project_base)
+        #setup project directories.
+        project_folder = os.path.join(project_base,projname)
+        if not os.path.exists(project_folder):
+            os.mkdir(project_folder)
+        raw = os.path.join(project_folder,"raw")
+        util.move_file_to_dest(filestoprocess["raw"],raw)
+        masks = os.path.join(project_folder,CONFIG["photogrammetry"]["mask_path"])
+        util.move_file_to_dest(filestoprocess["masks"],masks)
+        tifs = raw = os.path.join(project_folder,"tif")
+        util.move_file_to_dest(filestoprocess["tifs"],tifs)
+        build_model(projname,tifs,project_folder,CONFIG,False)
 
         
 def build_model(jobname,inputdir,outputdir,config,nomasks=False):
@@ -214,9 +288,8 @@ def build_model_cmd(args):
     job = args.jobname
     photoinput = args.photos
     outputdir = args.outputdirectory
-    config = load_config()
     nomasks = args.nomasks
-    build_model(job,photoinput,outputdir,config,nomasks)
+    build_model(job,photoinput,outputdir,CONFIG,nomasks)
     
 
 
@@ -242,8 +315,8 @@ def transfer_to_network_folder(args):
     fs=[os.path.join(inputdir,f) for f in os.listdir(inputdir) if f.endswith("cr2")]
     filestocopy = sorted(fs,key=getFileCreationTime)
     if args.p: #if the pics need to be pruned...
-       filestocopy= transferscripts.pruneOrteryPics(filestocopy,config["ortery"])
-    transferto=os.path.join(config["transfer"]["networkdrive"],jobname)
+       filestocopy= transferscripts.pruneOrteryPics(filestocopy,CONFIG["ortery"])
+    transferto=os.path.join(CONFIG["transfer"]["networkdrive"],jobname)
     transferscripts.transferToNetworkDirectory(transferto, filestocopy,)
     manifest  = os.path.join(transferto,"Files_to_Process.txt")
     with open(manifest,"w") as f:
@@ -258,10 +331,9 @@ def build_masks(args):
     inputdir: the directory of pictures that need to be masked in TIF format.
     output: the directory where the masks need to get copied when the masking is done.
     """
-    config = load_config()
     input = args.inputdir
     output = args.outputdir
-    image_processing.build_masks_with_droplet(input,output,config["processing"])
+    image_processing.build_masks_with_droplet(input,output,CONFIG["processing"])
 
 def convert_raw_to_format(args):
     """wrapper script for using the RAW image conversion fucntions via the command line.
@@ -281,9 +353,9 @@ def convert_raw_to_format(args):
             if os.path.isfile(f):
                 if f.name.upper().endswith(".CR2"): #CANON CAMERA!
                     if args.dng:
-                        image_processing.convert_CR2_to_DNG(os.path.join(f),outputdir, config["processing"])
+                        image_processing.convert_CR2_to_DNG(os.path.join(f),outputdir, CONFIG["processing"])
                     if args.tif:
-                        image_processing.convert_CR2_to_TIF(os.path.join(f),outputdir, config["processing"])
+                        image_processing.convert_CR2_to_TIF(os.path.join(f),outputdir, CONFIG["processing"])
                     if args.jpg:
                         image_processing.convertToJPG(os.path.join(f),outputdir)
                 elif f.name.upper().endswith("TIF") and args.jpg:
@@ -295,9 +367,8 @@ def load_config():
     """
     with open('config.json') as f:
         return json.load(f)["config"]
-   
 
-config = load_config()
+CONFIG = load_config()
 
 parser = argparse.ArgumentParser(prog="photogrammetryScripts")
 subparsers = parser.add_subparsers(help="Sub-command help")

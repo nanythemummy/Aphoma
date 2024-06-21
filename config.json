@@ -47,8 +47,9 @@
         },
         "watcher":
         {
-            "listen_directory":"",
-            "project_base":"e:\\automation"
+            "listen_directory":"E:\\Photogrammetry",
+            "project_base":"e:\\automation",
+            "listen_and_send":""
         },
         "photogrammetry":
         {
