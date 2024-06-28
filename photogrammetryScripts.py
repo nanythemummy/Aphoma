@@ -30,9 +30,11 @@ def process_images(args):
 class Manifest:
     """Class that manages the manifest written to the disk by the listen and send script on the ortery computer. Adds files to an
     internal list and writes them to disk when asked."""
-    def __init__(self, projectname):
+    def __init__(self, projectname, maskmode,bagheight):
         self.sentfiles = []
         self.projectname = projectname
+        self.maskmode = maskmode
+        self.bagheight = bagheight
     def addFile(self, filepath):
         """Adds a file to the manifest.
         
@@ -49,7 +51,10 @@ class Manifest:
         outputdir: the place to write the manifest file.
         returns: the path+filename that it wrote.
         """
-        outputjson = {self.projectname:self.sentfiles}
+        outputjson = {self.projectname:
+                      {    "maskmode":self.maskmode,
+                            "cushion_height":self.bagheight,
+                          "files":self.sentfiles}}
         filenametowrite = os.path.join(outputdir,f"{self.projectname}_manifest.txt")
         with open(filenametowrite,'w',encoding='utf-8') as f:
             json.dump(outputjson,f)
@@ -68,29 +73,34 @@ def verifyManifest(manifest:dict, basedir):
     manifest contains each of these files and their full paths in the format {"raw":[],"tif":[],"masks":[]}"""
     #check to see if all the masks and tifs have been made for this manifest.
     foundallfiles=True
-    files = manifest[list(manifest.keys())[0]]
+    project = next(iter(manifest))
+    files = manifest[project]["files"]
+
     fullmanifest = {"raw":[],"masks":[],"tifs":[]}
     for f in files:
         basename_with_ext = os.path.split(f)[1]
         basename = os.path.splitext(basename_with_ext)[0]
-        if os.path.exists(os.path.join(basedir,basename_with_ext)):
-            fullmanifest["raw"].append(os.path.join(basedir,basename_with_ext))
-            tifpath = os.path.join(basedir,"tifs")
-            if os.path.exists(os.path.join(tifpath,f"{basename}.tif")):
-                fullmanifest["tifs"].append(os.path.join(tifpath,f"{basename}.tif"))
-                maskpath = os.path.join(basedir,"masks")
-                maskext=CONFIG["photogrammetry"]["mask_ext"]
-                if os.path.exists(os.path.join(maskpath,f"{basename}.{maskext}")):
-                    fullmanifest["masks"].append(os.path.join(maskpath,f"{basename}.{maskext}"))
-                else:
-                    print(f"Warning: did not find mask for {basename_with_ext} in {maskpath}")
-                    foundallfiles &= False
-            else:
-                print(f"Warning: did not find tif for{basename_with_ext} in {tifpath}")
-                foundallfiles &= False
-        else:
+        if not os.path.exists(os.path.join(basedir,basename_with_ext)):
             print(f"Warning: did not find RAW file: {basename_with_ext} in {basedir}")
             foundallfiles &= False
+        else:
+            fullmanifest["raw"].append(os.path.join(basedir,basename_with_ext))
+            tifpath = os.path.join(basedir,"tif")
+            if not os.path.exists(os.path.join(tifpath,f"{basename}.tif")):
+                print(f"Warning: did not find tif for {basename_with_ext} in {tifpath}")
+                image_processing.process_image(os.path.join(basedir,basename_with_ext),tifpath,CONFIG["processing"])
+            fullmanifest["tifs"].append(os.path.join(tifpath,f"{basename}.tif"))
+            foundallfiles &= os.path.exists(os.path.join(tifpath,f"{basename}.tif"))
+            maskpath = os.path.join(basedir,"Masks")
+            maskext=CONFIG["photogrammetry"]["mask_ext"]
+            isMasked = manifest[project]["maskmode"] !=0
+            if(isMasked):
+                if not os.path.exists(os.path.join(maskpath,f"{basename}.{maskext}")):
+                    print(f"Warning: did not find mask for {basename_with_ext} in {maskpath}")
+                    if manifest[project]["maskmode"] ==util.MaskingOptions.MASK_DROPLET:
+                        image_processing.build_masks_with_droplet(os.path.join(tifpath,f"{basename}.tif"), maskpath,CONFIG["processing"])
+                fullmanifest["masks"].append(os.path.join(maskpath,f"{basename}.{maskext}"))
+                foundallfiles &= os.path.exists(os.path.join(maskpath,f"{basename}.{maskext}"))
     return foundallfiles,fullmanifest
 
 class WatcherSenderHandler(FileSystemEventHandler):
@@ -113,6 +123,18 @@ class WatcherRecipientHandler(FileSystemEventHandler):
     """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
     It extends Watchdog.FilesystemEventHandler."""
     @staticmethod
+    def process_incomming_file(eventpath):
+        inputdir = CONFIG["watcher"]["listen_directory"]
+        if eventpath.upper().endswith(".CR2"):
+             processedpath = os.path.join(inputdir,"tif")
+             maskpath = os.path.join(inputdir,"Masks")
+             tiffile=image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
+            #image_processing.build_masks_with_droplet(tiffile, maskpath,CONFIG["processing"])
+
+        elif eventpath.endswith("_manifest.txt"):
+            build_model_from_manifest(eventpath)
+
+    @staticmethod
     def on_any_event(event):
         """Event handler for any file system event. When an event of the type file created happens, if a CR2 file is created, the files will be processed and converted to TIF
         if a manifest file is created, a model will be built based on the manifest's files.
@@ -120,17 +142,24 @@ class WatcherRecipientHandler(FileSystemEventHandler):
         -------------------
         event: a watchdog.event from the watchdog library.
         """
-        inputdir = CONFIG["watcher"]["listen_directory"]
         if event.event_type=="modified":
+            try:
+                WatcherRecipientHandler.process_incomming_file(event.src_path)
+                #this gets triggered before the file is done writing, so we wait until its done. Janky, but seems the most platform independent way7
+                # to see if it's done.
+            except PermissionError:
+                print("Waiting for file {event.src_path} to finish transferring.")
+                last_size = -1
+                current_size = os.path.getsize(event.src_path)
+                while current_size !=last_size:
+                    time.sleep(2)
+                    last_size = current_size
+                    current_size = os.path.getsize(event.src_path)
+                WatcherRecipientHandler.process_incomming_file(event.src_path)
+                
 
-            if event.src_path.upper().endswith(".CR2"):
-                processedpath = os.path.join(inputdir,"tifs")
-                maskpath = os.path.join(inputdir,"masks")
-                tiffile=image_processing.process_image(event.src_path,processedpath,CONFIG["processing"])
-                image_processing.build_masks_with_droplet(tiffile, maskpath,CONFIG["processing"])
 
-            elif event.src_path.endswith("_manifest.txt"):
-                build_model_from_manifest(event.src_path)
+
 
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
@@ -145,7 +174,9 @@ class Watcher:
         self.observer = Observer()
         self.watched_dir = watchdir
         self.isSender = isSender
-        self.projectname = projectname
+        self.projectname = projectname,
+        self.bagHeight = 0.0
+        self.maskmode = 0
 
     def run(self):
         """Manages the threads for the watcher scripts. Basically schedules threads to listen for changes to a folder on the filesystem
@@ -156,7 +187,7 @@ class Watcher:
             handler = WatcherRecipientHandler()
         else:
             global MANIFEST
-            MANIFEST = Manifest(self.projectname)
+            MANIFEST = Manifest(self.projectname, self.maskmode,self.bagHeight)
             handler = WatcherSenderHandler()
         self.observer.schedule(handler,self.watched_dir,recursive=True)
         self.observer.start()
@@ -171,7 +202,8 @@ class Watcher:
                         self.observer.stop()
         except Exception:
             self.observer.stop()
-        self.observer.join()
+        finally:
+            self.observer.join()
         if  self.isSender and MANIFEST:
             manifestpath=MANIFEST.finalize(".")
             transferscripts.transferToNetworkDirectory(CONFIG["transfer"]["networkdrive"],[os.path.abspath(manifestpath)])
@@ -186,9 +218,15 @@ def listen_and_send(args):
     Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
     """
     inputdir =  CONFIG["watcher"]["listen_and_send"]
+    masktype = args.maskoption if args.maskoption else 0
+    bagheight = args.bagheight if args.bagheight else 0.0
+    if bagheight>0:
+        masktype =util.MaskingOptions.MASK_ARBITRARY_HEIGHT
     if not os.path.exists(inputdir):
         print(f"Cannot listen on a directory that does not exist: {inputdir}")
     watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
+    watcher.bagHeight = bagheight
+    watcher.maskmode = masktype
 
     watcher.run()
         
@@ -220,7 +258,9 @@ def build_model_from_manifest(manifestfile:str):
     manifest = {}
     with open(manifestfile,"r",encoding="utf-8") as f:
         manifest = json.load(f)
-    projname = list(manifest.keys())[0]
+    projname = next(iter(manifest))
+    bagheight = manifest[projname]["bagheight"]
+    masktype = manifest[projname]["maskmode"]
     succeeded, filestoprocess = verifyManifest(manifest, parentdir)
     if succeeded:
         #if the configured project directory doesn't exist, make it.
@@ -237,10 +277,10 @@ def build_model_from_manifest(manifestfile:str):
         util.move_file_to_dest(filestoprocess["masks"],masks)
         tifs = raw = os.path.join(project_folder,"tif")
         util.move_file_to_dest(filestoprocess["tifs"],tifs)
-        build_model(projname,tifs,project_folder,CONFIG,False)
+        build_model(projname,tifs,project_folder,CONFIG,masktype,bagheight)
 
         
-def build_model(jobname,inputdir,outputdir,config,nomasks=False):
+def build_model(jobname,inputdir,outputdir,config,mask_option=0,bag_height=0.0):
     """Given a folder full of pictures, this function builds a 3D Model.
 
     Parameters:
@@ -262,18 +302,24 @@ def build_model(jobname,inputdir,outputdir,config,nomasks=False):
             for f in it:
                 if os.path.isfile(f):
                     if f.name.upper().endswith(".CR2"):
-                        tifpath = os.path.join(outputdir,"TIFs")
+                        tifpath = os.path.join(outputdir,"tif")
                         if not os.path.exists(tifpath):
                             os.mkdir(tifpath)
                         image_processing.process_image(f.path,tifpath,config['processing'])
                         processedpath = tifpath       
-        if nomasks is False:
-            print("Building Masks")
+        if mask_option != util.MaskingOptions.NOMASKS:
+            print("Building Masks...")
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
-                image_processing.build_masks_with_droplet(processedpath,maskpath,config["processing"])         
-        print("Building Model")
+                if mask_option == util.MaskingOptions.MASK_DROPLET:
+                    image_processing.build_masks_with_droplet(processedpath,maskpath,config["processing"])      
+                elif mask_option == util.MaskingOptions.MASK_ARBITRARY_HEIGHT:
+                    image_processing.build_masks_of_arbitrary_height(processedpath,maskpath, config["processing"])
+        else:
+            config["photogrammetry"].pop("mask_path")
+
+        print(f"Building Model {jobname} with photos in {processedpath} and outputting in {outputdir}")
         MetashapeTools.build_basic_model(processedpath,jobname,outputdir, config["photogrammetry"])
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
@@ -289,8 +335,8 @@ def build_model_cmd(args):
     job = args.jobname
     photoinput = args.photos
     outputdir = args.outputdirectory
-    nomasks = args.nomasks
-    build_model(job,photoinput,outputdir,CONFIG,nomasks)
+    maskoption = args.maskoption
+    build_model(job,photoinput,outputdir,CONFIG,maskoption)
     
 
 
@@ -306,7 +352,7 @@ def transfer_to_network_folder(args):
     args: an arguments object with the following attributes: imagedirectory (a directory of images to transfer), 
     jobname (the name of the job associated with these)
     p: a flag that is true or false, which determines whether these pictures need to be pruned. The ortery takes too many pictures for 
-    some views. THis makes the process take longer than needed and adds sources of error at certain angels. To fix it, we can delete a fraction
+    some views. THis makes the process take longer than needed and adds sources of error at certain angles. To fix it, we can delete a fraction
     of the pictures from each photography angle. The configuration for this is located under config.json->transfer->ortery
 ."""
     inputdir = args.imagedirectory
@@ -396,7 +442,8 @@ photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for
 photogrammetryparser.add_argument("jobname", help="The name of the project")
 photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
 photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-photogrammetryparser.add_argument("--nomasks", help = "Skip the mask generation step.", action = "store_true")
+photogrammetryparser.add_argument("--maskoption", type = int, choices=[0,1,2], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+
 photogrammetryparser.set_defaults(func=build_model_cmd)
 
 watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
@@ -406,6 +453,9 @@ watcherparser.set_defaults(func=watch_and_process)
 listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
 listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
 listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+listensendparser.add_argument("--maskoption", type = int, choices=[0,1,2], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+listensendparser.add_argument("--bagheight",type=float, help ="If you used a cushion to stabilize the object and you would like to mask it out, how high is it? \
+                                  Note that specifying this will override --maskoption to be 2.")
 listensendparser.set_defaults(func=listen_and_send)    
 
 maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")

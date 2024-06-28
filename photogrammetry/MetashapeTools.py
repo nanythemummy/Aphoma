@@ -65,7 +65,9 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             current_chunk=doc.chunks[0]
         #build sparse cloud.
         if len(current_chunk.cameras)==0:
+
             maskpath =config["mask_path"] if "mask_path" in config.keys() else None
+
             load_photos_and_masks(current_chunk,projectdir,photodir,maskpath)
             current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
                 generic_preselection=True,

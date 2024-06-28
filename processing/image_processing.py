@@ -83,7 +83,8 @@ def get_color_card_from_image(colorcardimage: str):
         print(e)
         print(f"Could not find four markers in the color card iamge. Markers found were: {ids}. Aborting.")
         return None
-    
+def build_masks_of_arbitrary_height( imagefolder, outputpath,config):
+    pass
 def build_masks_with_droplet( imagefolder, outputpath, config):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
     The droplet runs a context aware select on the central pixel of an image and then dumps the mask in a temp directory. 
