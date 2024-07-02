@@ -9,7 +9,7 @@ class MaskingOptions:
     MASK_DROPLET = 1
     MASK_ARBITRARY_HEIGHT = 2
 
-def move_file_to_dest(sourcefiles:list,destpath:str):
+def copy_file_to_dest(sourcefiles:list,destpath:str):
     """Moves file from source to destination
     
     Parameters:
@@ -20,7 +20,7 @@ def move_file_to_dest(sourcefiles:list,destpath:str):
     if not os.path.exists(destpath):
          os.mkdir(destpath)
     for f in sourcefiles:
-        shutil.move(f,destpath)
+        shutil.copy(f,destpath)
         
 def get_config_for_platform(config):
     """For the operations that shell out to a third party app, the paths may be fundamentally different on Windows/Mac. This function may be

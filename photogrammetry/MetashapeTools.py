@@ -4,6 +4,7 @@ Code requiring number crunching probably ought to go in the associated utility c
 
 import argparse
 import json
+import time
 import traceback
 import os
 import Metashape
@@ -45,6 +46,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     config: the section of config.json containing the photogrammetry configurations, the value for the key "photogrammetry"
     decimate: If this is set to true, a new chunk will be made in which the model is decimated to the configured number of triangles.
     """
+    starttime = time.perf_counter()
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config["output_path"])
@@ -120,6 +122,8 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             c.exportModel(path=f"{os.path.join(outputpath,labelname)}_{ext.upper()}.{ext}",
                         texture_format = Metashape.ImageFormat.ImageFormatPNG,
                         embed_texture=(ext=="ply") )
+        stoptime = time.perf_counter()
+        print(f"Completed model in {stoptime-starttime} seconds.") 
     except Exception as e:
         print(e)
         print(traceback.format_exc())

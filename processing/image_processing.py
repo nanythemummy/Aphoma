@@ -9,6 +9,7 @@ Author: Kea Johnston, June 2024
 import os
 from pathlib import Path
 import shutil
+from time import perf_counter
 import subprocess
 import imageio
 import rawpy
@@ -19,6 +20,7 @@ from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
 from processing import processingTools
+
 
 def findGray(colorcarddatacv2):
     """Given an array of pixels corresponding to a color card, find the second gray box from the center.
@@ -83,8 +85,11 @@ def get_color_card_from_image(colorcardimage: str):
         print(e)
         print(f"Could not find four markers in the color card iamge. Markers found were: {ids}. Aborting.")
         return None
-def build_masks_of_arbitrary_height( imagefolder, outputpath,config):
-    pass
+    
+def build_masks(imagefolder,outputpath,mode,config):
+    if mode == util.MaskingOptions.MASK_DROPLET:
+        build_masks_with_droplet(imagefolder,outputpath,config)
+
 def build_masks_with_droplet( imagefolder, outputpath, config):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
     The droplet runs a context aware select on the central pixel of an image and then dumps the mask in a temp directory. 
@@ -99,6 +104,7 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
+    starttime = perf_counter()
     dropletpath = util.get_config_for_platform(config["Masking_Droplet"])
     dropletoutput = util.get_config_for_platform(config["Droplet_Output"])
     if not dropletpath:
@@ -120,6 +126,8 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
                 filename = f.name
                 shutil.move(oldpath,os.path.join(maskdir,filename))
     shutil.rmtree(dropletoutput)
+    stoptime = perf_counter()
+    print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
 
 def process_image(filepath: str, output: str, config: dict):
     """Runs non-filter corrections on a file format and then exports it as a tiff
@@ -134,13 +142,20 @@ def process_image(filepath: str, output: str, config: dict):
     config : a dictionary of config values. These are found in the config.json file under "processing", which is the dict that gets passed in.
 
     """
-    tiffile = ""
+    processedpath = ""
     if not os.path.exists(output):
-        os.mkdir(output)
-    exif = get_exif_data(filepath)
-    if filepath.upper().endswith(".CR2"):
-        tiffile = convert_CR2_to_TIF(filepath,output,config)
-    return tiffile
+        os.mkdir(output)    
+    if not filepath.upper().endswith(config["Destination_Type"].upper()):
+        if filepath.upper().endswith("CR2"):
+            #exif = get_exif_data(filepath)
+            if config["Destination_Type"].upper() == ".TIF":
+                processedpath = convert_CR2_to_TIF(filepath,output,config)
+            elif config["Destination_Type"].upper() == ".JPG":
+                processedpath = convertToJPG(filepath,output)
+        elif filepath.upper().endswith("TIF"):
+            if config["Destination_Type"].upper() == ".JPG":
+                processedpath = convertToJPG(filepath,output)
+    return processedpath 
 
 
 def lens_profile_correction(tifhandle ,config: dict, exif: dict):
@@ -236,13 +251,15 @@ def convert_CR2_to_TIF(input: str ,output: str, config: dict) -> str:
 
     returns: the full path and filename of the new tif file.
     """
-
+    starttime = perf_counter()
     fn = Path(input).stem
     outputname = os.path.join(output,fn+".tif")
     
     with rawpy.imread(input) as raw:
         rgb = raw.postprocess(use_camera_wb=True)
         imageio.imsave(outputname,rgb)
+    stoptime = perf_counter()
+    print(f"Converted CR2 to TIF in {stoptime-starttime} seconds")
     return outputname
 
 def convertToJPG(input: str, output: str) -> str:
@@ -257,15 +274,15 @@ def convertToJPG(input: str, output: str) -> str:
     """
     fn = Path(input).stem #get the filename.
     ext = os.path.splitext(input)[1].upper()
-    outputname = os.path.join(output,fn+".jpg")
+    outputname = os.path.join(output,fn)
     if ext ==".CR2":
-        with rawpy.imread(input) as f:
-            processedimage = f.postprocess(use_camera_wb=True)
-            imageio.save(outputname,processedimage)
+        with rawpy.imread(input) as raw:
+            rgb = raw.postprocess(use_camera_wb=True)
+            imageio.imwrite(f"{outputname}.jpg",rgb)
     else:
         try:
-            f=cv2.imread(input)
-            cv2.imwrite(outputname,f,[int(cv2.IMWRITE_JPEG_QUALITY),100])
+            f=PILImage.open(input)
+            f.save(f"{outputname}.jpg",quality=95)
         except Exception as e:
             raise e
     return outputname

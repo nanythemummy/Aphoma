@@ -22,7 +22,9 @@
                 "Linux":"/tempmasks"
             },
             "Camera":"",
-            "Lens":""
+            "Lens":"",
+            "Source_Type":"cr2",
+            "Destination_Type":"jpg"
 
         },
         "transfer":
