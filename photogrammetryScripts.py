@@ -6,6 +6,7 @@ import PIL
 import msvcrt
 import os.path, json, argparse
 import time
+import re
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from util import util
@@ -15,7 +16,9 @@ from util import util
 MANIFEST = None
 #This is the config file. I'm storing it in a global variable so I don't have to pass it or load it from disk constantly.
 CONFIG = {}
-
+#prune is a boolean on whether the listener should prune pictures from the ortery or not. Probably ought to come up with
+# a non global var way of doing this.
+PRUNE = False
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
 
@@ -114,7 +117,39 @@ def verifyManifest(manifest:dict, basedir):
                 foundallfiles &= os.path.exists(maskfile)
   
     return foundallfiles,fullmanifest
+def should_prune(filename: str)->bool:
+    """Takes a file name and figures out based on the number in it whether the picture should be sent or not and added to the manifest or not. It assumes files are named ending in a number and that
+    this is sequential based on when the camera took the picture.
+    Parameters
+    -----------------
+    filename: The filename in question.
+    
+    returns: True or false based on whether the file ought to be omitted.
+    """
+    if not PRUNE:
+        return False
+    shouldprune = False
+    numinround = CONFIG["ortery"]["pics_per_revolution"]
+    numcams = len(CONFIG["ortery"]["pics_per_cam"].keys())
+    basename_with_ext = os.path.split(filename)[1]
+    fn = os.path.splitext(basename_with_ext)[0]
+    try:
+        t = re.match(r"[a-zA-Z]*_*(\d+)$",fn)
+        filenum = int(t.group(1))+1 #ortery counts from zero.
+        camnum = int(filenum/numinround)+1
+        picinround = filenum%numinround+1
+        expected = CONFIG["ortery"]["pics_per_cam"][str(camnum)]
+        if expected < numinround:
+            if picinround%(numinround-expected)==0:
+                shouldprune=True
 
+
+
+    except AttributeError:
+        print("Filenames were not in format expected: [a-zA-Z]*_*\d+$.xxx . Forgoing pruning.")
+        shouldprune = False
+    finally:
+        return shouldprune
 class WatcherSenderHandler(FileSystemEventHandler):
     """Listen in the specified directory for cr2 files. It extends Watchdog.FilesystemEventHandler"""
     @staticmethod
@@ -128,9 +163,13 @@ class WatcherSenderHandler(FileSystemEventHandler):
         ext = os.path.splitext(event.src_path)[1].upper()
         if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
             config = CONFIG["transfer"]
-            transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
-            global MANIFEST
-            MANIFEST.addFile(event.src_path)
+            fn = os.path.splitext(event.src_path)[0]
+            if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
+                if not should_prune(event.src_path):
+                    transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
+                    global MANIFEST
+                    MANIFEST.addFile(event.src_path)
+                    print(f"added to manifest: {event.src_path}")
 
 class WatcherRecipientHandler(FileSystemEventHandler):
     """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
@@ -238,7 +277,9 @@ def listen_and_send(args):
     Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
     """
     inputdir =  CONFIG["watcher"]["listen_and_send"]
-    masktype = args.maskoption if args.maskoption else 0
+    global PRUNE
+    PRUNE = args.prune
+    masktype = int(args.maskoption) if args.maskoption else 0
     if not os.path.exists(inputdir):
         print(f"Cannot listen on a directory that does not exist: {inputdir}")
     watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
@@ -258,7 +299,7 @@ def watch_and_process(args):
     if not inputdir:
         print("Input Directory needed if not provided in config.json. (Check Watcher:Listen_Directory)")
         return
-    watcher = Watcher(inputdir, isSender=False)
+    watcher = Watcher(inputdir, isSender=False, prune=True)
     watcher.run()
 
 #This script contains the full automation flow and is triggered by the watcher
@@ -461,7 +502,7 @@ photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for
 photogrammetryparser.add_argument("jobname", help="The name of the project")
 photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
 photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-photogrammetryparser.add_argument("--maskoption", type = int, choices=[0,1,2], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
 
 photogrammetryparser.set_defaults(func=build_model_cmd)
 
@@ -472,7 +513,8 @@ watcherparser.set_defaults(func=watch_and_process)
 listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
 listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
 listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-listensendparser.add_argument("--maskoption", type = int, choices=[0,1,2], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
 listensendparser.set_defaults(func=listen_and_send)    
 
 maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
