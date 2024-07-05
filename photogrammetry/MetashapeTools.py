@@ -27,7 +27,7 @@ def load_photos_and_masks(chunk, projectdir:str, photodir:str, maskpath:str):
 
     images = os.listdir(photodir)
     for i in images:
-        if os.path.splitext(i)[1] in [".jpg", ".tiff",".tif"]:
+        if os.path.splitext(i)[1].upper() in [".JPG", ".TIFF",".TIF"]:
             chunk.addPhotos(os.path.join(photodir,i))
     if maskpath:
             files = os.listdir(maskpath)

@@ -282,7 +282,8 @@ def convertToJPG(input: str, output: str) -> str:
     else:
         try:
             f=PILImage.open(input)
-            f.save(f"{outputname}.jpg",quality=95)
+            rgb = f.convert('RGB')
+            rgb.save(f"{outputname}.jpg",quality=95)
         except Exception as e:
             raise e
     return outputname
