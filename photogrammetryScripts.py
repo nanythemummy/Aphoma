@@ -79,7 +79,7 @@ def verifyManifest(manifest:dict, basedir):
     foundallfiles=True
     project = next(iter(manifest))
     files = manifest[project]["files"]
-    destformat = CONFIG["processing"]["Destination_Type"].lower()
+    destformat = CONFIG["processing"]["Destination_Type"].upper()
     fullmanifest = {"source":[],"masks":[],"processed":[]}
     maskpath = os.path.join(basedir,"Masks")
     maskext=CONFIG["photogrammetry"]["mask_ext"]
@@ -176,17 +176,22 @@ class WatcherRecipientHandler(FileSystemEventHandler):
     It extends Watchdog.FilesystemEventHandler."""
     @staticmethod
     def process_incomming_file(eventpath):
-        # inputdir = os.path.abspath(os.path.join(eventpath,os.pardir))
-        # desttype = CONFIG["processing"]["Destination_Type"]
-        # imagetypes = [".CR2",".JPG",".TIF"]
-        # eventpathext = os.path.splitext(eventpath)[1].upper()
-        # if eventpathext in imagetypes and eventpathext != desttype.upper():
-        #     processedpath = os.path.join(inputdir,"processed")
-        #     image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
-
 
         if eventpath.endswith("_manifest.txt"):
             build_model_from_manifest(eventpath)
+        else:
+            inputdir = os.path.abspath(os.path.join(eventpath,os.pardir))
+            maskpath = os.path.join(inputdir,CONFIG["photogrammetry"]["mask_path"])
+            desttype = CONFIG["processing"]["Destination_Type"]
+            imagetypes = [".CR2",".JPG",".TIF"]
+            eventpathext = os.path.splitext(eventpath)[1].upper()
+            processedpath = os.path.join(inputdir,"processed")
+            basename_with_ext = os.path.split(eventpath)[1]
+            basename = os.path.splitext(basename_with_ext)[0]
+            if eventpathext in imagetypes and eventpathext != desttype.upper():
+                
+                pp = image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
+            image_processing.build_masks_with_droplet(os.path.join(processedpath,f"basename.{desttype}"),maskpath,CONFIG["processing"])
 
     @staticmethod
     def on_any_event(event):
@@ -197,23 +202,16 @@ class WatcherRecipientHandler(FileSystemEventHandler):
         event: a watchdog.event from the watchdog library.
         """
         if event.event_type=="created":
-            try:
-                WatcherRecipientHandler.process_incomming_file(event.src_path)
-                #this gets triggered before the file is done writing, so we wait until its done. Janky, but seems the most platform independent way7
-                # to see if it's done.
-            except Exception:
-                print(f"Waiting for file {event.src_path} to finish transferring.")
-                last_size = -1
+            last_size = -1
+            current_size = os.path.getsize(event.src_path)
+            while True:
+                print(f"{last_size} :{current_size} for {event.src_path}")
+                time.sleep(1)
+                last_size = current_size
                 current_size = os.path.getsize(event.src_path)
-                while True:
-                    print(f"{last_size} :{current_size}")
-                    time.sleep(2)
-                    last_size = current_size
-                    current_size = os.path.getsize(event.src_path)
-                    if current_size==last_size:
-                        time.sleep(10)
-                        break
-                WatcherRecipientHandler.process_incomming_file(event.src_path)
+                if current_size==last_size:
+                    break
+            WatcherRecipientHandler.process_incomming_file(event.src_path)
 
                 
 
