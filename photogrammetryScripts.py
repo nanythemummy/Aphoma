@@ -125,7 +125,8 @@ class WatcherSenderHandler(FileSystemEventHandler):
         -------------------
         event: a watchdog.event from the watchdog library.
         """
-        if event.event_type=="created" and event.src_path.upper().endswith(".CR2"):
+        ext = os.path.splitext(event.src_path)[1].upper()
+        if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
             config = CONFIG["transfer"]
             transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
             global MANIFEST
