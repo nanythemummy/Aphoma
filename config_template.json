@@ -21,15 +21,16 @@
                 "Mac":"/tempmasks",
                 "Linux":"/tempmasks"
             },
-            "Camera":"Ortery Camera",
-            "Lens":"Ortery Camera Lens"
+            "Camera":"",
+            "Lens":"",
+            "Source_Type":"cr2",
+            "Destination_Type":"jpg"
 
         },
         "transfer":
         {
-            "networkdrive":"\\\\Photogrammetry3\\Photogrammetry",
-            "host":"Photogrammetry3"
-
+            "networkdrive":"",
+            "host":""
         },
         "ortery":
         {
@@ -48,7 +49,8 @@
         "watcher":
         {
             "listen_directory":"",
-            "project_base":"e:\\automation"
+            "project_base":"",
+            "listen_and_send":""
         },
         "photogrammetry":
         {
@@ -68,8 +70,8 @@
             },
             "texture_size":4096,
             "texture_count":1,
-            "export_as":"obj",
-            "pallette":"large_axes_pallette"
+            "export_as":"",
+            "palette":""
         }
 
     }

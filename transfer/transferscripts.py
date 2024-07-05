@@ -12,6 +12,8 @@ def transferToNetworkDirectory(destpath, filestocopy):
     ----------
     destpath: Network directory to copy to.
     filestocopy: list of full paths of files to copy.
+
+    returns: the path of on the network directory that it copied to.
     """
     #transfer image files in directory to the networkdrive 
     if not os.path.exists(os.path.join(destpath)):
@@ -20,7 +22,6 @@ def transferToNetworkDirectory(destpath, filestocopy):
     for f in filestocopy:
         print(f"Transfering {f}")
         shutil.copy(f,destpath)
-
 
     
 #removes pics from a set of pictures such that the desired number in the configuration file is reached.

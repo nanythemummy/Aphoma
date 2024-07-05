@@ -1,7 +1,27 @@
 """Utility functions, mainly for dealing with configuration."""
 from sys import platform
 import json
+import shutil
+import os
+class MaskingOptions:
+    """Class containing constants for masking options."""
+    NOMASKS = 0
+    MASK_DROPLET = 1
+    MASK_ARBITRARY_HEIGHT = 2
 
+def copy_file_to_dest(sourcefiles:list,destpath:str):
+    """Moves file from source to destination
+    
+    Parameters:
+    --------------
+    * sourcefiles: a list of the files to move. [list of files]
+    * destpath: a string path to move them to.
+    """
+    if not os.path.exists(destpath):
+         os.mkdir(destpath)
+    for f in sourcefiles:
+        shutil.copy(f,destpath)
+        
 def get_config_for_platform(config):
     """For the operations that shell out to a third party app, the paths may be fundamentally different on Windows/Mac. This function may be
     deprecated now that each computer has its own config.json file.
