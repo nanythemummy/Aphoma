@@ -142,8 +142,11 @@ def reorient_model(chunk,config):
     config: the section of config.json under photogrammetry.
     """
     axes = ModelHelpers.find_axes_from_markers(chunk,config["palette"])
-    ModelHelpers.align_markers_to_axes(chunk,axes)
-    ModelHelpers.move_model_to_world_origin(chunk)
+    if len(axes)==0:
+        return
+    else:
+        ModelHelpers.align_markers_to_axes(chunk,axes)
+        ModelHelpers.move_model_to_world_origin(chunk)
 
 if __name__=="__main__":
     def load_config_file(configpath):

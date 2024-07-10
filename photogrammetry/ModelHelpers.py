@@ -91,21 +91,27 @@ def getLongestRunOfSequentialTargets(chunk):
                 groupsoftargets.append(sequentialtargets)
             sequentialtargets = [marker]
         prevmarker = marker
-    groupsoftargets.sort(key = lambda s:len(s))
-    groupsoftargets.reverse()
-    first= groupsoftargets[0][0]
-    last = groupsoftargets[0][-1]
-    distance = len(groupsoftargets[0])-1
-    return first,last, distance
+    if len(groupsoftargets) == 0:
+        return None, None, 0
+    else:
+        groupsoftargets.sort(key = lambda s:len(s))
+        groupsoftargets.reverse()
+        first= groupsoftargets[0][0]
+        last = groupsoftargets[0][-1]
+        distance = len(groupsoftargets[0])-1
+        return first,last, distance
 
 def are_points_colinear(point1,point2,point3):
     smol = 0.02
-    vec1 = point2.position-point1.position
-    vec2 = point3.position-point1.position
-    det = Metashape.Vector.cross(vec2,vec1)
-    #don't expect it to be exactly zero because of calculation errors. expect it to be close.
-    lengdet = math.sqrt(det.x**2+det.y**2+det.z**2)
-    return abs(lengdet) < smol
+    try:
+        vec1 = point2.position-point1.position
+        vec2 = point3.position-point1.position
+        det = Metashape.Vector.cross(vec2,vec1)
+        #don't expect it to be exactly zero because of calculation errors. expect it to be close.
+        lengdet = math.sqrt(det.x**2+det.y**2+det.z**2)
+        return abs(lengdet) < smol
+    except AttributeError:
+        return False #Turns out points can have no position. who would have t
     
 
 def build_scalebars_from_sequential_targets(chunk, scalebardefinitions):
@@ -123,6 +129,9 @@ def build_scalebars_from_sequential_targets(chunk, scalebardefinitions):
                  These can be found in markerpalettes.json
     """
     marker1,marker2, dist = getLongestRunOfSequentialTargets(chunk)
+    if dist == 0:
+        print("Not enough markers to properly scale.")
+        return # if there weren't enough markers to calculate this, return.
     units = scalebardefinitions["units"]
     distance = scalebardefinitions["distance"]
     scalebar = None
@@ -340,6 +349,9 @@ def find_axes_from_markers(chunk,palette:str):
             zaxis.append(m.position)
         if len(xaxis)>=2 and len(zaxis)>=2:
             break
+    if len(xaxis)<2 or len(zaxis) <2:
+        print("Not enough data to determine x and z axes.")
+        return []
     ux = (xaxis[1]-xaxis[0])
     uz = (zaxis[1]-zaxis[0])
     yaxis = Metashape.Vector.cross(uz,ux)

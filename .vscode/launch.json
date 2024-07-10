@@ -5,8 +5,6 @@
     "version": "0.2.0",
     "configurations": [
 
-    
-
 
         {
             "name": "Python Debugger: photogrammetryScripts",
@@ -15,7 +13,7 @@
             "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "E20533", "E:\\automation\\E20533\\processed","E:\\automation\\E20533\\" ]
+            "args":["photogrammetry", "E20973", "E:\\automation\\E20973\\processed","E:\\automation\\E20973\\" ]
 
         },
         {
