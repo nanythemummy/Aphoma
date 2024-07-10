@@ -5,15 +5,17 @@
     "version": "0.2.0",
     "configurations": [
 
+    
+
 
         {
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "E21333", "G:\\Meroitic Fineware E21333\\RAW","G:\\Meroitic Fineware E21333\\" ]
+            "args":["photogrammetry", "E20533", "E:\\automation\\E20533\\processed","E:\\automation\\E20533\\" ]
 
         },
         {

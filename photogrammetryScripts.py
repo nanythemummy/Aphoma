@@ -93,7 +93,7 @@ def verifyManifest(manifest:dict, basedir):
             #check to see if the processed version of the original image exists in the expected location, and if so, inventory it.
             fullmanifest["source"].append(os.path.join(basedir,basename_with_ext))
             processedpath = os.path.join(basedir,"processed")
-            if not sourceformat == destformat:
+            if not sourceformat.upper() == destformat.upper():
                 if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
                     print(f"Warning: did not find {destformat} file for {basename_with_ext} in {processedpath}")
                     image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,CONFIG["processing"])                   
@@ -139,19 +139,21 @@ class WatcherRecipientHandler(FileSystemEventHandler):
 
         if eventpath.endswith("_manifest.txt"):
             build_model_from_manifest(eventpath)
-        else:
-            inputdir = os.path.abspath(os.path.join(eventpath,os.pardir))
-            maskpath = os.path.join(inputdir,CONFIG["photogrammetry"]["mask_path"])
-            desttype = CONFIG["processing"]["Destination_Type"]
-            imagetypes = [".CR2",".JPG",".TIF"]
-            eventpathext = os.path.splitext(eventpath)[1].upper()
-            processedpath = os.path.join(inputdir,"processed")
-            basename_with_ext = os.path.split(eventpath)[1]
-            basename = os.path.splitext(basename_with_ext)[0]
-            if eventpathext in imagetypes and eventpathext != desttype.upper():
-                
-                pp = image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
-            image_processing.build_masks_with_droplet(os.path.join(processedpath,f"basename.{desttype}"),maskpath,CONFIG["processing"])
+        #else:
+            # inputdir = os.path.abspath(os.path.join(eventpath,os.pardir))
+            # maskpath = os.path.join(inputdir,CONFIG["photogrammetry"]["mask_path"])
+            # desttype = CONFIG["processing"]["Destination_Type"]
+            # imagetypes = [".CR2",".JPG",".TIF"]
+            # eventpathext = os.path.splitext(eventpath)[1].upper()
+            # processedpath = os.path.join(inputdir,"processed")
+            # basename_with_ext = os.path.split(eventpath)[1]
+            # basename = os.path.splitext(basename_with_ext)[0]
+            
+            # if eventpathext in imagetypes and eventpathext != desttype.upper():
+            #     image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
+            # if eventpathext ==desttype.upper():
+            #     util.copy_file_to_dest([eventpath],processedpath)
+            # image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
 
     @staticmethod
     def on_any_event(event):

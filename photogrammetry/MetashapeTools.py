@@ -96,7 +96,10 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
                 doc.save()
             if "scalebars" in palette.keys() and not current_chunk.scalebars:
-                ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"])
+                if palette["scalebars"]["type"] == "explicit":
+                    ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"])
+                elif palette["scalebars"]["type"]=="sequential":
+                    ModelHelpers.build_scalebars_from_sequential_targets(current_chunk,palette["scalebars"])
                 doc.save() 
         #remove blobs.
         ModelHelpers.cleanup_blobs(current_chunk)    
