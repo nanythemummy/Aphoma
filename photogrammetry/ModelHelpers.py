@@ -387,9 +387,7 @@ def align_markers_to_axes(chunk,axes):
     chunk: the chunk on which we are operating
     axes: a list of metashape vectors in the order x,y,z.
     """
-
     transmat = chunk.transform.matrix
-    #regioncenter = chunk.region.center
     scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
     scale*=1000.0 #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
     scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
@@ -399,11 +397,3 @@ def align_markers_to_axes(chunk,axes):
                    [0,0,0,1]])
 
     chunk.transform.matrix=scalematrix*newaxes 
-    # chunk.resetRegion()
-    # newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
-    #                                 [0,1,0,regioncenter[1]],
-    #                                 [0,0,1,regioncenter[2]],
-    #                                 [0,0,0,1]])
-    # chunk.transform.matrix *=newtranslation.inv()
-    # print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
-    # chunk.resetRegion()
