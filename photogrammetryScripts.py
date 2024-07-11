@@ -175,11 +175,6 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                     break
             WatcherRecipientHandler.process_incomming_file(event.src_path)
 
-                
-
-
-
-
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
     appearance of a manifest file in the desired directory, then builds a model with the pictures

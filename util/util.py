@@ -20,7 +20,7 @@ def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     if not os.path.exists(destpath):
          os.mkdir(destpath)
     for f in sourcefiles:
-        if not deleteoriginal:
+        if deleteoriginal:
             shutil.move(f,destpath, shutil.copy)
         else:
             shutil.copy(f,destpath)
