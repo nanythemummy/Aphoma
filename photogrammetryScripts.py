@@ -142,9 +142,6 @@ def should_prune(filename: str)->bool:
         if expected < numinround:
             if picinround%(numinround-expected)==0:
                 shouldprune=True
-
-
-
     except AttributeError:
         print("Filenames were not in format expected: [a-zA-Z]*_*\d+$.xxx . Forgoing pruning.")
         shouldprune = False
