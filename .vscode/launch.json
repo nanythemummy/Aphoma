@@ -10,10 +10,10 @@
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "E21333", "G:\\Meroitic Fineware E21333\\RAW","G:\\Meroitic Fineware E21333\\" ]
+            "args":["photogrammetry", "E20973", "E:\\automation\\E20973\\processed","E:\\automation\\E20973\\" ]
 
         },
         {

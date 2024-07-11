@@ -96,7 +96,10 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
                 doc.save()
             if "scalebars" in palette.keys() and not current_chunk.scalebars:
-                ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"])
+                if palette["scalebars"]["type"] == "explicit":
+                    ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"])
+                elif palette["scalebars"]["type"]=="sequential":
+                    ModelHelpers.build_scalebars_from_sequential_targets(current_chunk,palette["scalebars"])
                 doc.save() 
         #remove blobs.
         ModelHelpers.cleanup_blobs(current_chunk)    
@@ -139,8 +142,11 @@ def reorient_model(chunk,config):
     config: the section of config.json under photogrammetry.
     """
     axes = ModelHelpers.find_axes_from_markers(chunk,config["palette"])
-    ModelHelpers.align_markers_to_axes(chunk,axes)
-    ModelHelpers.move_model_to_world_origin(chunk)
+    if len(axes)==0:
+        return
+    else:
+        ModelHelpers.align_markers_to_axes(chunk,axes)
+        ModelHelpers.move_model_to_world_origin(chunk)
 
 if __name__=="__main__":
     def load_config_file(configpath):

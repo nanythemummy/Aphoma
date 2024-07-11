@@ -75,13 +75,13 @@ def verifyManifest(manifest:dict, basedir):
     returns: succeeded, full_manifest, where succeeded is true if all the masks and tifs and raw files expected were found, and 
     manifest contains each of these files and their full paths in the format {"raw":[],"tif":[],"masks":[]}"""
     #check to see if all the masks and tifs have been made for this manifest.
-
+    scratchdir = CONFIG["watcher"]["temp_scratch"]
     foundallfiles=True
     project = next(iter(manifest))
     files = manifest[project]["files"]
     destformat = CONFIG["processing"]["Destination_Type"].upper()
     fullmanifest = {"source":[],"masks":[],"processed":[]}
-    maskpath = os.path.join(basedir,"Masks")
+    maskpath = os.path.join(scratchdir,"Masks")
     maskext=CONFIG["photogrammetry"]["mask_ext"]
     isMasked = manifest[project]["maskmode"] !=0
     for f in files:
@@ -95,8 +95,8 @@ def verifyManifest(manifest:dict, basedir):
         else:
             #check to see if the processed version of the original image exists in the expected location, and if so, inventory it.
             fullmanifest["source"].append(os.path.join(basedir,basename_with_ext))
-            processedpath = os.path.join(basedir,"processed")
-            if not sourceformat == destformat:
+            processedpath = os.path.join(scratchdir,"processed")
+            if not sourceformat.upper() == destformat.upper():
                 if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
                     print(f"Warning: did not find {destformat} file for {basename_with_ext} in {processedpath}")
                     image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,CONFIG["processing"])                   
@@ -180,18 +180,20 @@ class WatcherRecipientHandler(FileSystemEventHandler):
         if eventpath.endswith("_manifest.txt"):
             build_model_from_manifest(eventpath)
         else:
-            inputdir = os.path.abspath(os.path.join(eventpath,os.pardir))
-            maskpath = os.path.join(inputdir,CONFIG["photogrammetry"]["mask_path"])
+            scratchdir = CONFIG["watcher"]["temp_scratch"]
+            maskpath = os.path.join(scratchdir,CONFIG["photogrammetry"]["mask_path"])
             desttype = CONFIG["processing"]["Destination_Type"]
             imagetypes = [".CR2",".JPG",".TIF"]
             eventpathext = os.path.splitext(eventpath)[1].upper()
-            processedpath = os.path.join(inputdir,"processed")
+            processedpath = os.path.join(scratchdir,"processed")
             basename_with_ext = os.path.split(eventpath)[1]
             basename = os.path.splitext(basename_with_ext)[0]
+            
             if eventpathext in imagetypes and eventpathext != desttype.upper():
-                
-                pp = image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
-            image_processing.build_masks_with_droplet(os.path.join(processedpath,f"basename.{desttype}"),maskpath,CONFIG["processing"])
+                image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
+            if eventpathext ==desttype.upper():
+                util.copy_file_to_dest([eventpath],processedpath, True)
+            image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
 
     @staticmethod
     def on_any_event(event):
@@ -294,6 +296,9 @@ def watch_and_process(args):
     will be used from config.json.
     """
     inputdir = args.inputdir if args.inputdir else CONFIG["watcher"]["listen_directory"]
+    scratchdir = CONFIG["watcher"]["temp_scratch"]
+    if not os.path.exists(scratchdir):
+        os.mkdir(scratchdir)
     if not inputdir:
         print("Input Directory needed if not provided in config.json. (Check Watcher:Listen_Directory)")
         return
@@ -328,11 +333,11 @@ def build_model_from_manifest(manifestfile:str):
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
         source = os.path.join(project_folder,"source")
-        util.copy_file_to_dest(filestoprocess["source"],source)
+        util.copy_file_to_dest(filestoprocess["source"],source, True)
         masks = os.path.join(project_folder,CONFIG["photogrammetry"]["mask_path"])
-        util.copy_file_to_dest(filestoprocess["masks"],masks)
+        util.copy_file_to_dest(filestoprocess["masks"],masks, True)
         processed= os.path.join(project_folder,"processed")
-        util.copy_file_to_dest(filestoprocess["processed"],processed)
+        util.copy_file_to_dest(filestoprocess["processed"],processed, True)
         stop = time.perf_counter()
         verify_time = stop-start
         start = time.perf_counter()

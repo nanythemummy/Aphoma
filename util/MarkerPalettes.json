@@ -3,18 +3,12 @@
     {
         "small_axes_palette":{
             "type":"12bit",
-            "scalebars":[
-                {
-                "points":[60,61],
+            "scalebars":{
+                "type":"sequential",
+                "labelinterval":1,
                 "distance":2.0,
                 "units":"cm"
-                },
-                {
-                "points":[51,52],
-                "distance":2.0,
-                "units":"cm"
-                }
-            ],
+            },
             "axes":{
                 "xpos":[64,63,62,61,60],
                 "xneg":[44,43,42,41,40],
@@ -24,7 +18,9 @@
         },
         "large_axes_palette":{
             "type":"12bit",
-            "scalebars":[
+            "scalebars":{
+                "type":"explicit",
+                "bars":[
                 {
                 "points":[60,61],
                 "distance":4.7,
@@ -35,7 +31,8 @@
                 "distance":4.7,
                 "units":"cm"
                 }
-            ],
+            ]
+            },
             "axes":{
                 "xpos":[64,63,62,61,60],
                 "xneg":[44,43,42,41,40],
