@@ -20,10 +20,15 @@ def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     if not os.path.exists(destpath):
          os.mkdir(destpath)
     for f in sourcefiles:
-        if not deleteoriginal:
-            shutil.move(f,destpath, shutil.copy)
-        else:
-            shutil.copy(f,destpath)
+        try:
+            if deleteoriginal:
+                shutil.move(f,destpath, shutil.copy)
+            else:
+                shutil.copy(f,destpath)
+        except shutil.Error as e:
+            print(e)
+            #swallow it and keep the original.
+            
         
 def get_config_for_platform(config):
     """For the operations that shell out to a third party app, the paths may be fundamentally different on Windows/Mac. This function may be

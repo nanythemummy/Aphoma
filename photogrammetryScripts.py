@@ -143,10 +143,11 @@ def should_prune(filename: str)->bool:
             if picinround%(numinround-expected)==0:
                 shouldprune=True
     except AttributeError:
-        print("Filenames were not in format expected: [a-zA-Z]*_*\d+$.xxx . Forgoing pruning.")
+        print("Filenames were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
         shouldprune = False
     finally:
         return shouldprune
+    
 class WatcherSenderHandler(FileSystemEventHandler):
     """Listen in the specified directory for cr2 files. It extends Watchdog.FilesystemEventHandler"""
     @staticmethod
@@ -189,7 +190,7 @@ class WatcherRecipientHandler(FileSystemEventHandler):
             if eventpathext in imagetypes and eventpathext != desttype.upper():
                 image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
             if eventpathext ==desttype.upper():
-                util.copy_file_to_dest([eventpath],processedpath, True)
+                util.copy_file_to_dest([eventpath],processedpath, False)
             image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
 
     @staticmethod
@@ -211,11 +212,6 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                 if current_size==last_size:
                     break
             WatcherRecipientHandler.process_incomming_file(event.src_path)
-
-                
-
-
-
 
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
@@ -299,7 +295,7 @@ def watch_and_process(args):
     if not inputdir:
         print("Input Directory needed if not provided in config.json. (Check Watcher:Listen_Directory)")
         return
-    watcher = Watcher(inputdir, isSender=False, prune=True)
+    watcher = Watcher(inputdir, isSender=False)
     watcher.run()
 
 #This script contains the full automation flow and is triggered by the watcher

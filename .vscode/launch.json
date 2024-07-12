@@ -13,7 +13,7 @@
             "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "E20973", "E:\\automation\\E20973\\processed","E:\\automation\\E20973\\" ]
+            "args":["photogrammetry", "Kish 156162", "E:\\automation\\Kish 156162\\processed","E:\\automation\\Kish 156162\\" ]
 
         },
         {
