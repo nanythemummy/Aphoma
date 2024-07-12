@@ -1,5 +1,6 @@
 from processing import image_processing
 from transfer import transferscripts
+import math
 import shutil
 import rawpy
 import PIL
@@ -128,7 +129,7 @@ def should_prune(filename: str)->bool:
     returns: True or false based on whether the file ought to be omitted.
     """
     if not PRUNE:
-        return False
+        return 
     shouldprune = False
     numinround = CONFIG["ortery"]["pics_per_revolution"]
     numcams = len(CONFIG["ortery"]["pics_per_cam"].keys())
@@ -136,13 +137,22 @@ def should_prune(filename: str)->bool:
     fn = os.path.splitext(basename_with_ext)[0]
     try:
         t = re.match(r"[a-zA-Z]*_*(\d+)$",fn)
-        filenum = int(t.group(1))+1 #ortery counts from zero.
+        filenum = int(t.group(1)) #ortery counts from zero.
         camnum = int(filenum/numinround)+1
-        picinround = filenum%numinround+1
+        picinround = filenum%(numinround)+1
         expected = CONFIG["ortery"]["pics_per_cam"][str(camnum)]
+        print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
         if expected < numinround:
-            if picinround%(numinround-expected)==0:
+            invert = False
+            if (numinround-expected)/numinround <=0.5:
+                divisor = round(numinround/(numinround-expected))
+            else:
+                divisor = round(numinround/expected)
+                invert = True
+            if (picinround %divisor==0) and invert is False:
                 shouldprune=True
+            elif (picinround % divisor != 0) and invert is True:
+                shouldprune = True
     except AttributeError:
         print("Filenames were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
         shouldprune = False
@@ -482,56 +492,56 @@ def load_config():
         return json.load(f)["config"]
 
 CONFIG = load_config()
+if __name__=="__main__":
+    parser = argparse.ArgumentParser(prog="photogrammetryScripts")
+    subparsers = parser.add_subparsers(help="Sub-command help")
+    convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
+    convertprocessor.add_argument("--dng",help="Converts RAW to dng type", action="store_true")
+    convertprocessor.add_argument("--tif", help = "Convert RAW to tif type", action="store_true")
+    convertprocessor.add_argument("--jpg", help="Converts TIF to jpg.", action="store_true")
+    convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
+    convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
+    convertprocessor.set_defaults(func=convert_raw_to_format)
 
-parser = argparse.ArgumentParser(prog="photogrammetryScripts")
-subparsers = parser.add_subparsers(help="Sub-command help")
-convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
-convertprocessor.add_argument("--dng",help="Converts RAW to dng type", action="store_true")
-convertprocessor.add_argument("--tif", help = "Convert RAW to tif type", action="store_true")
-convertprocessor.add_argument("--jpg", help="Converts TIF to jpg.", action="store_true")
-convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
-convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
-convertprocessor.set_defaults(func=convert_raw_to_format)
+    transferparser = subparsers.add_parser("transfer", help="transfers files to a network drive from the specified folder.")
+    transferparser.add_argument("--p", help="Prunes every Nth file from Camera X, as specified in the config.json.",action="store_true")
+    transferparser.add_argument("jobname", help="The name of this job. This translates into a subfolder on the network drive.")
+    transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
+    transferparser.set_defaults(func=transfer_to_network_folder)
 
-transferparser = subparsers.add_parser("transfer", help="transfers files to a network drive from the specified folder.")
-transferparser.add_argument("--p", help="Prunes every Nth file from Camera X, as specified in the config.json.",action="store_true")
-transferparser.add_argument("jobname", help="The name of this job. This translates into a subfolder on the network drive.")
-transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
-transferparser.set_defaults(func=transfer_to_network_folder)
+    imageprocessing  = subparsers.add_parser("process", help="Color Processing Functions")
+    imageprocessing.add_argument("inputimage", help="image to process")
+    imageprocessing.add_argument("outputdir", help="Directory where the final processed image will be stored.")
+    imageprocessing.set_defaults(func=process_images)
 
-imageprocessing  = subparsers.add_parser("process", help="Color Processing Functions")
-imageprocessing.add_argument("inputimage", help="image to process")
-imageprocessing.add_argument("outputdir", help="Directory where the final processed image will be stored.")
-imageprocessing.set_defaults(func=process_images)
+    photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
+    photogrammetryparser.add_argument("jobname", help="The name of the project")
+    photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
+    photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
+    photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
 
-photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
-photogrammetryparser.add_argument("jobname", help="The name of the project")
-photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
-photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+    photogrammetryparser.set_defaults(func=build_model_cmd)
 
-photogrammetryparser.set_defaults(func=build_model_cmd)
+    watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
+    watcherparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    watcherparser.set_defaults(func=watch_and_process)      
 
-watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
-watcherparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-watcherparser.set_defaults(func=watch_and_process)      
+    listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
+    listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+    listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
+    listensendparser.set_defaults(func=listen_and_send)    
 
-listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
-listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
-listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
-listensendparser.set_defaults(func=listen_and_send)    
-
-maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
-maskparser.add_argument("inputdir", help="Photos to mask")
-maskparser.add_argument("outputdir",help="location to store masks")   
-maskparser.set_defaults(func=build_masks)
+    maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
+    maskparser.add_argument("inputdir", help="Photos to mask")
+    maskparser.add_argument("outputdir",help="location to store masks")   
+    maskparser.set_defaults(func=build_masks)
 
 
-args = parser.parse_args()
-if hasattr(args,"func"):
-    args.func(args)
-else:
-    parser.print_help()
+    args = parser.parse_args()
+    if hasattr(args,"func"):
+        args.func(args)
+    else:
+        parser.print_help()
 
