@@ -1,5 +1,6 @@
 from processing import image_processing
 from transfer import transferscripts
+import math
 import shutil
 import rawpy
 import PIL
@@ -135,15 +136,18 @@ def should_prune(filename: str)->bool:
     fn = os.path.splitext(basename_with_ext)[0]
     try:
         t = re.match(r"[a-zA-Z]*_*(\d+)$",fn)
-        filenum = int(t.group(1))+1 #ortery counts from zero.
+        filenum = int(t.group(1)) #ortery counts from zero.
         camnum = int(filenum/numinround)+1
         picinround = filenum%numinround+1
         expected = CONFIG["ortery"]["pics_per_cam"][str(camnum)]
         if expected < numinround:
-            if picinround%(numinround-expected)==0:
+            numtoremove = numinround-expected
+            divisor = round((numinround/numtoremove)*10)
+            if (picinround*10)%divisor==0:
                 shouldprune=True
+                print(f"Pruning file {fn} taken by camera {camnum}")
     except AttributeError:
-        print("Filenames were not in format expected: [a-zA-Z]*_*\d+$.xxx . Forgoing pruning.")
+        print("Filenames were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
         shouldprune = False
     finally:
         return shouldprune
