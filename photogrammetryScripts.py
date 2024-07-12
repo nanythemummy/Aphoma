@@ -101,7 +101,8 @@ def verifyManifest(manifest:dict, basedir):
                     print(f"Warning: did not find {destformat} file for {basename_with_ext} in {processedpath}")
                     image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,CONFIG["processing"])                   
             else:
-                processedpath = basedir
+                if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
+                    processedpath = basedir
             processedfile = os.path.join(processedpath,f"{basename}{destformat}")
             fullmanifest["processed"].append(processedfile)
             foundallfiles &= os.path.exists(processedfile)
@@ -189,8 +190,11 @@ class WatcherRecipientHandler(FileSystemEventHandler):
             
             if eventpathext in imagetypes and eventpathext != desttype.upper():
                 image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
-            if eventpathext ==desttype.upper():
+            elif eventpathext ==desttype.upper():
                 util.copy_file_to_dest([eventpath],processedpath, False)
+            else:
+                print("Unrecognized filetype: {eventpathext}")
+                return
             image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
 
     @staticmethod
@@ -202,16 +206,22 @@ class WatcherRecipientHandler(FileSystemEventHandler):
         event: a watchdog.event from the watchdog library.
         """
         if event.event_type=="created":
-            last_size = -1
-            current_size = os.path.getsize(event.src_path)
-            while True:
-                print(f"{last_size} :{current_size} for {event.src_path}")
-                time.sleep(1)
-                last_size = current_size
+            ext = os.path.splitext(event.src_path)
+            if len(ext) <2:
+                return
+            extlist = [".jpg",".cr2",".tif",".txt",".json"]
+            if ext[1].lower() in extlist:
+                last_size = -1
                 current_size = os.path.getsize(event.src_path)
-                if current_size==last_size:
-                    break
-            WatcherRecipientHandler.process_incomming_file(event.src_path)
+                while True:
+                    time.sleep(1)
+                    last_size = current_size
+                    current_size = os.path.getsize(event.src_path)
+                    print(f"{last_size} :{current_size} for {event.src_path}")
+                    
+                    if current_size==last_size and current_size != 0:
+                        break
+                WatcherRecipientHandler.process_incomming_file(event.src_path)
 
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
@@ -325,12 +335,12 @@ def build_model_from_manifest(manifestfile:str):
         project_folder = os.path.join(project_base,projname)
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
-        source = os.path.join(project_folder,"source")
-        util.copy_file_to_dest(filestoprocess["source"],source, True)
         masks = os.path.join(project_folder,CONFIG["photogrammetry"]["mask_path"])
         util.copy_file_to_dest(filestoprocess["masks"],masks, True)
         processed= os.path.join(project_folder,"processed")
         util.copy_file_to_dest(filestoprocess["processed"],processed, True)
+        source = os.path.join(project_folder,"source")
+        util.copy_file_to_dest(filestoprocess["source"],source, True)
         stop = time.perf_counter()
         verify_time = stop-start
         start = time.perf_counter()
