@@ -51,7 +51,8 @@
         {
             "listen_directory":"",
             "project_base":"",
-            "listen_and_send":""
+            "listen_and_send":"",
+            "temp_scratch":"E:\\temp"
         },
         "photogrammetry":
         {
