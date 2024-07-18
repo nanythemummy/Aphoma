@@ -97,13 +97,10 @@ def verifyManifest(manifest:dict, basedir):
             #check to see if the processed version of the original image exists in the expected location, and if so, inventory it.
             fullmanifest["source"].append(os.path.join(basedir,basename_with_ext))
             processedpath = os.path.join(scratchdir,"processed")
-            if not sourceformat.upper() == destformat.upper():
-                if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
-                    print(f"Warning: did not find {destformat} file for {basename_with_ext} in {processedpath}")
-                    image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,CONFIG["processing"])                   
-            else:
-                if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
-                    processedpath = basedir
+            if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
+                print(f"Warning: did not find {destformat} file for {basename_with_ext} in {processedpath}")
+                image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,CONFIG["processing"])                   
+
             processedfile = os.path.join(processedpath,f"{basename}{destformat}")
             fullmanifest["processed"].append(processedfile)
             foundallfiles &= os.path.exists(processedfile)

@@ -155,6 +155,9 @@ def process_image(filepath: str, output: str, config: dict):
         elif filepath.upper().endswith("TIF"):
             if config["Destination_Type"].upper() == ".JPG":
                 processedpath = convertToJPG(filepath,output)
+    else:
+        util.copy_file_to_dest([filepath],output,False)
+        processedpath = os.path.join(output,f"{Path(filepath).stem}.{config["Destination_Type"]}")
     return processedpath 
 
 

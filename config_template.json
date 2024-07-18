@@ -39,13 +39,13 @@
             "pics_per_cam":{"1":24,
                             "2":24,
                             "3":24,
-                            "4":24,
-                            "5":12,
+                            "4":6,
+                            "5":6,
                             "6":12,
                             "7":24,
                             "8":24,
-                            "9":24,
-                            "10":24}
+                            "9":6,
+                            "10":6}
         },
         "watcher":
         {
@@ -60,7 +60,7 @@
             "model_quality":2,
             "mask_path": "Masks",
             "output_path":"Output",
-            "mask_ext":"tif",
+            "mask_ext":"png",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,

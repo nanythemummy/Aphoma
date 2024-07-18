@@ -399,11 +399,3 @@ def align_markers_to_axes(chunk,axes):
                    [0,0,0,1]])
 
     chunk.transform.matrix=scalematrix*newaxes 
-    # chunk.resetRegion()
-    # newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
-    #                                 [0,1,0,regioncenter[1]],
-    #                                 [0,0,1,regioncenter[2]],
-    #                                 [0,0,0,1]])
-    # chunk.transform.matrix *=newtranslation.inv()
-    # print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
-    # chunk.resetRegion()
