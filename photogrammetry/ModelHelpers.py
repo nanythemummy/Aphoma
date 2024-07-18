@@ -290,7 +290,23 @@ def refine_sparse_cloud(doc,chunk,config):
     optimize_cameras(chunk,True)
     doc.save()
 
+def get_export_filename(chunkname:str,config:dict):
+    """Constructs a filename for the export encoding features of the model such as the scale unit and filetype.
+
+    Parameters:
+    ------------------
+    chunkname: Should be the acession nubmer of the object.
+    config: a dictionary of config values, probably under Photogrammetry in config.json"
     
+    returns:string with proposed filename for export file. """
+    scaleunit ="mm"
+    if config["palette"]:
+        palette = load_palettes()[config["palette"]]
+        scaleunit = palette["unit"]
+    exporttype = config["export_as"].upper()
+    exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
+    return exportname
+
 def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
     """ This attempts to select and remove all points above a given error threshold in max_error, up to a maximum percentage of acceptable points to remove, max_points. 
     It returns true if it succeeds in removing all points with error higher than the threshold without first reaching the maximum selection.
@@ -370,8 +386,13 @@ def move_model_to_world_origin(chunk):
     chunk: the chunk on which we are operating.
     
     """
-    regioncenter = chunk.region.center
     chunk.resetRegion()
+    regioncenter = chunk.region.center
+    height = chunk.region.size.y
+    print(chunk.region.size)
+
+   # chunk.resetRegion()
+
     newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
                                     [0,1,0,regioncenter[1]],
                                     [0,0,1,regioncenter[2]],
@@ -379,7 +400,6 @@ def move_model_to_world_origin(chunk):
     chunk.transform.matrix *=newtranslation.inv()
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()
-    
 def align_markers_to_axes(chunk,axes): 
     """Takes the local coordinates y axis of the model as calculated from a marker pallette and aligns it with world Y axis in metashape.
     

@@ -2,6 +2,7 @@
 "palettes":
     {
         "small_axes_palette":{
+            "unit":"mm",
             "type":"12bit",
             "scalebars":{
                 "type":"sequential",
@@ -18,18 +19,19 @@
         },
         "large_axes_palette":{
             "type":"12bit",
+            "unit":"mm",
             "scalebars":{
                 "type":"explicit",
                 "bars":[
                 {
                 "points":[60,61],
-                "distance":4.7,
-                "units":"cm"
+                "distance":47,
+                "units":"mm"
                 },
                 {
                 "points":[51,52],
-                "distance":4.7,
-                "units":"cm"
+                "distance":47,
+                "units":"mm"
                 }
             ]
             },

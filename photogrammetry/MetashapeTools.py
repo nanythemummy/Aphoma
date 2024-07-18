@@ -122,7 +122,8 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             print(f"Finished! Now exporting chunk {c.label}")
             labelname = c.label.replace(" ","")
             ext = config["export_as"]
-            c.exportModel(path=f"{os.path.join(outputpath,labelname)}_{ext.upper()}.{ext}",
+            name = ModelHelpers.get_export_filename(labelname,config)
+            c.exportModel(path=f"{os.path.join(outputpath,name)}.{ext}",
                         texture_format = Metashape.ImageFormat.ImageFormatPNG,
                         embed_texture=(ext=="ply") )
         stoptime = time.perf_counter()
