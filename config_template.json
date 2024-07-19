@@ -28,6 +28,12 @@
             
 
         },
+        "postprocessing":
+        {
+            "script_directory":"",
+            "blender_exec":"",
+            "scale_path":""
+        },
         "transfer":
         {
             "networkdrive":"",
