@@ -40,11 +40,12 @@ def bottom_to_origin(filename,outputname):
     ms.save_current_mesh(outputname)
 
 def command_snapshot(args,config):
+    
     scriptdir = config["postprocessing"]["script_directory"]
-    scriptname = "background_job.py"
+    scriptname = "snapshot_with_scale.py"
     script = os.path.join(os.path.join(scriptdir),scriptname)
-    print(script)
-    params = {"text":"hello","render":"C:\\tmp\\hello","save":"c:\\tmp\\hello.blend"}
+    print(f"Executing Blender Script {script}")
+    params = {"input":args.inputdir,"render":os.path.dirname(args.inputdir),"scale":config["postprocessing"]["scale_path"], "flipx":args.flip}
     execute_blender_script(script,params,config)
 
 def command_bto(args,config):
@@ -64,12 +65,12 @@ if __name__=="__main__":
     translateprocessor.set_defaults(func=command_bto)
     snapshot = subparsers.add_parser("snapshot", help="Uses blender to build a scene with the object and a scale and to take a snapshot of it.")
     snapshot.add_argument("inputdir", help="Directory of the ply file to operate on.", type=str)
+    snapshot.add_argument("--flip", help="Directory of the ply file to operate on.", action="store_true")
     snapshot.set_defaults(func=command_snapshot)
     args = parser.parse_args()
     if hasattr(args,"func"):
         with open("../config.json",'r') as f:
             config = json.load(f)["config"]
-        print(config)
         args.func(args,config)
     else:
         parser.print_help()
