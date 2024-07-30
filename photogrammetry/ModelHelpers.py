@@ -352,7 +352,7 @@ def find_axes_from_markers(chunk,palette:str):
     palette = load_palettes()[palette]
     if not chunk.markers:
         print("No marker palette defined or markers detected. Cannot detect orientation from palette.")
-        return
+        return []
     xaxis = []
     zaxis = []
     markers = chunk.markers

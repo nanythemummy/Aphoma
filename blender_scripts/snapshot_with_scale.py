@@ -5,11 +5,24 @@ from pathlib import Path
 from mathutils import *
 from math import *
 import bpy
+def set_background(color:list):
+    if not "World" in bpy.data.worlds.keys():
+        print("Making new world.")
+        bpy.ops.world.new()
+    bpy.data.worlds["World"].node_tree.nodes["Background"].inputs[0].default_value=(color[0]/255.0,
+                                                                                    color[1]/255.0,
+                                                                                    color[2]/255.0,
+                                                                                    1)
+    bpy.context.scene.world = bpy.data.worlds["World"]
+    bpy.context.scene.view_settings.view_transform = "Standard"
 
 def render_snapshot(outputpath, objectname):
     #in the future allow for changing renderer. For now, we will use Eevee for max compatibility, and also because the material
     #we are rendering is not very sophisticated as far as reflections and lights go.
+
     bpy.context.scene.render.engine="BLENDER_EEVEE_NEXT"
+    bpy.context.scene.render.resolution_x=5616
+    bpy.context.scene.render.resolution_y=3744
     bpy.context.scene.render.filepath = os.path.join(outputpath,f"{objectname}_render.jpg")
     print(f"Rendering snapshot to {bpy.context.scene.render.filepath}")
     bpy.ops.render.render(write_still=True)
@@ -195,7 +208,9 @@ def scene_setup(inputpath, scalepath, render_path, flip):
     #scalename = import_position_scale(scalepath,objectname)
     setup_camera([objectname,scalename],0)
     setup_light(objectname,bpy.data.objects["Camera"].location)
+    set_background([255,255,255])
     save_blend(containingdir,objectname)
+
     render_snapshot(containingdir,objectname)
 
 
