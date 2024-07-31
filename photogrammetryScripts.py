@@ -515,7 +515,7 @@ if __name__=="__main__":
     photogrammetryparser.add_argument("jobname", help="The name of the project")
     photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
     photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-    photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+    photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=1)
 
     photogrammetryparser.set_defaults(func=build_model_cmd)
 
