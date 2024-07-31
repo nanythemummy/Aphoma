@@ -1,11 +1,13 @@
 from processing import image_processing
 from transfer import transferscripts
+import math
 import shutil
 import rawpy
 import PIL
 import msvcrt
 import os.path, json, argparse
 import time
+import re
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from util import util
@@ -15,7 +17,9 @@ from util import util
 MANIFEST = None
 #This is the config file. I'm storing it in a global variable so I don't have to pass it or load it from disk constantly.
 CONFIG = {}
-
+#prune is a boolean on whether the listener should prune pictures from the ortery or not. Probably ought to come up with
+# a non global var way of doing this.
+PRUNE = False
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
 
@@ -72,13 +76,13 @@ def verifyManifest(manifest:dict, basedir):
     returns: succeeded, full_manifest, where succeeded is true if all the masks and tifs and raw files expected were found, and 
     manifest contains each of these files and their full paths in the format {"raw":[],"tif":[],"masks":[]}"""
     #check to see if all the masks and tifs have been made for this manifest.
-
+    scratchdir = CONFIG["watcher"]["temp_scratch"]
     foundallfiles=True
     project = next(iter(manifest))
     files = manifest[project]["files"]
-    destformat = CONFIG["processing"]["Destination_Type"].lower()
+    destformat = CONFIG["processing"]["Destination_Type"].upper()
     fullmanifest = {"source":[],"masks":[],"processed":[]}
-    maskpath = os.path.join(basedir,"Masks")
+    maskpath = os.path.join(scratchdir,"Masks")
     maskext=CONFIG["photogrammetry"]["mask_ext"]
     isMasked = manifest[project]["maskmode"] !=0
     for f in files:
@@ -92,13 +96,11 @@ def verifyManifest(manifest:dict, basedir):
         else:
             #check to see if the processed version of the original image exists in the expected location, and if so, inventory it.
             fullmanifest["source"].append(os.path.join(basedir,basename_with_ext))
-            processedpath = os.path.join(basedir,"processed")
-            if not sourceformat == destformat:
-                if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
-                    print(f"Warning: did not find {destformat} file for {basename_with_ext} in {processedpath}")
-                    image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,CONFIG["processing"])                   
-            else:
-                processedpath = basedir
+            processedpath = os.path.join(scratchdir,"processed")
+            if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
+                print(f"Warning: did not find {destformat} file for {basename_with_ext} in {processedpath}")
+                image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,CONFIG["processing"])                   
+
             processedfile = os.path.join(processedpath,f"{basename}{destformat}")
             fullmanifest["processed"].append(processedfile)
             foundallfiles &= os.path.exists(processedfile)
@@ -114,7 +116,46 @@ def verifyManifest(manifest:dict, basedir):
                 foundallfiles &= os.path.exists(maskfile)
   
     return foundallfiles,fullmanifest
-
+def should_prune(filename: str)->bool:
+    """Takes a file name and figures out based on the number in it whether the picture should be sent or not and added to the manifest or not. It assumes files are named ending in a number and that
+    this is sequential based on when the camera took the picture.
+    Parameters
+    -----------------
+    filename: The filename in question.
+    
+    returns: True or false based on whether the file ought to be omitted.
+    """
+    if not PRUNE:
+        return 
+    shouldprune = False
+    numinround = CONFIG["ortery"]["pics_per_revolution"]
+    numcams = len(CONFIG["ortery"]["pics_per_cam"].keys())
+    basename_with_ext = os.path.split(filename)[1]
+    fn = os.path.splitext(basename_with_ext)[0]
+    try:
+        t = re.match(r"[a-zA-Z]*_*(\d+)$",fn)
+        filenum = int(t.group(1)) #ortery counts from zero.
+        camnum = int(filenum/numinround)+1
+        picinround = filenum%(numinround)+1
+        expected = CONFIG["ortery"]["pics_per_cam"][str(camnum)]
+        print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
+        if expected < numinround:
+            invert = False
+            if (numinround-expected)/numinround <=0.5:
+                divisor = round(numinround/(numinround-expected))
+            else:
+                divisor = round(numinround/expected)
+                invert = True
+            if (picinround %divisor==0) and invert is False:
+                shouldprune=True
+            elif (picinround % divisor != 0) and invert is True:
+                shouldprune = True
+    except AttributeError:
+        print("Filenames were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
+        shouldprune = False
+    finally:
+        return shouldprune
+    
 class WatcherSenderHandler(FileSystemEventHandler):
     """Listen in the specified directory for cr2 files. It extends Watchdog.FilesystemEventHandler"""
     @staticmethod
@@ -125,28 +166,43 @@ class WatcherSenderHandler(FileSystemEventHandler):
         -------------------
         event: a watchdog.event from the watchdog library.
         """
-        if event.event_type=="created" and event.src_path.upper().endswith(".CR2"):
+        ext = os.path.splitext(event.src_path)[1].upper()
+        if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
             config = CONFIG["transfer"]
-            transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
-            global MANIFEST
-            MANIFEST.addFile(event.src_path)
+            fn = os.path.splitext(event.src_path)[0]
+            if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
+                if not should_prune(event.src_path):
+                    transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
+                    global MANIFEST
+                    MANIFEST.addFile(event.src_path)
+                    print(f"added to manifest: {event.src_path}")
 
 class WatcherRecipientHandler(FileSystemEventHandler):
     """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
     It extends Watchdog.FilesystemEventHandler."""
     @staticmethod
     def process_incomming_file(eventpath):
-        # inputdir = os.path.abspath(os.path.join(eventpath,os.pardir))
-        # desttype = CONFIG["processing"]["Destination_Type"]
-        # imagetypes = [".CR2",".JPG",".TIF"]
-        # eventpathext = os.path.splitext(eventpath)[1].upper()
-        # if eventpathext in imagetypes and eventpathext != desttype.upper():
-        #     processedpath = os.path.join(inputdir,"processed")
-        #     image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
-
 
         if eventpath.endswith("_manifest.txt"):
             build_model_from_manifest(eventpath)
+        else:
+            scratchdir = CONFIG["watcher"]["temp_scratch"]
+            maskpath = os.path.join(scratchdir,CONFIG["photogrammetry"]["mask_path"])
+            desttype = CONFIG["processing"]["Destination_Type"]
+            imagetypes = [".CR2",".JPG",".TIF"]
+            eventpathext = os.path.splitext(eventpath)[1].upper()
+            processedpath = os.path.join(scratchdir,"processed")
+            basename_with_ext = os.path.split(eventpath)[1]
+            basename = os.path.splitext(basename_with_ext)[0]
+            
+            if eventpathext in imagetypes and eventpathext != desttype.upper():
+                image_processing.process_image(eventpath,processedpath,CONFIG["processing"])
+            elif eventpathext ==desttype.upper():
+                util.copy_file_to_dest([eventpath],processedpath, False)
+            else:
+                print("Unrecognized filetype: {eventpathext}")
+                return
+            image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
 
     @staticmethod
     def on_any_event(event):
@@ -157,28 +213,22 @@ class WatcherRecipientHandler(FileSystemEventHandler):
         event: a watchdog.event from the watchdog library.
         """
         if event.event_type=="created":
-            try:
-                WatcherRecipientHandler.process_incomming_file(event.src_path)
-                #this gets triggered before the file is done writing, so we wait until its done. Janky, but seems the most platform independent way7
-                # to see if it's done.
-            except Exception:
-                print(f"Waiting for file {event.src_path} to finish transferring.")
+            ext = os.path.splitext(event.src_path)
+            if len(ext) <2:
+                return
+            extlist = [".jpg",".cr2",".tif",".txt",".json"]
+            if ext[1].lower() in extlist:
                 last_size = -1
                 current_size = os.path.getsize(event.src_path)
                 while True:
-                    print(f"{last_size} :{current_size}")
-                    time.sleep(2)
+                    time.sleep(1)
                     last_size = current_size
                     current_size = os.path.getsize(event.src_path)
-                    if current_size==last_size:
-                        time.sleep(10)
+                    print(f"{last_size} :{current_size} for {event.src_path}")
+                    
+                    if current_size==last_size and current_size != 0:
                         break
                 WatcherRecipientHandler.process_incomming_file(event.src_path)
-
-                
-
-
-
 
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
@@ -237,7 +287,9 @@ def listen_and_send(args):
     Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
     """
     inputdir =  CONFIG["watcher"]["listen_and_send"]
-    masktype = args.maskoption if args.maskoption else 0
+    global PRUNE
+    PRUNE = args.prune
+    masktype = int(args.maskoption) if args.maskoption else 0
     if not os.path.exists(inputdir):
         print(f"Cannot listen on a directory that does not exist: {inputdir}")
     watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
@@ -254,6 +306,9 @@ def watch_and_process(args):
     will be used from config.json.
     """
     inputdir = args.inputdir if args.inputdir else CONFIG["watcher"]["listen_directory"]
+    scratchdir = CONFIG["watcher"]["temp_scratch"]
+    if not os.path.exists(scratchdir):
+        os.mkdir(scratchdir)
     if not inputdir:
         print("Input Directory needed if not provided in config.json. (Check Watcher:Listen_Directory)")
         return
@@ -287,12 +342,12 @@ def build_model_from_manifest(manifestfile:str):
         project_folder = os.path.join(project_base,projname)
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
-        source = os.path.join(project_folder,"source")
-        util.copy_file_to_dest(filestoprocess["source"],source)
         masks = os.path.join(project_folder,CONFIG["photogrammetry"]["mask_path"])
-        util.copy_file_to_dest(filestoprocess["masks"],masks)
+        util.copy_file_to_dest(filestoprocess["masks"],masks, True)
         processed= os.path.join(project_folder,"processed")
-        util.copy_file_to_dest(filestoprocess["processed"],processed)
+        util.copy_file_to_dest(filestoprocess["processed"],processed, True)
+        source = os.path.join(project_folder,"source")
+        util.copy_file_to_dest(filestoprocess["source"],source, True)
         stop = time.perf_counter()
         verify_time = stop-start
         start = time.perf_counter()
@@ -434,55 +489,56 @@ def load_config():
         return json.load(f)["config"]
 
 CONFIG = load_config()
+if __name__=="__main__":
+    parser = argparse.ArgumentParser(prog="photogrammetryScripts")
+    subparsers = parser.add_subparsers(help="Sub-command help")
+    convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
+    convertprocessor.add_argument("--dng",help="Converts RAW to dng type", action="store_true")
+    convertprocessor.add_argument("--tif", help = "Convert RAW to tif type", action="store_true")
+    convertprocessor.add_argument("--jpg", help="Converts TIF to jpg.", action="store_true")
+    convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
+    convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
+    convertprocessor.set_defaults(func=convert_raw_to_format)
 
-parser = argparse.ArgumentParser(prog="photogrammetryScripts")
-subparsers = parser.add_subparsers(help="Sub-command help")
-convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
-convertprocessor.add_argument("--dng",help="Converts RAW to dng type", action="store_true")
-convertprocessor.add_argument("--tif", help = "Convert RAW to tif type", action="store_true")
-convertprocessor.add_argument("--jpg", help="Converts TIF to jpg.", action="store_true")
-convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
-convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
-convertprocessor.set_defaults(func=convert_raw_to_format)
+    transferparser = subparsers.add_parser("transfer", help="transfers files to a network drive from the specified folder.")
+    transferparser.add_argument("--p", help="Prunes every Nth file from Camera X, as specified in the config.json.",action="store_true")
+    transferparser.add_argument("jobname", help="The name of this job. This translates into a subfolder on the network drive.")
+    transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
+    transferparser.set_defaults(func=transfer_to_network_folder)
 
-transferparser = subparsers.add_parser("transfer", help="transfers files to a network drive from the specified folder.")
-transferparser.add_argument("--p", help="Prunes every Nth file from Camera X, as specified in the config.json.",action="store_true")
-transferparser.add_argument("jobname", help="The name of this job. This translates into a subfolder on the network drive.")
-transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
-transferparser.set_defaults(func=transfer_to_network_folder)
+    imageprocessing  = subparsers.add_parser("process", help="Color Processing Functions")
+    imageprocessing.add_argument("inputimage", help="image to process")
+    imageprocessing.add_argument("outputdir", help="Directory where the final processed image will be stored.")
+    imageprocessing.set_defaults(func=process_images)
 
-imageprocessing  = subparsers.add_parser("process", help="Color Processing Functions")
-imageprocessing.add_argument("inputimage", help="image to process")
-imageprocessing.add_argument("outputdir", help="Directory where the final processed image will be stored.")
-imageprocessing.set_defaults(func=process_images)
+    photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
+    photogrammetryparser.add_argument("jobname", help="The name of the project")
+    photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
+    photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
+    photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
 
-photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
-photogrammetryparser.add_argument("jobname", help="The name of the project")
-photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
-photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-photogrammetryparser.add_argument("--maskoption", type = int, choices=[0,1,2], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+    photogrammetryparser.set_defaults(func=build_model_cmd)
 
-photogrammetryparser.set_defaults(func=build_model_cmd)
+    watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
+    watcherparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    watcherparser.set_defaults(func=watch_and_process)      
 
-watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
-watcherparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-watcherparser.set_defaults(func=watch_and_process)      
+    listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
+    listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+    listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
+    listensendparser.set_defaults(func=listen_and_send)    
 
-listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
-listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-listensendparser.add_argument("--maskoption", type = int, choices=[0,1,2], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
-listensendparser.set_defaults(func=listen_and_send)    
-
-maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
-maskparser.add_argument("inputdir", help="Photos to mask")
-maskparser.add_argument("outputdir",help="location to store masks")   
-maskparser.set_defaults(func=build_masks)
+    maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
+    maskparser.add_argument("inputdir", help="Photos to mask")
+    maskparser.add_argument("outputdir",help="location to store masks")   
+    maskparser.set_defaults(func=build_masks)
 
 
-args = parser.parse_args()
-if hasattr(args,"func"):
-    args.func(args)
-else:
-    parser.print_help()
+    args = parser.parse_args()
+    if hasattr(args,"func"):
+        args.func(args)
+    else:
+        parser.print_help()
 

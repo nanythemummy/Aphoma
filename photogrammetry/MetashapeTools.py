@@ -27,7 +27,7 @@ def load_photos_and_masks(chunk, projectdir:str, photodir:str, maskpath:str):
 
     images = os.listdir(photodir)
     for i in images:
-        if os.path.splitext(i)[1] in [".jpg", ".tiff",".tif"]:
+        if os.path.splitext(i)[1].upper() in [".JPG", ".TIFF",".TIF"]:
             chunk.addPhotos(os.path.join(photodir,i))
     if maskpath:
             files = os.listdir(maskpath)
@@ -96,7 +96,10 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
                 doc.save()
             if "scalebars" in palette.keys() and not current_chunk.scalebars:
-                ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"])
+                if palette["scalebars"]["type"] == "explicit":
+                    ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"]["bars"])
+                elif palette["scalebars"]["type"]=="sequential":
+                    ModelHelpers.build_scalebars_from_sequential_targets(current_chunk,palette["scalebars"])
                 doc.save() 
         #remove blobs.
         ModelHelpers.cleanup_blobs(current_chunk)    
@@ -119,7 +122,8 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             print(f"Finished! Now exporting chunk {c.label}")
             labelname = c.label.replace(" ","")
             ext = config["export_as"]
-            c.exportModel(path=f"{os.path.join(outputpath,labelname)}_{ext.upper()}.{ext}",
+            name = ModelHelpers.get_export_filename(labelname,config)
+            c.exportModel(path=f"{os.path.join(outputpath,name)}.{ext}",
                         texture_format = Metashape.ImageFormat.ImageFormatPNG,
                         embed_texture=(ext=="ply") )
         stoptime = time.perf_counter()
@@ -139,8 +143,11 @@ def reorient_model(chunk,config):
     config: the section of config.json under photogrammetry.
     """
     axes = ModelHelpers.find_axes_from_markers(chunk,config["palette"])
-    ModelHelpers.align_markers_to_axes(chunk,axes)
-    ModelHelpers.move_model_to_world_origin(chunk)
+    if len(axes)==0:
+        return
+    else:
+        ModelHelpers.align_markers_to_axes(chunk,axes)
+        ModelHelpers.move_model_to_world_origin(chunk)
 
 if __name__=="__main__":
     def load_config_file(configpath):

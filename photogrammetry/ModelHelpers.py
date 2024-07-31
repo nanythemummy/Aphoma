@@ -60,6 +60,95 @@ def convert_unit_to_meters(unit:str,val:float)->float:
     else:
         return val*1.0
     
+def getNumberedTarget(targetnumber:int, chunk):
+    name = f"target {targetnumber}"
+    desiredmarker = None
+    for marker in chunk.markers:
+        if marker.label ==name:
+            desiredmarker = marker
+            break
+    return desiredmarker
+
+def getLongestRunOfSequentialTargets(chunk):
+    chunk.sortMarkers()
+    markers = chunk.markers.copy()
+    markers.reverse()
+    prevmarker = None
+    sequentialtargets = []
+    groupsoftargets = []
+    for marker in markers:
+        if prevmarker is None:
+            prevmarker = marker
+            sequentialtargets.append(marker)
+            continue
+        marker1 = int(prevmarker.label.split(" ")[1])
+        marker2 = int(marker.label.split(" ")[1])
+        if abs(marker2-marker1) == 1 and \
+            (sequentialtargets[0].label == prevmarker.label or are_points_colinear(sequentialtargets[0],prevmarker,marker)):
+                sequentialtargets.append(marker)
+        else:
+            if len(sequentialtargets)>1:
+                groupsoftargets.append(sequentialtargets)
+            sequentialtargets = [marker]
+        prevmarker = marker
+    if len(groupsoftargets) == 0:
+        return None, None, 0
+    else:
+        groupsoftargets.sort(key = lambda s:len(s))
+        groupsoftargets.reverse()
+        first= groupsoftargets[0][0]
+        last = groupsoftargets[0][-1]
+        distance = len(groupsoftargets[0])-1
+        return first,last, distance
+
+def are_points_colinear(point1,point2,point3):
+    smol = 0.02
+    try:
+        vec1 = point2.position-point1.position
+        vec2 = point3.position-point1.position
+        det = Metashape.Vector.cross(vec2,vec1)
+        #don't expect it to be exactly zero because of calculation errors. expect it to be close.
+        lengdet = math.sqrt(det.x**2+det.y**2+det.z**2)
+        return abs(lengdet) < smol
+    except AttributeError:
+        return False #Turns out points can have no position. who would have t
+    
+
+def build_scalebars_from_sequential_targets(chunk, scalebardefinitions):
+    """Takes scalebar definition info and builds scalebars from it based the label numbers being sequential..
+    
+    Parameters:
+    ---------------
+    chunk: The Metashape Chunk with the scalebars.
+    scalebardefinitions: a list of small dictionaries of the format:    "scalebars":{
+                "type":"sequential",
+                "labelinterval":1,
+                "distance":2.0,
+                "units":"cm"
+            },
+                 These can be found in markerpalettes.json
+    """
+    marker1,marker2, dist = getLongestRunOfSequentialTargets(chunk)
+    if dist == 0:
+        print("Not enough markers to properly scale.")
+        return # if there weren't enough markers to calculate this, return.
+    units = scalebardefinitions["units"]
+    distance = scalebardefinitions["distance"]
+    scalebar = None
+    for existingbar in chunk.scalebars:
+        if (existingbar.point0==marker1 or existingbar.point0==marker1) and (existingbar.point0==marker2 or existingbar.point1==marker2):
+            scalebar = existingbar
+            break
+    if scalebar is None:
+        scalebar = chunk.addScalebar(marker1,marker2)
+    scalebar.reference.distance = convert_unit_to_meters(units,distance*dist)
+    scalebar.reference.accuracy = 1.0e-5
+    scalebar.reference.enabled = True
+    chunk.updateTransform()
+   
+
+
+
 def build_scalebars_from_list(chunk,scalebardefinitions):
     """Takes a list of marker pairs forming scalebars with the associated distances, finds those markers in the agisoft chunk,
     and creates scalebars based on them.
@@ -76,16 +165,8 @@ def build_scalebars_from_list(chunk,scalebardefinitions):
     """
     set_chunk_accuracy(chunk)
     for definition in scalebardefinitions:
-        name1=f"target {definition['points'][0]}"
-        name2=f"target {definition['points'][1]}"
-        marker1=marker2=None
-        for marker in chunk.markers:
-            if marker.label == name1:
-                marker1=marker
-            elif marker.label == name2:
-                marker2=marker
-            if marker1 and marker2:
-                break
+        marker1 = getNumberedTarget(definition['points'][0], chunk)
+        marker2 = getNumberedTarget(definition['points'][1], chunk)
         if marker1 and marker2:
             #either make a new scalebar or find one that already exists between the two markers and reset the distance between them.
             scalebar = None
@@ -93,7 +174,7 @@ def build_scalebars_from_list(chunk,scalebardefinitions):
                 if (existingbar.point0==marker1 or existingbar.point0==marker1) and (existingbar.point0==marker2 or existingbar.point1==marker2):
                     scalebar = existingbar
                     break
-            if scalebar == None:
+            if scalebar is None:
                 scalebar = chunk.addScalebar(marker1,marker2)
             scalebar.reference.distance = convert_unit_to_meters(definition["units"],definition["distance"])
             scalebar.reference.accuracy = 1.0e-5
@@ -209,7 +290,23 @@ def refine_sparse_cloud(doc,chunk,config):
     optimize_cameras(chunk,True)
     doc.save()
 
+def get_export_filename(chunkname:str,config:dict):
+    """Constructs a filename for the export encoding features of the model such as the scale unit and filetype.
+
+    Parameters:
+    ------------------
+    chunkname: Should be the acession nubmer of the object.
+    config: a dictionary of config values, probably under Photogrammetry in config.json"
     
+    returns:string with proposed filename for export file. """
+    scaleunit ="mm"
+    if config["palette"]:
+        palette = load_palettes()[config["palette"]]
+        scaleunit = palette["unit"]
+    exporttype = config["export_as"].upper()
+    exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
+    return exportname
+
 def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
     """ This attempts to select and remove all points above a given error threshold in max_error, up to a maximum percentage of acceptable points to remove, max_points. 
     It returns true if it succeeds in removing all points with error higher than the threshold without first reaching the maximum selection.
@@ -258,7 +355,9 @@ def find_axes_from_markers(chunk,palette:str):
         return
     xaxis = []
     zaxis = []
-    for m in chunk.markers:
+    markers = chunk.markers
+    markers.reverse() #generally higher numbers are on the inside, so search from inside out.
+    for m in markers:
         lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
         if lookforlabel in palette["axes"]["xpos"] or lookforlabel in palette["axes"]["xneg"]:
             xaxis.append(m.position)
@@ -266,6 +365,9 @@ def find_axes_from_markers(chunk,palette:str):
             zaxis.append(m.position)
         if len(xaxis)>=2 and len(zaxis)>=2:
             break
+    if len(xaxis)<2 or len(zaxis) <2:
+        print("Not enough data to determine x and z axes.")
+        return []
     ux = (xaxis[1]-xaxis[0])
     uz = (zaxis[1]-zaxis[0])
     yaxis = Metashape.Vector.cross(uz,ux)
@@ -284,8 +386,13 @@ def move_model_to_world_origin(chunk):
     chunk: the chunk on which we are operating.
     
     """
-    regioncenter = chunk.region.center
     chunk.resetRegion()
+    regioncenter = chunk.region.center
+    height = chunk.region.size.y
+    print(chunk.region.size)
+
+   # chunk.resetRegion()
+
     newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
                                     [0,1,0,regioncenter[1]],
                                     [0,0,1,regioncenter[2]],
@@ -293,7 +400,6 @@ def move_model_to_world_origin(chunk):
     chunk.transform.matrix *=newtranslation.inv()
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()
-    
 def align_markers_to_axes(chunk,axes): 
     """Takes the local coordinates y axis of the model as calculated from a marker pallette and aligns it with world Y axis in metashape.
     
@@ -313,11 +419,3 @@ def align_markers_to_axes(chunk,axes):
                    [0,0,0,1]])
 
     chunk.transform.matrix=scalematrix*newaxes 
-    # chunk.resetRegion()
-    # newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
-    #                                 [0,1,0,regioncenter[1]],
-    #                                 [0,0,1,regioncenter[2]],
-    #                                 [0,0,0,1]])
-    # chunk.transform.matrix *=newtranslation.inv()
-    # print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
-    # chunk.resetRegion()

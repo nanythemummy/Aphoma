@@ -10,10 +10,10 @@
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "E21333", "G:\\Meroitic Fineware E21333\\RAW","G:\\Meroitic Fineware E21333\\" ]
+            "args":["photogrammetry", "Kish 156162", "E:\\automation\\Kish 156162\\processed","E:\\automation\\Kish 156162\\" ]
 
         },
         {
@@ -44,7 +44,7 @@
             "request": "launch",
             "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
-            "args":["listenandsend", "C:\\Users\\kjohnston\\Pictures\\temp", "Kish Ceramic 156175"]
+            "args":["listenandsend", "C:\\Users\\kjohnston\\Pictures\\Ortery\\~temp", "Kish 156162","--maskoption", "1","--prune"]
         },
         {
             "name": "Python Debugger: MetashapeTools-TranslationTest",
