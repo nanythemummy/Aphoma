@@ -42,17 +42,14 @@ def build_position_scale(scalesizecm,  objectname):
     blackmat=bpy.data.materials.new(name="blackmat")
     cube.data.materials.append(blackmat)
     cube.active_material.diffuse_color = (0,0,0,1)
-   # cube.data.materials["blackmat"].node_tree.nodes["Principled BSDF"].inputs[0].default_value=(0,0,0,1)
 
     bpy.ops.object.duplicate()
     dupe = bpy.context.view_layer.objects.active
     dupe.name = "Scale_Small"
     bpy.ops.transform.resize(value=(0.95,0.95,0.95))
-   # dupe = bpy.data.objects["Scale_small"]
     whitemat = bpy.data.materials.new(name="whitemat")
     dupe.data.materials[0] =(whitemat)
     dupe.active_material.diffuse_color = (1,1,1,1)
-    #dupe.data.materials["whitemat"].node_tree.nodes["Principled BSDF"].inputs[0].default_value=(1,1,1,1)
 
     bpy.ops.object.select_all(action="DESELECT")
     dupe.select_set(True)
@@ -95,8 +92,7 @@ def build_position_scale(scalesizecm,  objectname):
     rotate_on_axis("Scale","x",90)
     rotate_on_axis("Scale","z", -90)
     #move the new scale into place.
-    print
-    bpy.ops.transform.translate(value=(-1*((width/2)+(cube.dimensions.x/2)+0.6),
+    bpy.ops.transform.translate(value=(-1*((width/2)+(cube.dimensions.x/2)+0.8),
                                         0.0,
                                         cube.dimensions.z/2))
     return cube.name
@@ -179,7 +175,7 @@ def setup_light(targetobjectname, lightpos):
     bpy.ops.object.light_add(type="SUN", align="WORLD", location=lightpos)
     bpy.ops.object.constraint_add(type="TRACK_TO")
     bpy.context.object.constraints["Track To"].target = targetobject
-    bpy.context.object.data.energy = 2.5
+    bpy.context.object.data.energy = 0.1
 
 
 def scene_setup(inputpath, scalepath, render_path, flip):
