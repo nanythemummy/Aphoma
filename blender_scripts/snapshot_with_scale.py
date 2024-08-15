@@ -19,8 +19,14 @@ def set_background(color:list):
 def render_snapshot(outputpath, objectname):
     #in the future allow for changing renderer. For now, we will use Eevee for max compatibility, and also because the material
     #we are rendering is not very sophisticated as far as reflections and lights go.
+    version = bpy.app.version_string
+    versionnum = version.split('.')
+    if int(versionnum[0])==4 and int(versionnum[1])>=2:
+        bpy.context.scene.render.engine="BLENDER_EEVEE_NEXT"
+    else:
+        bpy.context.scene.render.engine = "BLENDER_EEVEE"
+    
 
-    bpy.context.scene.render.engine="BLENDER_EEVEE_NEXT"
     bpy.context.scene.render.resolution_x=5616
     bpy.context.scene.render.resolution_y=3744
     bpy.context.scene.render.filepath = os.path.join(outputpath,f"{objectname}_render.jpg")
