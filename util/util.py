@@ -6,8 +6,8 @@ import os
 class MaskingOptions:
     """Class containing constants for masking options."""
     NOMASKS = 0
-    MASK_DROPLET = 1
-    MASK_ARBITRARY_HEIGHT = 2
+    MASK_SMARTSELECT = 1
+    MASK_FUZZYSELECT =2
 
 def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     """Moves file from source to destination
@@ -38,7 +38,7 @@ def get_config_for_platform(config):
     so I don't have to repeat this block of code everywhere.
     Parameters:
     ----------------
-    Config: the subset of the config dictionary with configurations that might vary by platform. For example: config["processing"]["Masking_Droplet"]
+    Config: the subset of the config dictionary with configurations that might vary by platform. For example: config["processing"]["SmartSelectDroplet"]
     """
 
     if platform.startswith("linux"):

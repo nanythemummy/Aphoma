@@ -87,8 +87,11 @@ def get_color_card_from_image(colorcardimage: str):
         return None
     
 def build_masks(imagefolder,outputpath,mode,config):
-    if mode == util.MaskingOptions.MASK_DROPLET:
-        build_masks_with_droplet(imagefolder,outputpath,config)
+    if mode == util.MaskingOptions.MASK_SMARTSELECT:
+        config["ListenerDefaultMasking"] = "SmartSelectDroplet"
+    if mode == util.MaskingOptions.MASK_FUZZYSELECT:
+        config["ListenerDefaultMasking"] = "FuzzySelectDroplet"
+    build_masks_with_droplet(imagefolder,outputpath,config)
 
 def build_masks_with_droplet( imagefolder, outputpath, config):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
@@ -105,7 +108,7 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
     starttime = perf_counter()
-    dropletpath = util.get_config_for_platform(config["Masking_Droplet"])
+    dropletpath = util.get_config_for_platform(config[config["ListenerDefaultMasking"]])
     dropletoutput = util.get_config_for_platform(config["Droplet_Output"])
     if not dropletpath:
         print("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
@@ -132,8 +135,7 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
 def process_image(filepath: str, output: str, config: dict):
     """Runs non-filter corrections on a file format and then exports it as a tiff
     
-    Checks to see if a file is a canon RAW file (CR2), and converts the file to tiff. Then, opens the file and with imageio 
-    and does lens profile corrections and vignette removal. Eventually this function will also do white balance.
+    Checks to see if a file is a canon RAW file (CR2), and converts the file to tiff. 
     
     Parameters
     -------------

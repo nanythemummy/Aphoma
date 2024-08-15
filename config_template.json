@@ -9,9 +9,15 @@
                 "Win":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
                 "Linux":""
             },
-            "Masking_Droplet":
+            "SmartSelectDroplet":
             {
-                "Win":"E:\\ContentSelectMask.exe",
+                "Win":"util/MaskBySmartSelect.exe",
+                "Mac":"",
+                "Linux":""
+            },
+            "FuzzySelectDroplet":
+            {
+                "Win":"util/MaskByFuzzySelect.exe",
                 "Mac":"",
                 "Linux":""
             },
@@ -24,7 +30,8 @@
             "Camera":"",
             "Lens":"",
             "Source_Type":"cr2",
-            "Destination_Type":"jpg"
+            "Destination_Type":"jpg",
+            "ListenerDefaultMasking":"FuzzySelectDroplet"
             
 
         },

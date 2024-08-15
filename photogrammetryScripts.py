@@ -202,7 +202,9 @@ class WatcherRecipientHandler(FileSystemEventHandler):
             else:
                 print("Unrecognized filetype: {eventpathext}")
                 return
-            image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
+            if CONFIG["processing"]["ListenerDefaultMasking"] != "None":
+                image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
+
 
     @staticmethod
     def on_any_event(event):
@@ -368,6 +370,7 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
     config: the full contents of config.json.
     nomasks: boolean value determining whether to build masks or not.
     """
+
     try:
         from photogrammetry import MetashapeTools
         if not os.path.exists(outputdir):
@@ -408,7 +411,7 @@ def build_model_cmd(args):
     job = args.jobname
     photoinput = args.photos
     outputdir = args.outputdirectory
-    maskoption = args.maskoption
+    maskoption = int(args.maskoption)
     build_model(job,photoinput,outputdir,CONFIG,maskoption)
     
 
@@ -515,7 +518,7 @@ if __name__=="__main__":
     photogrammetryparser.add_argument("jobname", help="The name of the project")
     photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
     photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-    photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=1)
+    photogrammetryparser.add_argument("--maskoption", type = str, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=1)
 
     photogrammetryparser.set_defaults(func=build_model_cmd)
 
