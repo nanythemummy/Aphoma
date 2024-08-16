@@ -191,7 +191,8 @@ if __name__=="__main__":
         if os.path.exists(args.psxpath):
             doc.open(path=args.psxpath)
         reorient_model(doc.chunks[0],cfg["photogrammetry"])
-
+    
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="MetashapeTools")
     subparsers = parser.add_subparsers(help="Sub-command help")
     

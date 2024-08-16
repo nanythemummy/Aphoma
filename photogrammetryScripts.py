@@ -223,14 +223,15 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                 last_size = -1
                 current_size = os.path.getsize(event.src_path)
                 while True:
-                    time.sleep(1)
+                    time.sleep(3)
                     last_size = current_size
                     current_size = os.path.getsize(event.src_path)
                     print(f"{last_size} :{current_size} for {event.src_path}")
                     
-                    if current_size==last_size and current_size != 0:
+                    if current_size==last_size:
                         break
-                WatcherRecipientHandler.process_incomming_file(event.src_path)
+                if current_size != 0:
+                    WatcherRecipientHandler.process_incomming_file(event.src_path)
 
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
