@@ -115,7 +115,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
                 c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
                 doc.save()
-                #reorient model and export.
+        #reorient model and export.
         for c in doc.chunks:
             #for now, don't save after model reorient.
             reorient_model(c,config)
