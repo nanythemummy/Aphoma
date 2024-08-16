@@ -44,7 +44,7 @@
             "request": "launch",
             "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
-            "args":["listenandsend", "C:\\Users\\kjohnston\\Pictures\\Ortery\\~temp", "Kish 156162","--maskoption", "1","--prune"]
+            "args":["listenandsend", "C:\\Users\\kjohnston\\Pictures\\Ortery\\~temp", "Kish 156162","--maskoption", "2","--prune"]
         },
         {
             "name": "Python Debugger: MetashapeTools-TranslationTest",
