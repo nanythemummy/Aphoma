@@ -1,7 +1,8 @@
 import argparse
 import json
-from os import listdir
-from os import path
+from os import listdir,path
+
+import util
 
 def generate_manifest(jobname:str,directory:str ,mode:int):
     """Generates a manifest based on a file full of folders. 
@@ -14,7 +15,11 @@ def generate_manifest(jobname:str,directory:str ,mode:int):
 
     returns: a dictionary which should be written to a json file.
     """
-    mn = {jobname:{"maskmode":mode, "files":list( listdir(directory))}}
+    files = []
+    for f in listdir(directory):
+        if f != 'Thumbs.db':
+            files.append(f)
+    mn = {jobname:{"maskmode":mode, "files":files}}
     return mn
 
 if __name__ == "__main__":
@@ -24,6 +29,5 @@ if __name__ == "__main__":
     parser.add_argument("maskingmode",choices=['0','1'], help="What type of masks should the manifest tell the recipient to build? 0=None, 1=From file, generate with Photoship droplet.")
     args = parser.parse_args()
     manifest = generate_manifest(args.projectname, args.imagedir, int(args.maskingmode))
-    docname = f"{args.projectname}_manifest.txt"
-    with open(path.join(args.imagedir,docname),'w', encoding='utf-8') as doc:
+    with open(f"{path.join(args.imagedir,args.projectname)}_manifest.txt",'w', encoding='utf-8') as doc:
         json.dump(manifest,doc)
