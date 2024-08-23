@@ -32,7 +32,7 @@ def build_masks(imagepath,outputdir,mode,config):
         build_masks_with_droplet(imagepath,outputdir,config)
     if mode == util.MaskingOptions.MASK_FUZZYSELECT:
         outputname = f"{Path(imagepath).stem}.png"
-        maskingAlgorithms.fuzzySelectMask(imagepath,Path(outputdir,outputname),config["FuzzySelectDroplet"]["lower_gray_threshold"])
+        maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),config["FuzzySelectDroplet"]["lower_gray_threshold"])
     stoptime = perf_counter()
     print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
 

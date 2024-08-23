@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-def fuzzySelectMask(picpath: Path, maskout: Path, lowerthreshold:int):
+def thresholdingMask(picpath: Path, maskout: Path, lowerthreshold:int):
     img = cv2.imread(picpath)
     #threshold image
     grayscale = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
@@ -13,7 +13,32 @@ def fuzzySelectMask(picpath: Path, maskout: Path, lowerthreshold:int):
     cv2.imwrite(maskout,mask)
 
 def contextSelectMask(picpath: Path, maskout: Path):
-    pass
+    #https://stackoverflow.com/questions/29313667/how-do-i-remove-the-background-from-this-kind-of-image?rq=4
+    canny_threshold1 = 10
+    canny_threshold2 = 200
+    
+    img = cv2.imread(picpath)
+    grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    #edge detection
+    edges = cv2.Canny(grayscale,canny_threshold1,canny_threshold2)
+
+    edges = cv2.dilate(edges, None)
+    edges = cv2.erode(edges, None)
+
+    #find contours in edges, sort by area
+    contoursInfo = []
+    contours,hierarchy = cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
+
+    for c in contours:
+        contoursInfo.append((c,cv2.isContourConvex(c),cv2.contourArea(c)))
+    contoursInfo = sorted(contoursInfo, key=lambda c: c[2], reverse=True)
+    max_contour = contoursInfo[0]
+
+    #make an empty mask, draw polygon on it corresponding to the largest contour.
+    mask = np.zeros(edges.shape)
+    cv2.fillConvexPoly(mask,max_contour[0],(255))
+    cv2.imwrite(maskout,mask)
 
 
 if __name__ == "__main__":
@@ -33,12 +58,12 @@ if __name__ == "__main__":
             cfg = json.load(f)
         return cfg["config"]
     
-    def fuzzySelectCommand(args):
+    def thresholdSelectCommand(args):
         img = Path(args.imagepath)
         outpath = Path(args.outpath)
         if img.exists and outpath.parent.exists():
             if not args.contextselect:
-                fuzzySelectMask(img, outpath,config["FuzzySelectDroplet"]["lower_gray_threshold"])
+                thresholdingMask(img, outpath,config["FuzzySelectDroplet"]["lower_gray_threshold"])
             else:
                 contextSelectMask(img,outpath)
 
@@ -49,7 +74,7 @@ if __name__ == "__main__":
     fuzzyselectParser.add_argument("--contextselect", action="store_true", help="By default, the background will be removed using grayscale thresholding. With this flag, it will use canny edge detection.")
     fuzzyselectParser.add_argument("imagepath", help="path to image with a background to remove.", type=str)
     fuzzyselectParser.add_argument("outpath", help="path to image with a background to remove.", type=str)
-    fuzzyselectParser.set_defaults(func=fuzzySelectCommand)
+    fuzzyselectParser.set_defaults(func=thresholdSelectCommand)
     args = parser.parse_args()
     if hasattr(args,"func"):
         args.func(args)
