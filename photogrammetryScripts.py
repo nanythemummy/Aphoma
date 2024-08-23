@@ -202,8 +202,14 @@ class WatcherRecipientHandler(FileSystemEventHandler):
             else:
                 print("Unrecognized filetype: {eventpathext}")
                 return
+            defmask = CONFIG["processing"]["ListenerDefaultMasking"]
+            mode = util.MaskingOptions.NOMASKS
+            if defmask == "FuzzySelectDroplet":
+                mode = util.MaskingOptions.MASK_FUZZYSELECT
+            elif defmask == "SmartSelectDroplet":
+                mode = util.MaskingOptions.MASK_SMARTSELECT
             if CONFIG["processing"]["ListenerDefaultMasking"] != "None":
-                image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
+                image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode, CONFIG["processing"])
 
 
     @staticmethod
@@ -223,7 +229,7 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                 last_size = -1
                 current_size = os.path.getsize(event.src_path)
                 while True:
-                    time.sleep(3)
+                    time.sleep(1)
                     last_size = current_size
                     current_size = os.path.getsize(event.src_path)
                     print(f"{last_size} :{current_size} for {event.src_path}")
@@ -457,7 +463,7 @@ def build_masks(args):
     """
     input = args.inputdir
     output = args.outputdir
-    image_processing.build_masks_with_droplet(input,output,CONFIG["processing"])
+    image_processing.build_masks(input,output,int(args.maskoption),CONFIG["processing"])
 
 def convert_raw_to_format(args):
     """wrapper script for using the RAW image conversion fucntions via the command line.
@@ -537,6 +543,8 @@ if __name__=="__main__":
     maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
     maskparser.add_argument("inputdir", help="Photos to mask")
     maskparser.add_argument("outputdir",help="location to store masks")   
+    maskparser.add_argument("--maskoption", type = str, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=1)
+
     maskparser.set_defaults(func=build_masks)
 
 

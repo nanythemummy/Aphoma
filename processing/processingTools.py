@@ -144,6 +144,7 @@ def find_gray_cmd(args):
         print(f"{args.colorcardimage} doesn't seem to be a real file.")
 
 if __name__ == "__main__":
+    
     parser = argparse.ArgumentParser(prog="processingTools")
     subparsers = parser.add_subparsers(help="Sub-command help")
     grayparser = subparsers.add_parser("detectGray", help="Detects a color card with aruco markers around it, and finds gray on that color card.")

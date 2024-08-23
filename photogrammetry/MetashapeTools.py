@@ -166,7 +166,7 @@ if __name__=="__main__":
         returns: dictionary of key value configurations.
         """
         cfg = {}
-        with open(os.path.abspath(args.config), encoding='utf-8') as f:
+        with open(configpath, encoding='utf-8') as f:
             cfg = json.load(f)
         return cfg["config"]
     

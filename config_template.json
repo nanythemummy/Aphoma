@@ -19,7 +19,8 @@
             {
                 "Win":"util/MaskByFuzzySelect.exe",
                 "Mac":"",
-                "Linux":""
+                "Linux":"",
+                "lower_gray_threshold":230
             },
             "Droplet_Output":
             {
@@ -32,6 +33,7 @@
             "Source_Type":"cr2",
             "Destination_Type":"jpg",
             "ListenerDefaultMasking":"FuzzySelectDroplet"
+
             
 
         },

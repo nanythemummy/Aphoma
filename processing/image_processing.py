@@ -20,14 +20,21 @@ from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
 from processing import processingTools
+from processing import maskingAlgorithms
 
     
-def build_masks(imagefolder,outputpath,mode,config):
+def build_masks(imagepath,outputdir,mode,config):
+    starttime = perf_counter()
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
     if mode == util.MaskingOptions.MASK_SMARTSELECT:
         config["ListenerDefaultMasking"] = "SmartSelectDroplet"
+        build_masks_with_droplet(imagepath,outputdir,config)
     if mode == util.MaskingOptions.MASK_FUZZYSELECT:
-        config["ListenerDefaultMasking"] = "FuzzySelectDroplet"
-    build_masks_with_droplet(imagefolder,outputpath,config)
+        outputname = f"{Path(imagepath).stem}.png"
+        maskingAlgorithms.fuzzySelectMask(imagepath,Path(outputdir,outputname),config["FuzzySelectDroplet"]["lower_gray_threshold"])
+    stoptime = perf_counter()
+    print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
 
 def build_masks_with_droplet( imagefolder, outputpath, config):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
@@ -43,7 +50,6 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
-    starttime = perf_counter()
     dropletpath = util.get_config_for_platform(config[config["ListenerDefaultMasking"]])
     dropletoutput = util.get_config_for_platform(config["Droplet_Output"])
     if not dropletpath:
@@ -65,8 +71,7 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
                 filename = f.name
                 shutil.move(oldpath,os.path.join(maskdir,filename))
     shutil.rmtree(dropletoutput)
-    stoptime = perf_counter()
-    print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
+
 
 def process_image(filepath: str, output: str, config: dict):
     """Runs non-filter corrections on a file format and then exports it as a tiff
