@@ -4,6 +4,7 @@ Code requiring number crunching probably ought to go in the associated utility c
 
 import argparse
 import json
+import time
 import traceback
 import os
 import Metashape
@@ -26,7 +27,7 @@ def load_photos_and_masks(chunk, projectdir:str, photodir:str, maskpath:str):
 
     images = os.listdir(photodir)
     for i in images:
-        if os.path.splitext(i)[1] in [".jpg", ".tiff",".tif"]:
+        if os.path.splitext(i)[1].upper() in [".JPG", ".TIFF",".TIF"]:
             chunk.addPhotos(os.path.join(photodir,i))
     if maskpath:
             files = os.listdir(maskpath)
@@ -45,6 +46,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     config: the section of config.json containing the photogrammetry configurations, the value for the key "photogrammetry"
     decimate: If this is set to true, a new chunk will be made in which the model is decimated to the configured number of triangles.
     """
+    starttime = time.perf_counter()
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config["output_path"])
@@ -65,7 +67,9 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             current_chunk=doc.chunks[0]
         #build sparse cloud.
         if len(current_chunk.cameras)==0:
+
             maskpath =config["mask_path"] if "mask_path" in config.keys() else None
+
             load_photos_and_masks(current_chunk,projectdir,photodir,maskpath)
             current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
                 generic_preselection=True,
@@ -92,8 +96,14 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
                 doc.save()
             if "scalebars" in palette.keys() and not current_chunk.scalebars:
-                ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"])
-                doc.save()         
+                if palette["scalebars"]["type"] == "explicit":
+                    ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"]["bars"])
+                elif palette["scalebars"]["type"]=="sequential":
+                    ModelHelpers.build_scalebars_from_sequential_targets(current_chunk,palette["scalebars"])
+                doc.save() 
+        #remove blobs.
+        ModelHelpers.cleanup_blobs(current_chunk)    
+        doc.save()    
         #decimate model
         if decimate and len(doc.chunks)<2:
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
@@ -112,9 +122,18 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             print(f"Finished! Now exporting chunk {c.label}")
             labelname = c.label.replace(" ","")
             ext = config["export_as"]
-            c.exportModel(path=f"{os.path.join(outputpath,labelname)}_{ext.upper()}.{ext}",
-                        texture_format = Metashape.ImageFormat.ImageFormatPNG,
-                        embed_texture=(ext=="ply") )
+            outputtypes = []
+            if ext == "all":
+                outputtypes += ['ply','obj']
+            else:
+                outputtypes.append(ext)
+            name = ModelHelpers.get_export_filename(labelname,config)
+            for extn in outputtypes:
+                c.exportModel(path=f"{os.path.join(outputpath,name)}.{extn}",
+                            texture_format = Metashape.ImageFormat.ImageFormatPNG,
+                            embed_texture=(extn=="ply") )
+        stoptime = time.perf_counter()
+        print(f"Completed model in {stoptime-starttime} seconds.")
     except Exception as e:
         print(e)
         print(traceback.format_exc())
@@ -130,8 +149,11 @@ def reorient_model(chunk,config):
     config: the section of config.json under photogrammetry.
     """
     axes = ModelHelpers.find_axes_from_markers(chunk,config["palette"])
-    ModelHelpers.align_markers_to_axes(chunk,axes)
-    ModelHelpers.move_model_to_world_origin(chunk)
+    if len(axes)==0:
+        return
+    else:
+        ModelHelpers.align_markers_to_axes(chunk,axes)
+        ModelHelpers.move_model_to_world_origin(chunk)
 
 if __name__=="__main__":
     def load_config_file(configpath):

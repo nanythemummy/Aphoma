@@ -4,3 +4,4 @@ samples/
 __pycache__/
 ~$*
 config.json
+*_manifest.txt

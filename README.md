@@ -1,5 +1,5 @@
 # museumcode
-Experimental  Scripts for use in a Museum or Archaeology
+Automated pipeline for building 3D Models with Photogrammetry, either using an ortery or pictures taken manually. It uses Metashape to build and export the models and an adobe droplet to make masks (if you happen to have photoshop.)
 ## Setup:
 1. Install Adobe DNG Converter if you want to use the DNG conversion command.  You can find it on [Adobe's Camera Raw Page](https://helpx.adobe.com/camera-raw/digital-negative.html)
 2. Setup a virtual environment
@@ -105,4 +105,17 @@ The model is then exported in the specified format to the output folder created 
 - **texture_count** how many textures to export. You can divide the texture up into several large image files if you have a large object or want a very high resolution texture.
 - **export_as** format to export. Should be obj or ply.
 - **palette** The name of the marker palette you are using. This will act as a key to the configuration of the marker palette, which is loacted in util/MarkerPalettes.json
+
+```
+usage: photogrammetryScripts photogrammetry [-h] [--nomasks] jobname photos outputdirectory
+
+positional arguments:
+  jobname          The name of the project
+  photos           Place where the photos in tiff or jpeg format are stored.
+  outputdirectory  Where the intermediary files for building the model and the ultimate model will be stored.
+
+options:
+  -h, --help       show this help message and exit
+  --nomasks        Skip the mask generation step.
+```
 

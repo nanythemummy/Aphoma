@@ -4,14 +4,16 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
+
         {
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "E21333", "G:\\Meroitic Fineware E21333\\RAW","G:\\Meroitic Fineware E21333\\" ]
+            "args":["photogrammetry", "Kish 156162", "E:\\automation\\Kish 156162\\processed","E:\\automation\\Kish 156162\\" ]
 
         },
         {
@@ -35,6 +37,14 @@
             "args":["watch", "e:\\photogrammetry"]
 
 
+        },
+        {
+            "name": "ListenSend",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryScripts.py",
+            "console": "integratedTerminal",
+            "args":["listenandsend", "C:\\Users\\kjohnston\\Pictures\\Ortery\\~temp", "Kish 156162","--maskoption", "1","--prune"]
         },
         {
             "name": "Python Debugger: MetashapeTools-TranslationTest",

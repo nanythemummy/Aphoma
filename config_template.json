@@ -21,15 +21,23 @@
                 "Mac":"/tempmasks",
                 "Linux":"/tempmasks"
             },
-            "Camera":"Ortery Camera",
-            "Lens":"Ortery Camera Lens"
+            "Camera":"",
+            "Lens":"",
+            "Source_Type":"cr2",
+            "Destination_Type":"jpg"
+            
 
+        },
+        "postprocessing":
+        {
+            "script_directory":"",
+            "blender_exec":"",
+            "scale_path":""
         },
         "transfer":
         {
-            "networkdrive":"\\\\Photogrammetry3\\Photogrammetry",
-            "host":"Photogrammetry3"
-
+            "networkdrive":"",
+            "host":""
         },
         "ortery":
         {
@@ -37,18 +45,20 @@
             "pics_per_cam":{"1":24,
                             "2":24,
                             "3":24,
-                            "4":24,
-                            "5":12,
+                            "4":6,
+                            "5":6,
                             "6":12,
                             "7":24,
                             "8":24,
-                            "9":24,
-                            "10":24}
+                            "9":6,
+                            "10":6}
         },
         "watcher":
         {
             "listen_directory":"",
-            "project_base":"e:\\automation"
+            "project_base":"",
+            "listen_and_send":"",
+            "temp_scratch":"E:\\temp"
         },
         "photogrammetry":
         {
@@ -56,7 +66,7 @@
             "model_quality":2,
             "mask_path": "Masks",
             "output_path":"Output",
-            "mask_ext":"tif",
+            "mask_ext":"png",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,
@@ -68,8 +78,8 @@
             },
             "texture_size":4096,
             "texture_count":1,
-            "export_as":"obj",
-            "pallette":"large_axes_pallette"
+            "export_as":"",
+            "palette":""
         }
 
     }
