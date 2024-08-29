@@ -1,14 +1,33 @@
-# museumcode
-Automated pipeline for building 3D Models with Photogrammetry, either using an ortery or pictures taken manually. It uses Metashape to build and export the models and an adobe droplet to make masks (if you happen to have photoshop.)
+# Photogrammetry Asset Pipeline (Command-line tools)
+
+Automated asset pipeline for building 3D Models with Photogrammetry, either using an ortery or pictures taken manually. It does the following:
+* Listens to a directory where pictures are being uploaded from a camera and transfers them to a different computer via a network drive for processing.
+  ** It can do this as a lump or stream them as they come in, using a manifest as a guide for what pics to include.
+* Takes a folder of pictures as input, converts them to jpg or tif as needed
+* Takes a folder of pictures as input and builds masks for them.
+* Takes a folder of images and builds a 3D model with them using Agisoft Metashape. Results are exported in the desired format.
+* Rotates the object in the model such that it faces in a specified direction and takes a snapshot using blender of the object next to a scale bar.
+* Can build a model using the Ortery in as little as 10 minutes and 30 seconds.
+  
+## Requirements:
+1.  Adobe DNG Converter if you want to use the DNG conversion command.  You can find it on [Adobe's Camera Raw Page](https://helpx.adobe.com/camera-raw/digital-negative.html)
+2.  Blender [https://www.blender.org/download/], if you want to take rendered "snapshots" of the emodel for use in the museum database. It has been tested on Blender 4.2.
+3.  Agisoft Metashape [https://www.agisoft.com] if you want to use the pipeline to build 3D models.
+5.  Adobe Photoshop if you wish to use droplets to build masks. Otherwise, openCV will be used, which is much faster anyway, but less transparent to the end user.
+6.  Python 3.11+
+7.  Meshlab [https://meshlab.net] if you want to use any of the meshlab automations. (These are still in progress and have been superseeded by the Blender functionality since Meshlab's Python API cannot render out screenshots.)
+8. Windows 10 or Windows 11. Theoretically, this will all work on Mac and Linux, too since most of the windows specific functionality can be configured. However, I have not yet had the opportunity to test extensively on MacOS or Linux.
+
 ## Setup:
-1. Install Adobe DNG Converter if you want to use the DNG conversion command.  You can find it on [Adobe's Camera Raw Page](https://helpx.adobe.com/camera-raw/digital-negative.html)
-2. Setup a virtual environment
-  UNIX
+In the Windows cmd terminal, powershell terminal, or Unix terminal, do the following on both the Ortery computer and the comptuer you will be using to do the model building. Windows commands will be given. If you are familiar with the MacOS/Linux terminal you should be able to figure out the equivalents.
+
+### Sync the Git Code and Set Up a Virtual Environment
+#### UNIX
   ```
   python3 -m venv venv
   source venv/bin/activate
   ```
-  WINDOWS
+#### WINDOWS
   ```
   python -m venv venv
   venv\scripts\activate.bat
