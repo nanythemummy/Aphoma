@@ -22,28 +22,35 @@ Automated asset pipeline for building 3D Models with Photogrammetry, either usin
 In the Windows cmd terminal, powershell terminal, or Unix terminal, do the following on both the Ortery computer and the comptuer you will be using to do the model building. Windows commands will be given. If you are familiar with the MacOS/Linux terminal you should be able to figure out the equivalents.
 
 ### Sync the Git Code and Set Up a Virtual Environment
-#### UNIX
+
   ```
-  python3 -m venv venv
-  source venv/bin/activate
-  ```
-#### WINDOWS
-  ```
+  git clone https://github.com/nanythemummy/museumcode.git
+  cd museumcode
   python -m venv venv
   venv\scripts\activate.bat
   ```
-3.  Install the dependencies in requirements.txt
-  ```
+### Install the dependencies 
+These are all in requirements text except for metashape, which you cannot get from pip. Download and Install the Metashape standalone python module from the [Agisoft Download Page](httpw://www.agisoft.com/downloads) Note that you must have a license for metashape professional for this to work. Note that if you are using Python 3.12, as of 6/14/2024, they have not made the module explicitly compatible with it yet. It does in fact work. You just need to rename the file from Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311-none-win_amd64 to Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64
+Now, install the wheel for metashape and then install the requirements in the normal way. The following assumes you downloaded the metashape wheel into the downloads directory.
+
+```
   pip install -r requirements.txt
-  ```
-4.  Download and Install the Metashape standalone python module from the [Agisoft Download Page](httpw://www.agisoft.com/downloads) Note that you must have a license for metashape professional for this to work. Note that if you are using Python 3.12, as of 6/14/2024, they have not made the module explicitly compatible with it yet. It does in fact work. You just need to rename the file from Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311-none-win_amd64 to Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64
-```
-pip install Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64
+  pip install %USERPROFILE%\Downloads\Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64.whl
 ```
 
-5. If you would like to build one mask for each photo using Photoshop's content aware masking, ensure that you have a copy of photoshop 2024 installed. If you have multiple versions of photoshop, you may want to open the latest because sometimes the droplet will open the wrong version and not the version it was made with. If you would not like to build makss this way, run the photogrammetry command with the --nomasks flag or choose one of the other masking options (TBA)
+### Configure config.json
+1. Make a copy of config_template.json and name it config.json
+2. Add config.json to .gitignore so you don't end up checking it in if you intend to work on this code.
+3. The following values should be filled out before you start. I've grouped them by configuration groups.
+* Under the **processing** configuration group
+    * fill out absolute paths for the **DNG_Converter**, **SmartSelectDroplet**, and **FuzzySelectDroplet** if you intend to use them. Some exe files for the droplets have been included under utils, but since they are compiled for Windows they may not work for you. If not, see the below Appendix on masking for some tips and tricks for making your own. All paths should be in quotes, and should either have the backslashes escaped or use unix-style paths. Python doesn't care when it comes to pulling directories out of json files.
+    * When a droplet is exported in photoshop, it has to have a hardcoded place to put the files when it's done with them. **Droplet_Output** is this directory, which should default to "C:\\tempmasks" The script will look for each mask in this directory as it is made and then move it elsewhere.
+    * **Source_Type** and **Destination_Type** are respectively the type of the files which go into the pipeline and the files that should be used to build the model. If you have a Canon camera, Source_Type should be ".cr2" and Destination_Type should be ".jpg" if you wish to build your model from jpgs, ".tif" if you want to build from Tif files (slower).
+    * **ListenerDefaultMasking** is the type of masking that will be used if you are using the command to listen to a directory for incoming files and masking them as they come in. The options are currently "SmartSelectDroplet" and "FuzzySelectDroplet."
 
-6. Make a copy of config_template.json and name it config.json. Change the values in it to suit the computer you are using and the job you want to do with it.
+6. If you would like to build one mask for each photo using Photoshop's content aware masking, ensure that you have a copy of photoshop 2024 installed. If you have multiple versions of photoshop, you may want to open the latest because sometimes the droplet will open the wrong version and not the version it was made with. If you would not like to build makss this way, run the photogrammetry command with the --nomasks flag or choose one of the other masking options (TBA)
+
+7. Make a copy of config_template.json and name it config.json. Change the values in it to suit the computer you are using and the job you want to do with it.
 
 ## Transfer
 This code facilitates the use of a seperate scanning workstation and photogrammetry workstation. It is meant to automate the workflow between the two.
