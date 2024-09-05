@@ -1,9 +1,5 @@
 from processing import image_processing
 from transfer import transferscripts
-import math
-import shutil
-import rawpy
-import PIL
 import msvcrt
 import os.path, json, argparse
 import time
@@ -105,13 +101,13 @@ def verifyManifest(manifest:dict, basedir):
             fullmanifest["processed"].append(processedfile)
             foundallfiles &= os.path.exists(processedfile)
             if isMasked:
-                if not os.path.exists(os.path.join(maskpath,f"{basename}.{maskext}")):
+                if not os.path.exists(os.path.join(maskpath,f"{basename}{maskext}")):
                     print(f"Warning: did not find mask for {basename_with_ext} in {maskpath}")
                     image_processing.build_masks(processedfile,
                                                  maskpath,
                                                  manifest[project]["maskmode"],
                                                  CONFIG["processing"])
-                maskfile = os.path.join(maskpath,f"{basename}.{maskext}")
+                maskfile = os.path.join(maskpath,f"{basename}{maskext}")
                 fullmanifest["masks"].append(maskfile)
                 foundallfiles &= os.path.exists(maskfile)
   
@@ -202,7 +198,19 @@ class WatcherRecipientHandler(FileSystemEventHandler):
             else:
                 print("Unrecognized filetype: {eventpathext}")
                 return
-            image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
+            defmask = CONFIG["processing"]["ListenerDefaultMasking"]
+            mode = util.MaskingOptions.NOMASKS
+            if defmask == "FuzzySelectDroplet":
+                mode = util.MaskingOptions.MASK_MAGIC_WAND_DROPLET
+            elif defmask == "SmartSelectDroplet":
+                mode = util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET
+            elif defmask == "Thresholding":
+                mode = util.MaskingOptions.MASK_THRESHOLDING
+            elif defmask == "EdgeDetection":
+                mode= util.MaskingOptions.MASK_CANNY
+            if CONFIG["processing"]["ListenerDefaultMasking"] != "None":
+                image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode, CONFIG["processing"])
+
 
     @staticmethod
     def on_any_event(event):
@@ -226,9 +234,10 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                     current_size = os.path.getsize(event.src_path)
                     print(f"{last_size} :{current_size} for {event.src_path}")
                     
-                    if current_size==last_size and current_size != 0:
+                    if current_size==last_size:
                         break
-                WatcherRecipientHandler.process_incomming_file(event.src_path)
+                if current_size != 0:
+                    WatcherRecipientHandler.process_incomming_file(event.src_path)
 
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
@@ -368,6 +377,7 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
     config: the full contents of config.json.
     nomasks: boolean value determining whether to build masks or not.
     """
+
     try:
         from photogrammetry import MetashapeTools
         if not os.path.exists(outputdir):
@@ -408,7 +418,7 @@ def build_model_cmd(args):
     job = args.jobname
     photoinput = args.photos
     outputdir = args.outputdirectory
-    maskoption = args.maskoption
+    maskoption = int(args.maskoption)
     build_model(job,photoinput,outputdir,CONFIG,maskoption)
     
 
@@ -453,7 +463,7 @@ def build_masks(args):
     """
     input = args.inputdir
     output = args.outputdir
-    image_processing.build_masks_with_droplet(input,output,CONFIG["processing"])
+    image_processing.build_masks(input,output,int(args.maskoption),CONFIG["processing"])
 
 def convert_raw_to_format(args):
     """wrapper script for using the RAW image conversion fucntions via the command line.
@@ -515,7 +525,12 @@ if __name__=="__main__":
     photogrammetryparser.add_argument("jobname", help="The name of the project")
     photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
     photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-    photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=1)
+    photogrammetryparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], help = "How do you want to build masks:0 = no masks,\
+                                    1 = Photoshop droplet(context aware select), \
+                                    2 = Photoshop droplet (magic wand), \
+                                    3 = Canny Edge detection algorithm \
+                                    4 = Grayscale Thresholding",
+                                    default=0)
 
     photogrammetryparser.set_defaults(func=build_model_cmd)
 
@@ -526,13 +541,27 @@ if __name__=="__main__":
     listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
     listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+    listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
+                            help = "How do you want to build masks:0 = no masks,\
+                                    1 = Photoshop droplet(context aware select), \
+                                    2 = Photoshop droplet (magic wand), \
+                                    3 = Canny Edge detection algorithm \
+                                    4 = Grayscale Thresholding",
+                            default=0)
     listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
     listensendparser.set_defaults(func=listen_and_send)    
 
     maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
     maskparser.add_argument("inputdir", help="Photos to mask")
     maskparser.add_argument("outputdir",help="location to store masks")   
+    maskparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
+                            help = "How do you want to build masks:0 = no masks,\
+                                    1 = Photoshop droplet(context aware select), \
+                                    2 = Photoshop droplet (magic wand), \
+                                    3 = Canny Edge detection algorithm \
+                                    4 = Grayscale Thresholding",
+                            default=0)
+
     maskparser.set_defaults(func=build_masks)
 
 

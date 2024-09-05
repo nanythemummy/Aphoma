@@ -115,7 +115,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
                 c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
                 doc.save()
-                #reorient model and export.
+        #reorient model and export.
         for c in doc.chunks:
             #for now, don't save after model reorient.
             reorient_model(c,config)
@@ -124,12 +124,13 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             ext = config["export_as"]
             outputtypes = []
             if ext == "all":
-                outputtypes += ['ply','obj']
+                outputtypes += ['.ply','.obj']
             else:
                 outputtypes.append(ext)
-            name = ModelHelpers.get_export_filename(labelname,config)
+            
             for extn in outputtypes:
-                c.exportModel(path=f"{os.path.join(outputpath,name)}.{extn}",
+                name = ModelHelpers.get_export_filename(labelname,config)
+                c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                             texture_format = Metashape.ImageFormat.ImageFormatPNG,
                             embed_texture=(extn=="ply") )
         stoptime = time.perf_counter()
@@ -166,7 +167,7 @@ if __name__=="__main__":
         returns: dictionary of key value configurations.
         """
         cfg = {}
-        with open(os.path.abspath(args.config), encoding='utf-8') as f:
+        with open(configpath, encoding='utf-8') as f:
             cfg = json.load(f)
         return cfg["config"]
     
@@ -191,7 +192,8 @@ if __name__=="__main__":
         if os.path.exists(args.psxpath):
             doc.open(path=args.psxpath)
         reorient_model(doc.chunks[0],cfg["photogrammetry"])
-
+    
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="MetashapeTools")
     subparsers = parser.add_subparsers(help="Sub-command help")
     
