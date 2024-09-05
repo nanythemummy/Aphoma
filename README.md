@@ -153,7 +153,7 @@ Before you start, you will want to open config.json and adjust some settings for
    * **texture_count** how many textures to export. You can divide the texture up into several large image files if you have a large object or want a very high resolution texture.
 * The following values ought to be filled out by you
    *  **export_as** format to export. Should be obj or ply. You can also specify "all" and it will export both obj and ply. Note that right now, if you want to use Blender to take automated snapshots of the object, .obj works better than .ply.
-   *  **palette** specify which palette you are using. If you don't know what that is, read the section entitled [Making Palettes](#making-palettes). Possible pallettes are, by default "small_axes_palette" and "large_axes_palette".
+   *  **palette** specify which palette you are using. If you don't know what that is, read the section entitled [Making Palettes](#making-palettes). Possible pallettes are, by default "small_axes_palette" and "large_axes_palette". If you don't want to use one at all, specify "None".
 
 
 Now, to generate your model, you will use the following command, run from the museumcode directory with your virtual environment activated:
@@ -177,7 +177,7 @@ python photogrammetryScripts.py photogrammetry E29180 E:\automation\E29180\proce
 Here, I'm building a project called **E29180**, with the pictures in the directory **E:\automation\E29180\processed**, and I'm putting all intermediate files and products in the directory **E:\automation\E29180**. I'm using masking option 1, which is **No Masks**. 
 You should then see a stream of output as masks are generated (if you chose to generate them) and as the model is built. The final obj or ply files will be placed in the ./output subdirectory of your project directory, or whatever you chose as the output directory in config.json.
 
-#### Masking
+#### Listen and Send
 
 This code facilitates the use of a seperate scanning workstation and photogrammetry workstation. It is meant to automate the workflow between the two.
 ### Configuration
