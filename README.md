@@ -41,18 +41,63 @@ Now, install the wheel for metashape and then install the requirements in the no
 ### Configure config.json
 1. Make a copy of config_template.json and name it config.json
 2. Add config.json to .gitignore so you don't end up checking it in if you intend to work on this code.
-3. The following values should be filled out before you start. I've grouped them by configuration groups.
+3. The following values should be filled out before you start. I've grouped them by configuration groups. For further configuration, see the section of this tutorial dealing with the processes you want to use.
 * Under the **processing** configuration group
     * fill out absolute paths for the **DNG_Converter**, **SmartSelectDroplet**, and **FuzzySelectDroplet** if you intend to use them. Some exe files for the droplets have been included under utils, but since they are compiled for Windows they may not work for you. If not, see the below Appendix on masking for some tips and tricks for making your own. All paths should be in quotes, and should either have the backslashes escaped or use unix-style paths. Python doesn't care when it comes to pulling directories out of json files.
     * When a droplet is exported in photoshop, it has to have a hardcoded place to put the files when it's done with them. **Droplet_Output** is this directory, which should default to "C:\\tempmasks" The script will look for each mask in this directory as it is made and then move it elsewhere.
-    * **Source_Type** and **Destination_Type** are respectively the type of the files which go into the pipeline and the files that should be used to build the model. If you have a Canon camera, Source_Type should be ".cr2" and Destination_Type should be ".jpg" if you wish to build your model from jpgs, ".tif" if you want to build from Tif files (slower).
-    * **ListenerDefaultMasking** is the type of masking that will be used if you are using the command to listen to a directory for incoming files and masking them as they come in. The options are currently "SmartSelectDroplet" and "FuzzySelectDroplet."
+    * **Source_Type** and **Destination_Type** are respectively the type of the files which go into the pipeline and the files that should be used to build the model. If you have a Canon camera, Source_Type should be ".cr2" and Destination_Type should be ".jpg" if you wish to build your model from jpgs, ".tif" if you want to build from Tif files (slower) Note that **Destination_Type** is the type of files from which you want to build your model. Remember to include the '.'.
+* Under the **photogrammetry** config group
+   * All the detaults should be fine here.
+   * mask_ext should be whatever filetype you exported the mask as. The default is ".png", which is what the included droplets export to. If you are instead using the CV2 masking options, you should change this to whatever you set under **Processing->CV2_Export_Type**. Be sure to include the "." in both.
 
-6. If you would like to build one mask for each photo using Photoshop's content aware masking, ensure that you have a copy of photoshop 2024 installed. If you have multiple versions of photoshop, you may want to open the latest because sometimes the droplet will open the wrong version and not the version it was made with. If you would not like to build makss this way, run the photogrammetry command with the --nomasks flag or choose one of the other masking options (TBA)
+## Notes on Masking
 
-7. Make a copy of config_template.json and name it config.json. Change the values in it to suit the computer you are using and the job you want to do with it.
+## Making Palettes
 
-## Transfer
+## Cookbook
+Below are several "recipes" for using these scripts. Pick the tutorial for the task you want to complete.
+
+### I already have RAW files, TIF files, or JPG files and I want to build a 3D Model from them.
+Before you start, you will want to open config.json and adjust some settings for your model.
+* Under Processing, make sure **Source_Type** and **Destination_Type** are set as described above. Remember that **Source_Type** is the type of image you have and **Destination_Type** is the type of image you want to build your model with.
+* You will also want to fill out the pertinent values for the type of masking you'll be using. See the above section on **Notes on Masking.**
+* Under Photogrammetry, the following values can be left at their defaults, but you should know what they do.
+   * **sparse_cloud_quality** Corresponds with the quality of the sparse cloud in metashape when you run align photos. Must be 0,1,2,4, or 8 with 0 being the highest quality. If you are working with a small object and are not getting good results, you may want to set this to 0.
+   * **model_quality** Corresponds with the quality of the model when building the model in metashape. Must be 1,2,4,8 or 16 with 1 being the highest quality.
+   * **mask_path** Subdirectory of the project directory where masks will be stored. By default, it is ./masks in the project directory.
+   * **output_path** where the model will be exported when built. By default it is ./output in the project directory.
+   * **mask_ext** this is the type of file that the script will look for in the masks directory when importing masks into Metashape. Default is .png, but it should be configured to be the same value as you are outputing under **processing->CV2_Export_Type**
+   * **error_thresholds** These values are used in the camera calibration process. Each point as a certain amount of error associated with its position.  The oprimization and error reduction process removes points with error above certain thresholds and recalibrates the cameras based on the points with less error. You may find that with skinny or small models you are getting holes in your model with these settings. If this is the case, you can raise projection accuracy to 6 or reconstruction uncertainty to more towards 30 until you get the results you want. Probably best to leave the rest alone.
+   * **texture_size** The size of the texture to export. Should be a power of 2. 4096 is the default.
+   * **texture_count** how many textures to export. You can divide the texture up into several large image files if you have a large object or want a very high resolution texture.
+* The following values ought to be filled out by you
+   *  **export_as** format to export. Should be obj or ply. You can also specify "all" and it will export both obj and ply. Note that right now, if you want to use Blender to take automated snapshots of the object, .obj works better than .ply.
+   *  **palette** specify which palette you are using. If you don't know what that is, read the section entitled **Making Palettes**. Possible pallettes are, by default "small_axes_palette" and "large_axes_palette".
+
+
+Now, to generate your model, you will use the following command, run from the museumcode directory with your virtual environment activated:
+```
+python photogrammetryScripts.py [Name of the Project] [Absolute Path to your folder of pictures] [Absolute Path to the project] --maskoption [1,2,3,4]
+```
+Masking options are as follows (which you will also see if you type "help" for this command). The default if you pass nothing at all is "No Masks." You should see the **Notes on Masking** section above to pick which one works best for you, and for instructions on how to best configure it.
+
+   0. No masks
+   1. Photoshop droplet(context aware select)
+   2. Photoshop droplet (magic wand),
+   3. Canny Edge detection algorithm 
+   4. Grayscale Thresholding"
+
+For example: 
+```
+python photogrammetryScripts.py photogrammetry E29180 E:\automation\E29180\processed E:\automation\E29180 --maskoption 0
+
+```
+
+Here, I'm building a project called **E29180**, with the pictures in the directory **E:\automation\E29180\processed**, and I'm putting all intermediate files and products in the directory **E:\automation\E29180**. I'm using masking option 1, which is **No Masks**. 
+You should then see a stream of output as masks are generated (if you chose to generate them) and as the model is built. The final obj or ply files will be placed in the ./output subdirectory of your project directory, or whatever you chose as the output directory in config.json.
+
+#### Masking
+
 This code facilitates the use of a seperate scanning workstation and photogrammetry workstation. It is meant to automate the workflow between the two.
 ### Configuration
 - **ortery:pics_per_revolution** The ortery does not allow you to configure the number of degrees at which the pictures are taken on a per-camera basis. Therefore, we are pruning the number of pictures after.
