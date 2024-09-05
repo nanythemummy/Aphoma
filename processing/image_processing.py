@@ -27,14 +27,32 @@ def build_masks(imagepath,outputdir,mode,config):
     starttime = perf_counter()
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
-    if mode == util.MaskingOptions.MASK_SMARTSELECT:
+    if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET:
         config["ListenerDefaultMasking"] = "SmartSelectDroplet"
         build_masks_with_droplet(imagepath,outputdir,config)
-    if mode == util.MaskingOptions.MASK_FUZZYSELECT:
-        outputname = f"{Path(imagepath).stem}.png"
-        maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),config["FuzzySelectDroplet"]["lower_gray_threshold"])
+    elif mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
+        config["ListenderDefaultMasking"] = "FuzzySelectDroplet"
+        build_masks_with_droplet(imagepath,outputdir,config)
+    else:
+        if Path(imagepath).is_dir():
+            for f in os.listdir(imagepath):
+                build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
+        else:
+            build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
+
     stoptime = perf_counter()
     print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
+
+def build_masks_with_cv2(imagepath,outputdir,mode,config):
+    outputname = f"{Path(imagepath).stem}{config["CV2_Export_Type"]}"
+    if mode == util.MaskingOptions.MASK_THRESHOLDING:
+        maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),config["thresholding_lower_gray_threshold"])
+    else:
+        #canny edge detection
+        maskingAlgorithms.edgeDetectionMask(imagepath,
+                                            Path(outputdir,outputname),
+                                            config["canny_lower_intensity_threshold"], 
+                                            config["canny_higher_intensity_threshold"])
 
 def build_masks_with_droplet( imagefolder, outputpath, config):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
@@ -50,8 +68,8 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
-    dropletpath = util.get_config_for_platform(config[config["ListenerDefaultMasking"]])
-    dropletoutput = util.get_config_for_platform(config["Droplet_Output"])
+    dropletpath = config[config["ListenerDefaultMasking"]]
+    dropletoutput = config["Droplet_Output"]
     if not dropletpath:
         print("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
         return
@@ -150,7 +168,7 @@ def convert_CR2_to_DNG(input,output,config):
     """
 
     outputcmd = f"-d \"{output}/\""
-    converterpath = util.get_config_for_platform(config["DNG_Converter"])
+    converterpath = config["DNG_Converter"]
     subprocess.run([converterpath,"-d",output,"-c", input], check = False)
 
 def get_exif_data(filename: str) -> dict:

@@ -124,12 +124,13 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             ext = config["export_as"]
             outputtypes = []
             if ext == "all":
-                outputtypes += ['ply','obj']
+                outputtypes += ['.ply','.obj']
             else:
                 outputtypes.append(ext)
-            name = ModelHelpers.get_export_filename(labelname,config)
+            
             for extn in outputtypes:
-                c.exportModel(path=f"{os.path.join(outputpath,name)}.{extn}",
+                name = ModelHelpers.get_export_filename(labelname,config)
+                c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                             texture_format = Metashape.ImageFormat.ImageFormatPNG,
                             embed_texture=(extn=="ply") )
         stoptime = time.perf_counter()
