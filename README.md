@@ -51,8 +51,89 @@ Now, install the wheel for metashape and then install the requirements in the no
    * mask_ext should be whatever filetype you exported the mask as. The default is ".png", which is what the included droplets export to. If you are instead using the CV2 masking options, you should change this to whatever you set under **Processing->CV2_Export_Type**. Be sure to include the "." in both.
 
 ## Notes on Masking
+Happily, Agisoft Metashape now has an option to ignore stationary points when building a model, negating the need to do masking on many projects where the object is moving but the camera is not (ie. using a turntable). However, some projects still need to be masked because there are items in the scene moving with the target object that we do not want to include in our model like rulers, scale palettes, and cushions used to stabilize fragile objects. 
+Objects are built using the "ignore stationary points" option by default, so with many projects, you can run the commands to [build an object from a folder of pictures](#i-already-have-raw-files-tif-files-or-jpg-files-and-i-want-to-build-a-3d-model-from-them) or from a manifest with the flag 
+```
+--maskoption 0
+```
+to build without masks. If you find you have unwanted objects in your scene, or if you are not getting good points on your model, you will need to mask. For that, this pipeling provides a couple of options, each of which require a little configuration.
+### Masking with Photoshop or Other External Apps
+Two photoshop droplets are provided in the util directory. One builds a mask using Photoshop 2024+'s context aware select tool, and the other uses the Magic Wand tool that has been in photoshop since forever. Both take the value of the center pixel in an image that is (5616x3744) and assume that it is on the desired object.  These are both accurate ways to mask models, with SmartSelect/Context Aware Select being the most accurate <ins>provided that the object you want to build a model of is on the center pixel is centered every picture.</ins> Unfortunately, photoshop droplets are really limited in their configurability. They don't allow you to specify which pixel to sample, for example, or the dimensions of your images. Furthermore, the included droplets may not work on your machine since they were exported on Windows 10. If you would like to use an external program like a droplet to generate a mask, it must meet several requirements:
+* You must be able to run it from the command line with one parameter, a folder of files to mask.
+* It must output to a directory that is NOT the directory you've configured under config.json->photogrammetry->mask_path. I've chosen a temp directory on c: that exists or could exist on almost all windows machines.
+
+To configure the pipeline to use the new droplet: 
+
+* In config.json->processing, change either **SmartSelectDroplet** or **FuzzySelectDroplet** to the path for your masking program or droplet.
+* Change **Droplet_Output** to be the directory where your third party app saves the finished masks. Do not have the app save them to the directory configured in photogrammetry->mask_path. The code will copy the files from this directory to the mask directory that you specify under config.json->photogrammetry->mask_path.
+* If you are planning on using a listener to wait for image files from a device or another computer, you will need to specify your droplet as the default masking option. Put the name of the config variable you changed to contain the path of your 3rd party app under **ListenerDefaultMasking**.
+
+To use this method to build a model, specify --maskoption 1 or 2 on any command that takes this option, depending on whether you replaced SmartSelectDroplet (1) or FuzzySelectDroplet (2) with your own app.
+
+### Masking using Grayscale Thresholding
+This masking method builds a mask by converting each image to grayscale, and taking all pixels with RGB values above a particular threshold (closer to white) and turning them black, and all pixels with RGB values below that threshold (closer to black) and turning them white. To use it, you will need to configure a threshold. This is currently the fastest method and produces results that are as good as the magic wand select droplet.
+* processing->**thresholding_lower_gray_threshold** should be be between 0 and 255 with 255 being white, and 0 being black.
+* processing->**CV2_Export_Type** and photogrammetry->**mask_ext** ought to have the same value. The default is ".png". **CV2_Export_Type** is the image format that your masks will be saved to.
+* If you are wanting to build masks as images come in from another computer to save time, **ListenerDefaultMasking** should be set to "Thresholding".
+
+To use this method to build a model, specify --maskoption 4 on any command that takes this option.
+
+### Masking using Edge Detection
+This masking method uses Canny Edge Detection to detect edges in the image, selects the longest one, and fills it. Canny edge detection uses two thresholds because of the way it decides which edges to use in the final project. These need to be configured in config.json.
+For more on Canny edge detection see: [OpenCV Docs on Canny Edge Detection](https://docs.opencv.org/3.4/da/d22/tutorial_py_canny.html)
+* processing->**canny_lower_intensity_threshold** is a value between 1 and 200 representing intensity where the intensity corresponds to the gradient in the area. Below this intensity value, an pixel will not be considered part of the object of interest.
+* processing->**canny_upper_intensity_threshold** is a value between 1 and 200 representing intensity. Above this value, a pixel will definitely be included in a curve representing an edge. Between these thresholds, a pixel will be included if it is connected to a pixel that is above the upper intensity threshold.
+* processing->**CV2_Export_Type** and photogrammetry->**mask_ext** ought to have the same value. The default is ".png". **CV2_Export_Type** is the image format that your masks will be saved to.
+* If you are wanting to build masks as images come in from another computer to save time, **ListenerDefaultMasking** should be set to "EdgeDetection".
+
+To use this method to build a model, specify --maskoption 4 on any command that takes this option.
 
 ## Making Palettes
+In order to automatically center, scale, and orient models we use a palette, which is a physical overlay placed on top of the turntable and underneath the object. These consist of computer readable targets encoding a number which will be the name of the target when read by Metashape. On the palette, these targets are placed relative to each other in an orientation which can be used to derive an X and Z axis in a world where the Y axis is up.
+You can make and define your own palette, or you can print off the one we have included which is already defined. Either way, you'll find pallette definitions in the file **util/MarkerPalettes.json**, where you will also find the PDF files containing the palettes themselves. The palette itself can be printed from the file util/"Turntable targets (sheet size is 25 x 25 in).pdf" It ought to be printed at 25 x25 in to correspond to the large_axes_palette defined in MarkerPalettes.json
+
+If you scale it differently, you will have to add a new entry to  MarkerPalettes.json or adjust the values already there. 
+To add a Palette to the MarkerPalettes.json file, paste the following and modify the values:
+ ```
+        "my_palette":{
+            "type":"12bit",
+            "scalebars":{
+                "type":"sequential",
+                "labelinterval":1,
+                "distance":2.0,
+                "units":"cm"
+            },
+            "axes":{
+                "xpos":[],
+                "xneg":[],
+                "zpos":[],
+                "zneg":[]
+            }
+```
+* All Units ought to be in metric, either mm, cm, or m. The unit on the top level ought to be the same as that specified for the scalebars. It will be used to name the output OBJ file so the user knows what units it uses by looking at the filename.
+* "type" refers to the type of marker used on the palette. Your options here are Circular, 12bit, 14bit, 16bit, 20bit, Cross.
+* "Scalebars" can either be determined from any two markers that are sequential in number ("type":"sequential") or explicitly defined ("type":"explicit").
+   * If you have explicitly defined scalebars they need to be defined in an array "bars":[] where each bar is a JSON object with:
+      *  "points" (a two member array of marker numbers)
+      *  "distance", an integer specifying the distance between the points, and
+      *  "units", which are the units of that distance in mm, cm, or m
+```
+ "scalebars":{
+                "type":"explicit",
+                "bars":[
+                 {
+                  "points":[1,2],
+                  "distance":5,
+                  "units":"cm"
+                 },
+                ]
+```
+   * If you wish to just find two sequential points and give a measurement between them, you can specify "type":"sequential". You need to specify the following properties on the scalebar object
+      * "labelinterval"  is the numerical interval between two adjacent marker labels. ie, if you want to make a scalebar with point 61 and point 63, this value ought to be "2".
+     * "distance" The distance between any two labels.
+     * "units" the units of that distance in mm,cm, or m.
+Finally, if you want to orient the object in space, you should specify which labels should be considered part of which axis. This is defined with an "axes" json object, which contains arrays corresponding to the positive and negative sides of the x and z axes. The arrays should contain integers corresponding to the numbers encoded by the targets on your palette, which also become the marker labels when the palettes get scanned by Metashape.
+
 
 ## Cookbook
 Below are several "recipes" for using these scripts. Pick the tutorial for the task you want to complete.
@@ -72,14 +153,14 @@ Before you start, you will want to open config.json and adjust some settings for
    * **texture_count** how many textures to export. You can divide the texture up into several large image files if you have a large object or want a very high resolution texture.
 * The following values ought to be filled out by you
    *  **export_as** format to export. Should be obj or ply. You can also specify "all" and it will export both obj and ply. Note that right now, if you want to use Blender to take automated snapshots of the object, .obj works better than .ply.
-   *  **palette** specify which palette you are using. If you don't know what that is, read the section entitled **Making Palettes**. Possible pallettes are, by default "small_axes_palette" and "large_axes_palette".
+   *  **palette** specify which palette you are using. If you don't know what that is, read the section entitled [Making Palettes](#making-palettes). Possible pallettes are, by default "small_axes_palette" and "large_axes_palette".
 
 
 Now, to generate your model, you will use the following command, run from the museumcode directory with your virtual environment activated:
 ```
 python photogrammetryScripts.py [Name of the Project] [Absolute Path to your folder of pictures] [Absolute Path to the project] --maskoption [1,2,3,4]
 ```
-Masking options are as follows (which you will also see if you type "help" for this command). The default if you pass nothing at all is "No Masks." You should see the **Notes on Masking** section above to pick which one works best for you, and for instructions on how to best configure it.
+Masking options are as follows (which you will also see if you type "help" for this command). The default if you pass nothing at all is "No Masks." You should see the [Notes on Masking](#notes-on-masking) section above to pick which one works best for you, and for instructions on how to best configure it.
 
    0. No masks
    1. Photoshop droplet(context aware select)
