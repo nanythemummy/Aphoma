@@ -44,6 +44,9 @@ def build_masks(imagepath,outputdir,mode,config):
     print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
 
 def build_masks_with_cv2(imagepath,outputdir,mode,config):
+    if not str(imagepath).upper().endswith(config["Destination_Type"].upper()):
+        print(f"{imagepath}")
+        return
     outputname = f"{Path(imagepath).stem}{config["CV2_Export_Type"]}"
     if mode == util.MaskingOptions.MASK_THRESHOLDING:
         maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),config["thresholding_lower_gray_threshold"])

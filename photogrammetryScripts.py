@@ -162,14 +162,13 @@ class WatcherSenderHandler(FileSystemEventHandler):
         -------------------
         event: a watchdog.event from the watchdog library.
         """
+
         ext = os.path.splitext(event.src_path)[1].upper()
         if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
-            config = CONFIG["transfer"]
             fn = os.path.splitext(event.src_path)[0]
             if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
                 if not should_prune(event.src_path):
-                    transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
-                    global MANIFEST
+                    transferscripts.transferToNetworkDirectory(CONFIG["watcher"]["networkdrive"], [event.src_path])
                     MANIFEST.addFile(event.src_path)
                     print(f"added to manifest: {event.src_path}")
 
@@ -284,7 +283,7 @@ class Watcher:
             self.observer.join()
         if  self.isSender and MANIFEST:
             manifestpath=MANIFEST.finalize(".")
-            transferscripts.transferToNetworkDirectory(CONFIG["transfer"]["networkdrive"],[os.path.abspath(manifestpath)])
+            transferscripts.transferToNetworkDirectory(CONFIG["watcher"]["networkdrive"],[os.path.abspath(manifestpath)])
 
 def listen_and_send(args):
     """Listens for incoming cr2 files and sends them to the network drive to be converted to tifs and then processed"
@@ -426,7 +425,7 @@ def build_model_cmd(args):
 def transfer_to_network_folder(args):
     """This script is for transfering files from the ortery computer to the network drive. 
     
-    It copies the files to the drive specified in config.json under transfer->networkdrive. 
+    It copies the files to the drive specified in config.json under watcher->networkdrive. 
     Then, as a final step, it leaves a manifest of the files it copied as a comma seperated list entitled "Files_To_Process.txt." 
     This file will be used as a signal that the sending is complete by any machine listening for changes on the folder.
 
@@ -446,7 +445,7 @@ def transfer_to_network_folder(args):
     filestocopy = sorted(fs,key=getFileCreationTime)
     if args.p: #if the pics need to be pruned...
        filestocopy= transferscripts.pruneOrteryPics(filestocopy,CONFIG["ortery"])
-    transferto=os.path.join(CONFIG["transfer"]["networkdrive"],jobname)
+    transferto=os.path.join(CONFIG["watcher"]["networkdrive"],jobname)
     transferscripts.transferToNetworkDirectory(transferto, filestocopy,)
     manifest  = os.path.join(transferto,"Files_to_Process.txt")
     with open(manifest,"w") as f:
@@ -535,11 +534,11 @@ if __name__=="__main__":
     photogrammetryparser.set_defaults(func=build_model_cmd)
 
     watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
-    watcherparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    watcherparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     watcherparser.set_defaults(func=watch_and_process)      
 
     listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
-    listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    listensendparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
                             help = "How do you want to build masks:0 = no masks,\

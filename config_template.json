@@ -24,11 +24,6 @@
             "blender_exec":"",
             "scale_path":""
         },
-        "transfer":
-        {
-            "networkdrive":"",
-            "host":""
-        },
         "ortery":
         {
             "pics_per_revolution":24,
@@ -48,7 +43,8 @@
             "listen_directory":"",
             "project_base":"",
             "listen_and_send":"",
-            "temp_scratch":"E:\\temp"
+            "temp_scratch":"E:\\temp",
+            "networkdrive":""
         },
         "photogrammetry":
         {
@@ -66,10 +62,12 @@
                 "projection_accuracy_max_selection":0.5,
                 "reconstruction_uncertainty_max_selection":0.5
             },
+            "custom_face_count":0,
+            "low_res_poly_count":100000,
             "texture_size":4096,
             "texture_count":1,
             "export_as":"",
-            "palette":""
+            "palette":"small_axes_palette"
         }
 
     }
