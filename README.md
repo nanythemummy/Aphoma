@@ -153,7 +153,9 @@ Before you start, you will want to open config.json and adjust some settings for
    * **texture_count** how many textures to export. You can divide the texture up into several large image files if you have a large object or want a very high resolution texture.
 * The following values ought to be filled out by you
    *  **export_as** format to export. Should be obj or ply. You can also specify "all" and it will export both obj and ply. Note that right now, if you want to use Blender to take automated snapshots of the object, .obj works better than .ply.
-   *  **palette** specify which palette you are using. If you don't know what that is, read the section entitled [Making Palettes](#making-palettes). Possible pallettes are, by default "small_axes_palette" and "large_axes_palette". If you don't want to use one at all, specify "None".
+   *  **palette** specify which palette you are using. If you don't know what that is, read the section entitled [Making Palettes](#making-palettes). Possible pallettes are, by default "small_axes_palette" and "large_axes_palette". If you don't want to use one at all, delete this attribute in your config.json file or type "None".
+   *  **custom_face_count** If you want to build a very high resolution model for archival purposes, set this to 0. This will cause Metashape to build a model with the max number of polygons that your photographs will support. The number you provide here will be used as the face count for the high resolution version of your model that gets exported. If you would like to go to the default, "high resolution" model, delete this key from the json object.
+   *  **low_res_poly_count** This script will export a high resolution and decimated version of your model. The low resolution one is good for streaming over the internet, but may lose some detail when viewed without its texture. This is the target polygon count that your low-resolution model will be decimated to.
 
 
 Now, to generate your model, you will use the following command, run from the museumcode directory with your virtual environment activated:
@@ -177,27 +179,62 @@ python photogrammetryScripts.py photogrammetry E29180 E:\automation\E29180\proce
 Here, I'm building a project called **E29180**, with the pictures in the directory **E:\automation\E29180\processed**, and I'm putting all intermediate files and products in the directory **E:\automation\E29180**. I'm using masking option 1, which is **No Masks**. 
 You should then see a stream of output as masks are generated (if you chose to generate them) and as the model is built. The final obj or ply files will be placed in the ./output subdirectory of your project directory, or whatever you chose as the output directory in config.json.
 
-#### Listen and Send
+### I have an Ortery or a similar device, and I would like to build models on a second computer while photographing on the first
+The basic strategy here is to run the sending script on the machine which is hooked up to your camera or Ortery while running the watcher script on the machine that you want to build your model. The building machine will make certain assumptions about how you want to do masking and do the filetype conversion and masking work while you are still taking pictures on your photography machine. Then, when you are will done, the photography machine will send a manifest of all the files in the model to the build machine and the build machine will use that to collect all the files for one model into one place and to build the model.
+* You need to use Windows to set up a shared folder on your build machine that is accessible from both computers. To share the a folder on the build machine, see the following [instructions from the Microsoft webpage](https://support.microsoft.com/en-us/windows/file-sharing-over-a-network-in-windows-b58704b2-f53a-4b82-7bc1-80f9994725bf#ID0EBD=Windows_11).
+* Then, you need to [mount that folder as a network drive on the photography computer](https://support.microsoft.com/en-us/windows/map-a-network-drive-in-windows-29ce55d1-34e3-a7e2-4801-131475f9557d). For the below examples, my folder e:\photogrammetry on the build computer is now x:\photogrammetry on the photography machine.
+* At the moment, SCP and other file transfer protocols are not supported, though they may be in the future. If you would still like to use the watcher script to build models without a the send script, configure the listening script, then see the tutorial below for the situation where [I would like to send my images to another, faster machine to build.](#i_would_like_to_send_my_images_to_another_faster_machine_to_build).
 
-This code facilitates the use of a seperate scanning workstation and photogrammetry workstation. It is meant to automate the workflow between the two.
-### Configuration
-- **ortery:pics_per_revolution** The ortery does not allow you to configure the number of degrees at which the pictures are taken on a per-camera basis. Therefore, we are pruning the number of pictures after.
-In Config.json, under "Ortery", set the "pics_per_revolution" to the number of pictures you set the ortery to take per camera. For every 15 degrees, it's 24.
-- **ortery:pics_per_cam** For each camera, set the number of pics that you want to keep for that camera. So, say you want to take a pciture every 30 degrees for the top camera, you would set cameras 5,6 to 12. Note that if you are going by degrees, you are limited to multiples of the degrees that you set for the number of pics per revolution, ie. 15 for a number of 24. For example, if you want to prune camera 5 down to 7 pics per revolution, this is not the same as getting a picture every 51 degrees on camera 5, but getting rid of 17 of 24 pictures taken at intervals of 15 degrees. The other thing to note, is that the camera numbers go from bottom to top (1-5) and from top to bottom(6-10), where you are doing a model in two hemispheres. If you don't like this, you can rename the cameras To prune pictures like this, run the transfer command with the --p flag.
-- **transfer:networkdrive** Other useful configurations for the transfer include the transfer:networkdrive config value, which is the network drive the pics need to be transfered to. Right now, it will move all cr2 pics to this drive. If you are doing a windows directory, backslashes ought to be escaped with another backslash, or else enter it like you would a unix directory and let python sort out which is which.
+#### Configuring and Running the Watcher Script
 
+* Configure the Watcher in config.json
+   * Under watcher->**listen_directory**, put the directory that you want the watcher to look for incoming image files on. You can also specify this as a positional argument on the command line.
+   * watcher->**temp_scratch** Specify a directory where the watcher can temporarily store its work products (converted files and masks) while it waits for a manifest from the photography computer.
+   * watcher->**project_base** is the base directory in which all model projects will be stored. When the model is finished, your model will be in project_base\\my_project_name
+ * Run the watcher script
 ```
-usage: photogrammetryScripts transfer [-h] [--p] jobname imagedirectory
-
-positional arguments:
-  jobname         The name of this job. This translates into a subfolder on the network drive.
-  imagedirectory  Copies images from this directory to the shared network folder as specified in config.json
-
-options:
-  -h, --help      show this help message and exit
-  --p             Prunes every Nth file from Camera X, as specified in the config.json.
+python photogrammetryScripts.py watch
+\\likewise, if you did not want to configure the directory to listen on, you can specify it with the --inputdir optional argument.
+python photogrammetryScripts.py watch --inputdir "e:\photogrammetry"
 ```
+The script will loop in the background waiting for files to arrive. If you want to exit it, type **F**
 
+#### Configuring and running the Listen-Send Script
+* On the machine connected to the ortery, configure the following in config.json
+   * watcher->**listen_and_send** should be the directory where your third party photography device uploads the photographs to your computer. For example, while it is in the process of taking photos, the Ortery Capture software will store JPGs and RAW files in C:\%USERPROFILE%\Pictures\Ortery\~temp
+   * watcher->**networkdrive** should be the networkdrive that you mapped above, for example: "x:\photogrammetry". This is where the files from the ortery will be sent for the watcher script to pick them up.\
+* If you are taking pictures with a multi-camera machine, you may find that the machine takes more pictures than you want at certain angles and it is not tunable from within the Ortery (or other) software. The following configuration allows you to remove every Nth picture on a specified camera. It counts pictures based on the temporary numbering that the Ortery gives them and in this way is very Ortery specific. You can configure your ortery setup if you are using one as follows in the ortery object in config.json.
+   * ortery->**pics_per_revolution**. This is the number of pictures taken by a single camera during a 360 rotation of the ortery turntable.
+   * ortery->**pics_per_cam**. This attribute contains a dictionary mapping camera numbers to the desired number of pictures to be sent to the build machine from each camera. The following is an example of a configuration for an ortery taking a picture of a pot on a turntable where the pot must be photographed right-side-up and then again upside-down. Cameras 1-5 are the lowest to highest angle cameras respectively on the first (rightside up) pass, and cameras 6-10 are the lowest to highest angle cameras on the second (upside-down) pass. The cameras at the highest angles (4,5,9,and 10) are set to take fewer pictures, because at this angle, pretty much every picture has a high overlap of information when compared to the last. Furthermore, it is assumed that pretty much all the information in picture 6 will be overlapped in the previous pictures, so the number of desired pictures for it is set to 12 meaning that the sender script will only send 12 of the 24 pics taken. For the best results, the pics_per_cam ought to divide evenly into pics_per_revolution.
+     ```
+         "ortery":
+        {
+            "pics_per_revolution":24,
+            "pics_per_cam":{"1":24,
+                            "2":24,
+                            "3":24,
+                            "4":6,
+                            "5":6,
+                            "6":12,
+                            "7":24,
+                            "8":24,
+                            "9":6,
+                            "10":6}
+        }
+     ```
+    Now you are all configured, you should run the listen-send script with the following command.
+  ```
+  python photogrammetryScripts.py listenandsend ProjectName
+  ```
+  You can also specify the following arguments:
+  * --inputdir is the directory to look for incoming files in--if you don't specify it, the directory gets pulled from watcher->**listen_and_send**
+  * --maskoption [1,2,3,4] This is not usually useful in this usecase. If you are for some reason not using the watcher script, this will specify the masking option in the manifest that gest sent at the end of the job so that you can run the build later at your leasure with a custom masking option. Normally, the build comptuer is masking while you are photographing, and there is no way to tell it that you should use one masking method over the other, so the watcher computer will use the default masking method specified in configuration under processing->**ListenerDefaultMasking** For information on what the options do, see the [section on masking options](#notes_on_masking)
+  * --prune This will run the pruning script that selects a subset of pictures to send to the build computer based on the filename of the picture and the configuration values specified in the config.json ortery object.
+
+    When you are finished photographing a single object, type **F** to send the manifest to the build comptuer.
+
+### I would like to send my images to another, faster machine to build.
+TBD
 ## Converters:
 ### Configuration:
 Install Adobe's DNG converter( see above), and configure the path for it.
@@ -236,38 +273,3 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
 ```
-## Photogrammetry
-This function takes an input folder full of pictures in CR2 (NEF will probably be supported at some point) format and uses it to build a 3D model with Agisoft Metashape. It converts the files to TIF if needed and builds masks for each file. Then it adds them to one chunk in Metashape and builds a sparse cloud. It deletes potentially erroneous points, then uses the sparse cloud to create depth maps and a model. If scalebars are configured, markers are detected and scalebars are created with the configured values. If a marker pallette indicating x and z axes is used, the model is rotated such that the x and z and y on the pallette correspond with the world coordinate system. The model is centered on the origin in world space and scaled x1000 as all measurements in Metashape are in meters, whereas most objects that we are dealing with ought to be in mm. In the future, this scaling should be configurable.
-The model is then exported in the specified format to the output folder created in the proejct directory passed in on the command line.
-
-### Configuration
- - **sparse_cloud_quality** Corresponds with the quality of the sparse cloud in metashape when you run align photos. Must be 0,1,2,4, or 8 with 1 being the highest quality.
- - **model_quality** Corresponds with the quality of the model when building the model in metashape. Must be 1,2,4,8 or 16 with one being the highest quality.
- - **mask_path** Subdirectory of the project directory where masks will be stored. 
-
-- **error_thresholds** Each point as a certain amount of error associated with its position. The oprimization and error reduction process removes points with error above certain thresholds and recalibrates the cameras based on the points with less error. You may find that with skinny or small models you are getting holes in your model with these settings. If this is the case, you can raise projection accuracy to 6 or reconstruction uncertainty to more towards 30 until you get the results you want. Probably best to leave the rest alone.
-                "reconstruction_uncertainty":15,
-                "projection_accuracy":5,
-                "reprojection_error":0.3,
-                "reprojection_max_selection_per_iteration":0.1,
-                "reprojection_max_selection":0.5,
-                "projection_accuracy_max_selection":0.5,
-                "reconstruction_uncertainty_max_selection":0.5
-- **texture_size** The size of the texture to export. Should be a power of 2. 4096 is the default.
-- **texture_count** how many textures to export. You can divide the texture up into several large image files if you have a large object or want a very high resolution texture.
-- **export_as** format to export. Should be obj or ply.
-- **palette** The name of the marker palette you are using. This will act as a key to the configuration of the marker palette, which is loacted in util/MarkerPalettes.json
-
-```
-usage: photogrammetryScripts photogrammetry [-h] [--nomasks] jobname photos outputdirectory
-
-positional arguments:
-  jobname          The name of the project
-  photos           Place where the photos in tiff or jpeg format are stored.
-  outputdirectory  Where the intermediary files for building the model and the ultimate model will be stored.
-
-options:
-  -h, --help       show this help message and exit
-  --nomasks        Skip the mask generation step.
-```
-
