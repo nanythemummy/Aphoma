@@ -8,7 +8,7 @@ def thresholdingMask(picpath: Path, maskout: Path, lowerthreshold:int):
     img = cv2.imread(str(picpath))
     #threshold image
     grayscale = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    mask = cv2.threshold(grayscale,235,lowerthreshold,cv2.THRESH_BINARY)[1]
+    mask = cv2.threshold(grayscale,lowerthreshold,255,cv2.THRESH_BINARY)[1]
     mask = 255-mask #invert the colors
     cv2.imwrite(str(maskout),mask)
 
@@ -22,16 +22,22 @@ def edgeDetectionMask(picpath: Path, maskout: Path, threshold1: int, threshold2:
 
     print(f"Building mask for {picpath} with edge detection. Output at {maskout}")
     img = cv2.imread(str(picpath))
-
+    h,w,_ = img.shape
+    print(f"h:{h},w:{w}")
     grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
+    blur = cv2.GaussianBlur(grayscale,(11,11),0)
     #edge detection
     print(f"thresholds ={threshold1},{threshold2}")
-    edges = cv2.Canny(grayscale,threshold1,threshold2)
+    edges = cv2.Canny(blur,threshold1,threshold2)
+
+    cv2.imshow('With canny', cv2.resize(edges,(1600,1000 )))
+    cv2.waitKey(0)
 
     edges = cv2.dilate(edges, None)
     edges = cv2.erode(edges, None)
 
+    cv2.imshow('With dilation erosion', cv2.resize(edges,(1600,1000 )))
+    cv2.waitKey(0)
     #find contours in edges, sort by area
     contoursInfo = []
     contours, _ = cv2.findContours(edges,cv2.RETR_LIST,cv2.CHAIN_APPROX_NONE)
@@ -67,21 +73,25 @@ if __name__ == "__main__":
     def thresholdSelectCommand(args):
         img = Path(args.imagepath)
         outpath = Path(args.outpath)
+        thresholds = []
+        if args.thresholds:
+            thresholds = [float(f) for f in str.split(args.thresholds.replace(" ",""),',')] 
         if img.exists and outpath.parent.exists():
             if not args.contextselect:
-                thresholdingMask(img, outpath,config["thresholding_lower_gray_threshold"])
+                thresholdingMask(img, outpath,thresholds[0] if len(thresholds)>0 else config["thresholding_lower_gray_threshold"])
             else:
                 edgeDetectionMask(img,outpath, 
-                                  config["canny_lower_intensity_threshold"],
-                                  config["canny_higher_intensity_threshold"])
+                                  thresholds[0] if len(thresholds)>1 else config["canny_lower_intensity_threshold"],
+                                  thresholds[1] if len(thresholds)>1 else config["canny_higher_intensity_threshold"])
 
     config = load_config_file(Path.joinpath(Path(__file__).parent.parent.resolve(),"config.json"))["processing"]
     parser = argparse.ArgumentParser(prog="maskingAlgorithms")
     subparsers = parser.add_subparsers(help="Sub-command help")
-    maskTypeParser = subparsers.add_parser("mask", help="algorithm for removing background from an image")
-    maskTypeParser.add_argument("--contextselect", action="store_true", help="By default, the background will be removed using grayscale thresholding. With this flag, it will use canny edge detection.")
+    maskTypeParser = subparsers.add_parser("mask", help="algorithm for removing background from an image. default is thresholding, whcih takes a minimum gray value.")
+    maskTypeParser.add_argument("--contextselect", action="store_true", help="By default, the background will be removed using grayscale thresholding. With this flag, it will use canny edge detection. It takes an upper and lower threshold.")
     maskTypeParser.add_argument("imagepath", help="path to image with a background to remove.", type=str)
     maskTypeParser.add_argument("outpath", help="path to image with a background to remove.", type=str)
+    maskTypeParser.add_argument("--thresholds", help="Each masking option can take thresholds. Pass these in as a comma seperated list.", type=str)
     maskTypeParser.set_defaults(func=thresholdSelectCommand)
     args = parser.parse_args()
     if hasattr(args,"func"):

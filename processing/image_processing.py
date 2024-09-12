@@ -38,7 +38,7 @@ def build_masks(imagepath,outputdir,mode,config):
             for f in os.listdir(imagepath):
                 build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
         else:
-            build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
+            build_masks_with_cv2(Path(imagepath),outputdir,mode,config)
 
     stoptime = perf_counter()
     print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")

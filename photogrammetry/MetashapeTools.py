@@ -36,7 +36,7 @@ def load_photos_and_masks(chunk, projectdir:str, photodir:str, maskpath:str):
                 template = f"{maskpath}{os.sep}{{filename}}{ext}"
                 chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
         
-def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict, decimate = True):
+def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict, decimate = True, maskoption = 0):
     """Uses Agisoft Metashape to build and export a model using the photos in the directory specified.
     Parameters:
     ------------------
@@ -68,7 +68,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         #build sparse cloud.
         if len(current_chunk.cameras)==0:
 
-            maskpath =config["mask_path"] if "mask_path" in config.keys() else None
+            maskpath =config["mask_path"] if maskoption !=0 else None
 
             load_photos_and_masks(current_chunk,projectdir,photodir,maskpath)
             current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],

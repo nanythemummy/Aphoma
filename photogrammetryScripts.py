@@ -399,10 +399,10 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
                 image_processing.build_masks(processedpath,maskpath,mask_option,config["processing"])      
-        else:
-            config["photogrammetry"].pop("mask_path")
+        #else:
+        #   config["photogrammetry"].pop("mask_path")
         print(f"Building Model {jobname} with photos in {processedpath} and outputting in {outputdir}")
-        MetashapeTools.build_basic_model(processedpath,jobname,outputdir, config["photogrammetry"])
+        MetashapeTools.build_basic_model(processedpath,jobname,outputdir, config["photogrammetry"], mask_option)
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e
