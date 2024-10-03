@@ -137,17 +137,21 @@ def should_prune(filename: str)->bool:
         print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
         if expected < numinround:
             invert = False
-            if (numinround-expected)/numinround <=0.5:
+            if (numinround-expected)/numinround <0.5:
                 divisor = round(numinround/(numinround-expected))
             else:
                 divisor = round(numinround/expected)
                 invert = True
             if (picinround %divisor==0) and invert is False:
                 shouldprune=True
+                print("Prune Me")
             elif (picinround % divisor != 0) and invert is True:
                 shouldprune = True
+                print("Prune me")
+            else:
+                print("Don't Prune Me.")
     except AttributeError:
-        print("Filenames were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
+        print(f"Filename {fn} were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
         shouldprune = False
     finally:
         return shouldprune
@@ -168,9 +172,22 @@ class WatcherSenderHandler(FileSystemEventHandler):
             fn = os.path.splitext(event.src_path)[0]
             if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
                 if not should_prune(event.src_path):
-                    transferscripts.transferToNetworkDirectory(CONFIG["watcher"]["networkdrive"], [event.src_path])
-                    MANIFEST.addFile(event.src_path)
-                    print(f"added to manifest: {event.src_path}")
+                    last_size = -1
+                    current_size = os.path.getsize(event.src_path)
+                    while True:
+                        time.sleep(3)
+                        last_size = current_size
+                        current_size = os.path.getsize(event.src_path)
+                        print(f"{last_size} :{current_size} for {event.src_path}")
+                
+                        if current_size==last_size:
+                            break
+                    if current_size >0:    
+                        transferscripts.transferToNetworkDirectory(CONFIG["watcher"]["networkdrive"], [event.src_path])
+                        global MANIFEST
+                        MANIFEST.addFile(event.src_path)
+                        print(f"added to manifest: {event.src_path}")
+
 
 class WatcherRecipientHandler(FileSystemEventHandler):
     """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
@@ -542,8 +559,8 @@ if __name__=="__main__":
     watcherparser.set_defaults(func=watch_and_process)      
 
     listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
-    listensendparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    listensendparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
                             help = "How do you want to build masks:0 = no masks,\
                                     1 = Photoshop droplet(context aware select), \

@@ -47,7 +47,7 @@ def build_masks_with_cv2(imagepath,outputdir,mode,config):
     if not str(imagepath).upper().endswith(config["Destination_Type"].upper()):
         print(f"{imagepath}")
         return
-    outputname = f"{Path(imagepath).stem}{config["CV2_Export_Type"]}"
+    outputname = f"{Path(imagepath).stem}{config['CV2_Export_Type']}"
     if mode == util.MaskingOptions.MASK_THRESHOLDING:
         maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),config["thresholding_lower_gray_threshold"])
     else:
@@ -122,7 +122,7 @@ def process_image(filepath: str, output: str, config: dict):
                 processedpath = convertToJPG(filepath,output)
     else:
         util.copy_file_to_dest([filepath],output,False)
-        processedpath = os.path.join(output,f"{Path(filepath).stem}.{config["Destination_Type"]}")
+        processedpath = os.path.join(output,f"{Path(filepath).stem}.{config['Destination_Type']}")
     return processedpath 
 
 
