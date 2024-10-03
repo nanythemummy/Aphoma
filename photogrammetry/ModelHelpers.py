@@ -181,6 +181,17 @@ def build_scalebars_from_list(chunk,scalebardefinitions):
             scalebar.reference.enabled = True
     chunk.updateTransform()
 
+def close_holes(chunk):
+  """Closes any holes in the model.
+    
+    Parameters:
+    ---------------
+    Chunk: the metashape chunk we want to act on.
+    """
+  if chunk.model:
+      threshold = 50
+      chunk.model.closeHoles(level = threshold)
+
 def cleanup_blobs(chunk):
     """Cleans up freestanding floating geometry that has less <= 60% of the faces of the total faces in the model.
     
@@ -209,7 +220,7 @@ def detect_markers(chunk, markertype:str):
     # detect markers using defaults (12-bit markers, tolerance: 50, filter_mask: False, etc.)
     chunk.detectMarkers(target_type=targetTypes[markertype], filter_mask=False) 
 
-    # bale if we have no markers
+    # bail if we have no markers
     if len(chunk.markers) ==  0:
         print("- no markers detected")
     else:

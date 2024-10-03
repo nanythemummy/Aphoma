@@ -9,6 +9,7 @@
 
 
 
+
         {
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
@@ -16,7 +17,7 @@
             "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "E29160", "E:\\automation\\E29160\\processed","E:\\automation\\E29160\\","--maskoption","3"]
+            "args":["photogrammetry", "TSB_5209", "E:\\automation\\TSB_5209_Crate21\\JPG","E:\\automation\\TSB_5209_Crate21\\","--maskoption","0"]
 
         },
         {

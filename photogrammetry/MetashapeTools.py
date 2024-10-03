@@ -112,6 +112,9 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         #remove blobs.
         ModelHelpers.cleanup_blobs(current_chunk)    
         doc.save()    
+        #close holes
+        ModelHelpers.close_holes(current_chunk)
+        doc.save()
         #decimate model
         if decimate and len(doc.chunks)<2:
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
@@ -132,15 +135,16 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             labelname = c.label.replace(" ","")
             ext = config["export_as"]
             outputtypes = []
-            if ext == "all":
-                outputtypes += ['.ply','.obj']
-            else:
-                outputtypes.append(ext)
-            for extn in outputtypes:
-                name = ModelHelpers.get_export_filename(labelname,config,extn)
-                c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
-                            texture_format = Metashape.ImageFormat.ImageFormatPNG,
-                            embed_texture=(extn=="ply") )
+            if not ext == "none":
+                if ext == "all":
+                    outputtypes += ['.ply','.obj']
+                else:
+                    outputtypes.append(ext)
+                for extn in outputtypes:
+                    name = ModelHelpers.get_export_filename(labelname,config,extn)
+                    c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
+                                texture_format = Metashape.ImageFormat.ImageFormatPNG,
+                                embed_texture=(extn=="ply") )
         stoptime = time.perf_counter()
         print(f"Completed model in {stoptime-starttime} seconds.")
     except Exception as e:
