@@ -4,6 +4,70 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
+
+
+
+
+
+        {
+            "name": "Python Debugger: photogrammetryScripts",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryScripts.py",
+            "console": "integratedTerminal",
+
+            "args":["photogrammetry", "TSB_5209", "E:\\automation\\TSB_5209_Crate21\\JPG","E:\\automation\\TSB_5209_Crate21\\","--maskoption","0"]
+
+        },
+        {
+            "name": "Python Debugger: MetashapeTools",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+
+            "args":["build", "E22373", "D:\\Meroitic Fineware E33272\\TIF","D:\\Meroitic Fineware E22373","config.json"]
+
+
+        },
+        {
+            "name": "Watch",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryScripts.py",
+            "console": "integratedTerminal",
+
+            "args":["watch", "--inputdir","e:\\photogrammetry"]
+
+
+        },
+        {
+            "name": "ListenSend",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryScripts.py",
+            "console": "integratedTerminal",
+            "args":["listenandsend", "C:\\Users\\kjohnston\\Pictures\\Ortery\\~temp", "Kish 156162","--maskoption", "1","--prune"]
+        },
+        {
+            "name": "Python Debugger: MetashapeTools-TranslationTest",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+
+            "args":["orient", "C:\\Users\\keajohnston\\Documents\\Projects\\Rollouts\\Meroitic Fineware E21484\\Meroitic Fineware E21484.psx","config.json"]
+
+        }
+    ]
+}
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
     
     
 

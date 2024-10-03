@@ -38,7 +38,7 @@ def build_masks(imagepath,outputdir,mode,config):
             for f in os.listdir(imagepath):
                 build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
         else:
-            build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
+            build_masks_with_cv2(Path(imagepath),outputdir,mode,config)
 
     stoptime = perf_counter()
     print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
@@ -51,11 +51,12 @@ def build_masks_with_cv2(imagepath,outputdir,mode,config):
     if mode == util.MaskingOptions.MASK_THRESHOLDING:
         maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),config["thresholding_lower_gray_threshold"])
     else:
+        maskingAlgorithms.otsuThresholding(imagepath,Path(outputdir,outputname))
         #canny edge detection
-        maskingAlgorithms.edgeDetectionMask(imagepath,
-                                            Path(outputdir,outputname),
-                                            config["canny_lower_intensity_threshold"], 
-                                            config["canny_higher_intensity_threshold"])
+        #maskingAlgorithms.edgeDetectionMask(imagepath,
+                                            #Path(outputdir,outputname),
+                                            #config["canny_lower_intensity_threshold"], 
+                                            #config["canny_higher_intensity_threshold"])
 
 def build_masks_with_droplet( imagefolder, outputpath, config):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
