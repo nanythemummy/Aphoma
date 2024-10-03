@@ -172,7 +172,6 @@ class WatcherSenderHandler(FileSystemEventHandler):
         """
         ext = os.path.splitext(event.src_path)[1].upper()
         if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
-            config = CONFIG["transfer"]
             fn = os.path.splitext(event.src_path)[0]
             if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
                 if not should_prune(event.src_path):
@@ -187,7 +186,7 @@ class WatcherSenderHandler(FileSystemEventHandler):
                         if current_size==last_size:
                             break
                     if current_size >0:    
-                        transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
+                        transferscripts.transferToNetworkDirectory(CONFIG["watcher"]["networkdrive"], [event.src_path])
                         global MANIFEST
                         MANIFEST.addFile(event.src_path)
                         print(f"added to manifest: {event.src_path}")
