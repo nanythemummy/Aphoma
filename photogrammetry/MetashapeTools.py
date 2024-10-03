@@ -36,7 +36,7 @@ def load_photos_and_masks(chunk, projectdir:str, photodir:str, maskpath:str):
                 template = f"{maskpath}{os.sep}{{filename}}{ext}"
                 chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
         
-def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict, decimate = True):
+def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict, decimate = True, maskoption = 0):
     """Uses Agisoft Metashape to build and export a model using the photos in the directory specified.
     Parameters:
     ------------------
@@ -68,7 +68,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         #build sparse cloud.
         if len(current_chunk.cameras)==0:
 
-            maskpath =config["mask_path"] if "mask_path" in config.keys() else None
+            maskpath =config["mask_path"] if maskoption !=0 else None
 
             load_photos_and_masks(current_chunk,projectdir,photodir,maskpath)
             current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
@@ -112,6 +112,9 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         #remove blobs.
         ModelHelpers.cleanup_blobs(current_chunk)    
         doc.save()    
+        #close holes
+        ModelHelpers.close_holes(current_chunk)
+        doc.save()
         #decimate model
         if decimate and len(doc.chunks)<2:
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
@@ -132,15 +135,16 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             labelname = c.label.replace(" ","")
             ext = config["export_as"]
             outputtypes = []
-            if ext == "all":
-                outputtypes += ['.ply','.obj']
-            else:
-                outputtypes.append(ext)
-            for extn in outputtypes:
-                name = ModelHelpers.get_export_filename(labelname,config,extn)
-                c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
-                            texture_format = Metashape.ImageFormat.ImageFormatPNG,
-                            embed_texture=(extn=="ply") )
+            if not ext == "none":
+                if ext == "all":
+                    outputtypes += ['.ply','.obj']
+                else:
+                    outputtypes.append(ext)
+                for extn in outputtypes:
+                    name = ModelHelpers.get_export_filename(labelname,config,extn)
+                    c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
+                                texture_format = Metashape.ImageFormat.ImageFormatPNG,
+                                embed_texture=(extn=="ply") )
         stoptime = time.perf_counter()
         print(f"Completed model in {stoptime-starttime} seconds.")
     except Exception as e:
