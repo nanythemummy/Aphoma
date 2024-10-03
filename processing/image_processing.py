@@ -20,75 +20,42 @@ from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
 from processing import processingTools
+from processing import maskingAlgorithms
 
-
-def findGray(colorcarddatacv2):
-    """Given an array of pixels corresponding to a color card, find the second gray box from the center.
-    This basically just finds the center point and counts two swatches up and over. It doesn't do any sort of special color
-    detection stuff.
     
-    Parameters:
-    ---------------
-    colorcarddatacv2 - an array of pixels.
-    """
+def build_masks(imagepath,outputdir,mode,config):
+    starttime = perf_counter()
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+    if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET:
+        config["ListenerDefaultMasking"] = "SmartSelectDroplet"
+        build_masks_with_droplet(imagepath,outputdir,config)
+    elif mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
+        config["ListenderDefaultMasking"] = "FuzzySelectDroplet"
+        build_masks_with_droplet(imagepath,outputdir,config)
+    else:
+        if Path(imagepath).is_dir():
+            for f in os.listdir(imagepath):
+                build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
+        else:
+            build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
 
-    h,w,rgb = colorcarddatacv2.shape
-    midpoint = [int(w/2),int(h/2)]
-    #there are four squares per row on a color card. 
-    halfsquare = int(w/8)
-    #our gray square ought to be about a square and a half up and to the right from the centerpoint.
-    graycoords = [midpoint[0]+3*halfsquare,midpoint[1]-3*halfsquare]
-    print(f"width:{w},height:{h},square dimensions:{halfsquare*2}, gray location:{graycoords}")
-    graypoint = colorcarddatacv2[graycoords[0],graycoords[1]]
-    print(f"color {graypoint} at coords: {graycoords}")
-    return graypoint
+    stoptime = perf_counter()
+    print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
 
-
-def get_color_card_from_image(colorcardimage: str): 
-    """
-    Detects Aruco markers around a color card in a picture, and does a perspective transform on them so that they form a rectangular image.
-    The model for this code is here: https://pyimagesearch.com/2021/02/15/automatic-color-correction-with-opencv-and-python/
-    
-    Parameters:
-    -----------------
-    colorcardimage: path to an image with a color card and aruco markers in it.
-
-    returns: a numpy array of pixels (numpy.Matlike) representing the color card.
-
-    """
-    markerdict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-    arucoparams = cv2.aruco.DetectorParameters()
-    detector = cv2.aruco.ArucoDetector(markerdict,arucoparams)
-    corners, ids, rejected = detector.detectMarkers(colorcardimage)
-    ids = ids.flatten()
-    print("found markers {ids}")
-    try:
-        #basically get the index in the ids array of each marker id. 
-        #The corner coordinates of the marker will have the same index in the 
-        #multidimensional "corners" array. Get the outermost coordinate for each item in the array 
-        # we will use these to straighten the color card. The order of the ids is arbitrary based on how I made the card.
-        idindex = np.squeeze(np.where(ids==2))
-        topleft = np.squeeze(corners[idindex])[0]
-        print("Got topleft")
-        idindex = np.squeeze(np.where(ids==3))
-        topright = np.squeeze(corners[idindex])[1]
-        print("Got topright")
-        idindex = np.squeeze(np.where(ids==0))
-        bottomright = np.squeeze(corners[idindex])[2]
-        print("Got bottomright")
-        idindex = np.squeeze(np.where(ids==1))
-        bottomleft = np.squeeze(corners[idindex])[3]
-        print("Got bottomleft")
-        card = processingTools.perspective_transform(colorcardimage,np.array([topleft,topright,bottomright,bottomleft]))
-        return card
-    except Exception as e:
-        print(e)
-        print(f"Could not find four markers in the color card iamge. Markers found were: {ids}. Aborting.")
-        return None
-    
-def build_masks(imagefolder,outputpath,mode,config):
-    if mode == util.MaskingOptions.MASK_DROPLET:
-        build_masks_with_droplet(imagefolder,outputpath,config)
+def build_masks_with_cv2(imagepath,outputdir,mode,config):
+    if not str(imagepath).upper().endswith(config["Destination_Type"].upper()):
+        print(f"{imagepath}")
+        return
+    outputname = f"{Path(imagepath).stem}{config["CV2_Export_Type"]}"
+    if mode == util.MaskingOptions.MASK_THRESHOLDING:
+        maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),config["thresholding_lower_gray_threshold"])
+    else:
+        #canny edge detection
+        maskingAlgorithms.edgeDetectionMask(imagepath,
+                                            Path(outputdir,outputname),
+                                            config["canny_lower_intensity_threshold"], 
+                                            config["canny_higher_intensity_threshold"])
 
 def build_masks_with_droplet( imagefolder, outputpath, config):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
@@ -104,9 +71,8 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
-    starttime = perf_counter()
-    dropletpath = util.get_config_for_platform(config["Masking_Droplet"])
-    dropletoutput = util.get_config_for_platform(config["Droplet_Output"])
+    dropletpath = config[config["ListenerDefaultMasking"]]
+    dropletoutput = config["Droplet_Output"]
     if not dropletpath:
         print("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
         return
@@ -126,14 +92,12 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
                 filename = f.name
                 shutil.move(oldpath,os.path.join(maskdir,filename))
     shutil.rmtree(dropletoutput)
-    stoptime = perf_counter()
-    print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
+
 
 def process_image(filepath: str, output: str, config: dict):
     """Runs non-filter corrections on a file format and then exports it as a tiff
     
-    Checks to see if a file is a canon RAW file (CR2), and converts the file to tiff. Then, opens the file and with imageio 
-    and does lens profile corrections and vignette removal. Eventually this function will also do white balance.
+    Checks to see if a file is a canon RAW file (CR2), and converts the file to tiff. 
     
     Parameters
     -------------
@@ -207,7 +171,7 @@ def convert_CR2_to_DNG(input,output,config):
     """
 
     outputcmd = f"-d \"{output}/\""
-    converterpath = util.get_config_for_platform(config["DNG_Converter"])
+    converterpath = config["DNG_Converter"]
     subprocess.run([converterpath,"-d",output,"-c", input], check = False)
 
 def get_exif_data(filename: str) -> dict:

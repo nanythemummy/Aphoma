@@ -4,6 +4,8 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+    
+
 
 
         {
@@ -13,7 +15,7 @@
             "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["photogrammetry", "Kish 156162", "E:\\automation\\Kish 156162\\processed","E:\\automation\\Kish 156162\\" ]
+            "args":["photogrammetry", "E29160", "E:\\automation\\E29160\\processed","E:\\automation\\E29160\\","--maskoption","3"]
 
         },
         {

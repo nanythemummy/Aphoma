@@ -3,29 +3,19 @@
     {
         "processing":
         {
-            "DNG_Converter":
-            {
-                "Mac":"/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter",
-                "Win":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
-                "Linux":""
-            },
-            "Masking_Droplet":
-            {
-                "Win":"E:\\ContentSelectMask.exe",
-                "Mac":"",
-                "Linux":""
-            },
-            "Droplet_Output":
-            {
-                "Win":"C:\\tempmasks",
-                "Mac":"/tempmasks",
-                "Linux":"/tempmasks"
-            },
+            "DNG_Converter":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
+            "SmartSelectDroplet":"util/MaskBySmartSelect.exe",
+            "FuzzySelectDroplet":"util/MaskByFuzzySelect.exe",
+            "thresholding_lower_gray_threshold":230,
+            "canny_lower_intensity_threshold": 0,
+            "canny_higher_intensity_threshold": 80,
+            "Droplet_Output":"C:\\tempmasks",
             "Camera":"",
             "Lens":"",
-            "Source_Type":"cr2",
-            "Destination_Type":"jpg"
-            
+            "Source_Type":".cr2",
+            "Destination_Type":".jpg",
+            "ListenerDefaultMasking":"SmartSelectDroplet",
+            "CV2_Export_Type":".png"
 
         },
         "postprocessing":
@@ -33,11 +23,6 @@
             "script_directory":"",
             "blender_exec":"",
             "scale_path":""
-        },
-        "transfer":
-        {
-            "networkdrive":"",
-            "host":""
         },
         "ortery":
         {
@@ -58,7 +43,8 @@
             "listen_directory":"",
             "project_base":"",
             "listen_and_send":"",
-            "temp_scratch":"E:\\temp"
+            "temp_scratch":"E:\\temp",
+            "networkdrive":""
         },
         "photogrammetry":
         {
@@ -66,7 +52,7 @@
             "model_quality":2,
             "mask_path": "Masks",
             "output_path":"Output",
-            "mask_ext":"png",
+            "mask_ext":".png",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,
                 "projection_accuracy":5,
@@ -76,10 +62,12 @@
                 "projection_accuracy_max_selection":0.5,
                 "reconstruction_uncertainty_max_selection":0.5
             },
+            "custom_face_count":0,
+            "low_res_poly_count":100000,
             "texture_size":4096,
             "texture_count":1,
             "export_as":"",
-            "palette":""
+            "palette":"small_axes_palette"
         }
 
     }

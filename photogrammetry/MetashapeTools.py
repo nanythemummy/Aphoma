@@ -86,11 +86,19 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             doc.save()
         #build model.
         if not current_chunk.model:
+            facecount = None
+            if "custom_face_count" in config.keys():
+                facecount = config["custom_face_count"]
+                print(f"custom facecount is {facecount}")
+            targetfacecount = facecount if facecount is not None else 200000
+            facecountconst = Metashape.FaceCount.CustomFaceCount if facecount is not None else Metashape.FaceCount.HighFaceCount
             current_chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
-            current_chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData)
+            current_chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData, 
+                                    face_count = facecountconst,
+                                    face_count_custom = targetfacecount)
             doc.save()
         #detect markers
-        if "palette" in config.keys():
+        if "palette" in config.keys() and config["palette"] != "None":
             palette = ModelHelpers.load_palettes()[config["palette"]]
             if not current_chunk.markers:
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
@@ -107,29 +115,30 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         #decimate model
         if decimate and len(doc.chunks)<2:
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
-            newchunk.label = f"{current_chunk.label} lowpoly 50K"
-            newchunk.decimateModel(replace_asset=True,face_count=50000)
+            newchunk.label = f"{current_chunk.label} lowpoly {int(config["low_res_poly_count"]/1000)}K"
+            newchunk.decimateModel(replace_asset=True,face_count=config["low_res_poly_count"])
         #build texture for each chunk.
         for c in doc.chunks:
             if not c.model.textures:
                 c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
                 c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
                 doc.save()
-                #reorient model and export.
+        #reorient model and export.
         for c in doc.chunks:
             #for now, don't save after model reorient.
-            reorient_model(c,config)
+            if "palette" in config.keys() and config["palette"] != "None":
+                reorient_model(c,config)
             print(f"Finished! Now exporting chunk {c.label}")
             labelname = c.label.replace(" ","")
             ext = config["export_as"]
             outputtypes = []
             if ext == "all":
-                outputtypes += ['ply','obj']
+                outputtypes += ['.ply','.obj']
             else:
                 outputtypes.append(ext)
-            name = ModelHelpers.get_export_filename(labelname,config)
             for extn in outputtypes:
-                c.exportModel(path=f"{os.path.join(outputpath,name)}.{extn}",
+                name = ModelHelpers.get_export_filename(labelname,config,extn)
+                c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                             texture_format = Metashape.ImageFormat.ImageFormatPNG,
                             embed_texture=(extn=="ply") )
         stoptime = time.perf_counter()
@@ -166,7 +175,7 @@ if __name__=="__main__":
         returns: dictionary of key value configurations.
         """
         cfg = {}
-        with open(os.path.abspath(args.config), encoding='utf-8') as f:
+        with open(configpath, encoding='utf-8') as f:
             cfg = json.load(f)
         return cfg["config"]
     
@@ -191,7 +200,8 @@ if __name__=="__main__":
         if os.path.exists(args.psxpath):
             doc.open(path=args.psxpath)
         reorient_model(doc.chunks[0],cfg["photogrammetry"])
-
+    
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="MetashapeTools")
     subparsers = parser.add_subparsers(help="Sub-command help")
     
