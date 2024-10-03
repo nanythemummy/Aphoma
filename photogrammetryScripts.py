@@ -555,8 +555,8 @@ if __name__=="__main__":
     watcherparser.set_defaults(func=watch_and_process)      
 
     listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
-    listensendparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    listensendparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
                             help = "How do you want to build masks:0 = no masks,\
                                     1 = Photoshop droplet(context aware select), \
