@@ -1,15 +1,12 @@
 from tkinter import *
-from tkinter import ttk
+from tkinter import ttk #themed tk
 from tkinter import filedialog
 from tkinter import messagebox
 from pathlib import Path
 import photogrammetryScripts as phscripts
+from UI.UIconsts import UIConsts
 
-MASKOPTIONS = {"No Masks":0,
-            "Context-Aware Select Droplet":1,
-            "Magic Wand Droplet":2,
-            "Otsu Thresholding":3,
-            "Binary Thresholding":4}
+
 
 def buildFrameSetup(parent):
     buildframe = ttk.Frame(parent,padding=10,borderwidth=1,relief='solid')
@@ -18,7 +15,7 @@ def buildFrameSetup(parent):
     imagepath = StringVar()
     projbase = StringVar()
     maskoption = StringVar()
-    vals = [*MASKOPTIONS.keys()]
+    vals = [*UIConsts.MASKOPTIONS.keys()]
     projnameentry = ttk.Entry(buildframe, width=25, textvariable=projname)
     projnameentry.grid(column=0,row=2,sticky=(W,E))
     projnameentry = ttk.Entry(buildframe, width=25, textvariable=projname)
@@ -52,7 +49,7 @@ def buildFrameSetup(parent):
                               inputdir = imagepath.get(),
                               outputdir = projbase.get(),
                               config = phscripts.CONFIG,
-                              mask_option = MASKOPTIONS[maskoption.get()])
+                              mask_option = UIConsts.MASKOPTIONS[maskoption.get()])
 
     ttk.Label(buildframe,text="Image Folder Path").grid(column=0,row=4)
     ttk.Label(buildframe,textvariable = imagepath,borderwidth=1, relief="solid").grid(column=0,row=5)

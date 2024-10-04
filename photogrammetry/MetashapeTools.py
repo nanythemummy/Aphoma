@@ -89,7 +89,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             facecount = None
             if "custom_face_count" in config.keys():
                 facecount = config["custom_face_count"]
-                print(f"custom facecount is {facecount}")
+                #print(f"custom facecount is {facecount}")
             targetfacecount = facecount if facecount is not None else 200000
             facecountconst = Metashape.FaceCount.CustomFaceCount if facecount is not None else Metashape.FaceCount.HighFaceCount
             current_chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)

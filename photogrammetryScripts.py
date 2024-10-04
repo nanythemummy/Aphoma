@@ -400,7 +400,7 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
             os.mkdir(outputdir)
 
         processedpath = inputdir
-        print("Converting files if needed.")                        
+        #print("Converting files if needed.")                        
         with os.scandir(inputdir) as it:
             for f in it:
                 if os.path.isfile(f):
@@ -411,14 +411,14 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
                         image_processing.process_image(f.path,tifpath,config['processing'])
                         processedpath = tifpath       
         if mask_option != util.MaskingOptions.NOMASKS:
-            print("Building Masks...")
+            #print("Building Masks...")
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
                 image_processing.build_masks(processedpath,maskpath,mask_option,config["processing"])      
         #else:
         #   config["photogrammetry"].pop("mask_path")
-        print(f"Building Model {jobname} with photos in {processedpath} and outputting in {outputdir}")
+        #print(f"Building Model {jobname} with photos in {processedpath} and outputting in {outputdir}")
         MetashapeTools.build_basic_model(photodir=processedpath,
                                          projectname=jobname,
                                          projectdir=outputdir, 
