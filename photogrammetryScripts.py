@@ -1,9 +1,5 @@
 from processing import image_processing
 from transfer import transferscripts
-import math
-import shutil
-import rawpy
-import PIL
 import msvcrt
 import os.path, json, argparse
 import time
@@ -105,13 +101,13 @@ def verifyManifest(manifest:dict, basedir):
             fullmanifest["processed"].append(processedfile)
             foundallfiles &= os.path.exists(processedfile)
             if isMasked:
-                if not os.path.exists(os.path.join(maskpath,f"{basename}.{maskext}")):
+                if not os.path.exists(os.path.join(maskpath,f"{basename}{maskext}")):
                     print(f"Warning: did not find mask for {basename_with_ext} in {maskpath}")
                     image_processing.build_masks(processedfile,
                                                  maskpath,
                                                  manifest[project]["maskmode"],
                                                  CONFIG["processing"])
-                maskfile = os.path.join(maskpath,f"{basename}.{maskext}")
+                maskfile = os.path.join(maskpath,f"{basename}{maskext}")
                 fullmanifest["masks"].append(maskfile)
                 foundallfiles &= os.path.exists(maskfile)
   
@@ -141,17 +137,21 @@ def should_prune(filename: str)->bool:
         print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
         if expected < numinround:
             invert = False
-            if (numinround-expected)/numinround <=0.5:
+            if (numinround-expected)/numinround <0.5:
                 divisor = round(numinround/(numinround-expected))
             else:
                 divisor = round(numinround/expected)
                 invert = True
             if (picinround %divisor==0) and invert is False:
                 shouldprune=True
+                print("Prune Me")
             elif (picinround % divisor != 0) and invert is True:
                 shouldprune = True
+                print("Prune me")
+            else:
+                print("Don't Prune Me.")
     except AttributeError:
-        print("Filenames were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
+        print(f"Filename {fn} were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
         shouldprune = False
     finally:
         return shouldprune
@@ -166,16 +166,28 @@ class WatcherSenderHandler(FileSystemEventHandler):
         -------------------
         event: a watchdog.event from the watchdog library.
         """
+
         ext = os.path.splitext(event.src_path)[1].upper()
         if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
-            config = CONFIG["transfer"]
             fn = os.path.splitext(event.src_path)[0]
             if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
                 if not should_prune(event.src_path):
-                    transferscripts.transferToNetworkDirectory(config["networkdrive"], [event.src_path])
-                    global MANIFEST
-                    MANIFEST.addFile(event.src_path)
-                    print(f"added to manifest: {event.src_path}")
+                    last_size = -1
+                    current_size = os.path.getsize(event.src_path)
+                    while True:
+                        time.sleep(3)
+                        last_size = current_size
+                        current_size = os.path.getsize(event.src_path)
+                        print(f"{last_size} :{current_size} for {event.src_path}")
+                
+                        if current_size==last_size:
+                            break
+                    if current_size >0:    
+                        transferscripts.transferToNetworkDirectory(CONFIG["watcher"]["networkdrive"], [event.src_path])
+                        global MANIFEST
+                        MANIFEST.addFile(event.src_path)
+                        print(f"added to manifest: {event.src_path}")
+
 
 class WatcherRecipientHandler(FileSystemEventHandler):
     """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
@@ -202,7 +214,19 @@ class WatcherRecipientHandler(FileSystemEventHandler):
             else:
                 print("Unrecognized filetype: {eventpathext}")
                 return
-            image_processing.build_masks_with_droplet(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,CONFIG["processing"])
+            defmask = CONFIG["processing"]["ListenerDefaultMasking"]
+            mode = util.MaskingOptions.NOMASKS
+            if defmask == "FuzzySelectDroplet":
+                mode = util.MaskingOptions.MASK_MAGIC_WAND_DROPLET
+            elif defmask == "SmartSelectDroplet":
+                mode = util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET
+            elif defmask == "Thresholding":
+                mode = util.MaskingOptions.MASK_THRESHOLDING
+            elif defmask == "EdgeDetection":
+                mode= util.MaskingOptions.MASK_CANNY
+            if CONFIG["processing"]["ListenerDefaultMasking"] != "None":
+                image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode, CONFIG["processing"])
+
 
     @staticmethod
     def on_any_event(event):
@@ -226,9 +250,10 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                     current_size = os.path.getsize(event.src_path)
                     print(f"{last_size} :{current_size} for {event.src_path}")
                     
-                    if current_size==last_size and current_size != 0:
+                    if current_size==last_size:
                         break
-                WatcherRecipientHandler.process_incomming_file(event.src_path)
+                if current_size != 0:
+                    WatcherRecipientHandler.process_incomming_file(event.src_path)
 
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 
@@ -275,7 +300,7 @@ class Watcher:
             self.observer.join()
         if  self.isSender and MANIFEST:
             manifestpath=MANIFEST.finalize(".")
-            transferscripts.transferToNetworkDirectory(CONFIG["transfer"]["networkdrive"],[os.path.abspath(manifestpath)])
+            transferscripts.transferToNetworkDirectory(CONFIG["watcher"]["networkdrive"],[os.path.abspath(manifestpath)])
 
 def listen_and_send(args):
     """Listens for incoming cr2 files and sends them to the network drive to be converted to tifs and then processed"
@@ -368,6 +393,7 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
     config: the full contents of config.json.
     nomasks: boolean value determining whether to build masks or not.
     """
+
     try:
         from photogrammetry import MetashapeTools
         if not os.path.exists(outputdir):
@@ -378,8 +404,8 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
         with os.scandir(inputdir) as it:
             for f in it:
                 if os.path.isfile(f):
-                    if f.name.upper().endswith(".CR2"):
-                        tifpath = os.path.join(outputdir,"tif")
+                    if f.name.upper().endswith(CONFIG["processing"]["Source_Type"]):
+                        tifpath = os.path.join(outputdir,CONFIG["processing"]["Destination_Type"][1:])
                         if not os.path.exists(tifpath):
                             os.mkdir(tifpath)
                         image_processing.process_image(f.path,tifpath,config['processing'])
@@ -390,10 +416,14 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
                 image_processing.build_masks(processedpath,maskpath,mask_option,config["processing"])      
-        else:
-            config["photogrammetry"].pop("mask_path")
+        #else:
+        #   config["photogrammetry"].pop("mask_path")
         print(f"Building Model {jobname} with photos in {processedpath} and outputting in {outputdir}")
-        MetashapeTools.build_basic_model(processedpath,jobname,outputdir, config["photogrammetry"])
+        MetashapeTools.build_basic_model(photodir=processedpath,
+                                         projectname=jobname,
+                                         projectdir=outputdir, 
+                                         config=config["photogrammetry"],
+                                           maskoption=mask_option)
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e
@@ -408,7 +438,7 @@ def build_model_cmd(args):
     job = args.jobname
     photoinput = args.photos
     outputdir = args.outputdirectory
-    maskoption = args.maskoption
+    maskoption = int(args.maskoption)
     build_model(job,photoinput,outputdir,CONFIG,maskoption)
     
 
@@ -416,7 +446,7 @@ def build_model_cmd(args):
 def transfer_to_network_folder(args):
     """This script is for transfering files from the ortery computer to the network drive. 
     
-    It copies the files to the drive specified in config.json under transfer->networkdrive. 
+    It copies the files to the drive specified in config.json under watcher->networkdrive. 
     Then, as a final step, it leaves a manifest of the files it copied as a comma seperated list entitled "Files_To_Process.txt." 
     This file will be used as a signal that the sending is complete by any machine listening for changes on the folder.
 
@@ -436,7 +466,7 @@ def transfer_to_network_folder(args):
     filestocopy = sorted(fs,key=getFileCreationTime)
     if args.p: #if the pics need to be pruned...
        filestocopy= transferscripts.pruneOrteryPics(filestocopy,CONFIG["ortery"])
-    transferto=os.path.join(CONFIG["transfer"]["networkdrive"],jobname)
+    transferto=os.path.join(CONFIG["watcher"]["networkdrive"],jobname)
     transferscripts.transferToNetworkDirectory(transferto, filestocopy,)
     manifest  = os.path.join(transferto,"Files_to_Process.txt")
     with open(manifest,"w") as f:
@@ -453,7 +483,7 @@ def build_masks(args):
     """
     input = args.inputdir
     output = args.outputdir
-    image_processing.build_masks_with_droplet(input,output,CONFIG["processing"])
+    image_processing.build_masks(input,output,int(args.maskoption),CONFIG["processing"])
 
 def convert_raw_to_format(args):
     """wrapper script for using the RAW image conversion fucntions via the command line.
@@ -515,24 +545,43 @@ if __name__=="__main__":
     photogrammetryparser.add_argument("jobname", help="The name of the project")
     photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
     photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-    photogrammetryparser.add_argument("--maskoption", type = int, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=1)
+    photogrammetryparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], help = "How do you want to build masks:0 = no masks,\
+                                    1 = Photoshop droplet(context aware select), \
+                                    2 = Photoshop droplet (magic wand), \
+                                    3 = Canny Edge detection algorithm \
+                                    4 = Grayscale Thresholding",
+                                    default=0)
 
     photogrammetryparser.set_defaults(func=build_model_cmd)
 
     watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
-    watcherparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    watcherparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     watcherparser.set_defaults(func=watch_and_process)      
 
     listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
-    listensendparser.add_argument("inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2"], help = "How do you want to build masks:0 = no masks, 1 = photoshop droplet, 2 = arbitrary line", default=0)
+    listensendparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
+    listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
+                            help = "How do you want to build masks:0 = no masks,\
+                                    1 = Photoshop droplet(context aware select), \
+                                    2 = Photoshop droplet (magic wand), \
+                                    3 = Canny Edge detection algorithm \
+                                    4 = Grayscale Thresholding",
+                            default=0)
     listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
     listensendparser.set_defaults(func=listen_and_send)    
 
     maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
     maskparser.add_argument("inputdir", help="Photos to mask")
     maskparser.add_argument("outputdir",help="location to store masks")   
+    maskparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
+                            help = "How do you want to build masks:0 = no masks,\
+                                    1 = Photoshop droplet(context aware select), \
+                                    2 = Photoshop droplet (magic wand), \
+                                    3 = Canny Edge detection algorithm \
+                                    4 = Grayscale Thresholding",
+                            default=0)
+
     maskparser.set_defaults(func=build_masks)
 
 

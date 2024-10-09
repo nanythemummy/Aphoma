@@ -26,7 +26,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="buildManifest")
     parser.add_argument("projectname", help="A string naming the project.")
     parser.add_argument("imagedir",help="Directory of images for which to build a manifest")
-    parser.add_argument("maskingmode",choices=['0','1'], help="What type of masks should the manifest tell the recipient to build? 0=None, 1=From file, generate with Photoship droplet.")
+    parser.add_argument("maskingmode",choices=['0','1','2','3','4'], help="What type of masks should the manifest tell the recipient to build? 0=None, 1=From file, generate with Photoship droplet.")
     args = parser.parse_args()
     manifest = generate_manifest(args.projectname, args.imagedir, int(args.maskingmode))
     with open(f"{path.join(args.imagedir,args.projectname)}_manifest.txt",'w', encoding='utf-8') as doc:

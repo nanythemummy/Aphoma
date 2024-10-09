@@ -181,6 +181,17 @@ def build_scalebars_from_list(chunk,scalebardefinitions):
             scalebar.reference.enabled = True
     chunk.updateTransform()
 
+def close_holes(chunk):
+  """Closes any holes in the model.
+    
+    Parameters:
+    ---------------
+    Chunk: the metashape chunk we want to act on.
+    """
+  if chunk.model:
+      threshold = 50
+      chunk.model.closeHoles(level = threshold)
+
 def cleanup_blobs(chunk):
     """Cleans up freestanding floating geometry that has less <= 60% of the faces of the total faces in the model.
     
@@ -209,7 +220,7 @@ def detect_markers(chunk, markertype:str):
     # detect markers using defaults (12-bit markers, tolerance: 50, filter_mask: False, etc.)
     chunk.detectMarkers(target_type=targetTypes[markertype], filter_mask=False) 
 
-    # bale if we have no markers
+    # bail if we have no markers
     if len(chunk.markers) ==  0:
         print("- no markers detected")
     else:
@@ -290,7 +301,7 @@ def refine_sparse_cloud(doc,chunk,config):
     optimize_cameras(chunk,True)
     doc.save()
 
-def get_export_filename(chunkname:str,config:dict):
+def get_export_filename(chunkname:str,config:dict, type:str):
     """Constructs a filename for the export encoding features of the model such as the scale unit and filetype.
 
     Parameters:
@@ -303,7 +314,8 @@ def get_export_filename(chunkname:str,config:dict):
     if config["palette"]:
         palette = load_palettes()[config["palette"]]
         scaleunit = palette["unit"]
-    exporttype = config["export_as"].upper()
+    type = type.replace('.','')
+    exporttype = type.upper()
     exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
     return exportname
 
@@ -358,13 +370,14 @@ def find_axes_from_markers(chunk,palette:str):
     markers = chunk.markers
     markers.reverse() #generally higher numbers are on the inside, so search from inside out.
     for m in markers:
-        lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
-        if lookforlabel in palette["axes"]["xpos"] or lookforlabel in palette["axes"]["xneg"]:
-            xaxis.append(m.position)
-        elif lookforlabel in palette["axes"]["zpos"] or lookforlabel in palette["axes"]["zneg"]:
-            zaxis.append(m.position)
-        if len(xaxis)>=2 and len(zaxis)>=2:
-            break
+        if not m.position==None:
+            lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
+            if lookforlabel in palette["axes"]["xpos"] or lookforlabel in palette["axes"]["xneg"]:
+                xaxis.append(m.position)
+            elif lookforlabel in palette["axes"]["zpos"] or lookforlabel in palette["axes"]["zneg"]:
+                zaxis.append(m.position)
+            if len(xaxis)>=2 and len(zaxis)>=2:
+                break
     if len(xaxis)<2 or len(zaxis) <2:
         print("Not enough data to determine x and z axes.")
         return []

@@ -1,5 +1,6 @@
 import argparse
 import pymeshlab
+from pathlib import Path
 import os
 import subprocess
 import json
@@ -69,7 +70,8 @@ if __name__=="__main__":
     snapshot.set_defaults(func=command_snapshot)
     args = parser.parse_args()
     if hasattr(args,"func"):
-        with open("../config.json",'r') as f:
+        parentpath = Path(__file__).parent.parent.absolute()
+        with open(Path(parentpath,"config.json"),'r') as f:
             config = json.load(f)["config"]
         args.func(args,config)
     else:
