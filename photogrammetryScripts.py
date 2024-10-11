@@ -1,5 +1,7 @@
 from processing import image_processing
 from transfer import transferscripts
+import logging
+import logging.config
 import msvcrt
 import os.path, json, argparse
 import time
@@ -7,6 +9,7 @@ import re
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from util import util
+
 
 #Global Variables
 #because the callback methods are static for the watchers, we need a place to store the manifest of the files they are transfering.
@@ -16,6 +19,11 @@ CONFIG = {}
 #prune is a boolean on whether the listener should prune pictures from the ortery or not. Probably ought to come up with
 # a non global var way of doing this.
 PRUNE = False
+#logger is a logger. all methods to go to the console in the ui should use this so that we can filter the normal metashape and debugging messages from things like 
+#instrumentation.
+
+LOGGER = util.getLogger(__name__)
+LOGGER.debug('HI')
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
 
@@ -399,8 +407,7 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
         if not os.path.exists(outputdir):
             os.mkdir(outputdir)
 
-        processedpath = inputdir
-        #print("Converting files if needed.")                        
+        processedpath = inputdir                   
         with os.scandir(inputdir) as it:
             for f in it:
                 if os.path.isfile(f):
@@ -411,14 +418,10 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
                         image_processing.process_image(f.path,tifpath,config['processing'])
                         processedpath = tifpath       
         if mask_option != util.MaskingOptions.NOMASKS:
-            #print("Building Masks...")
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
                 image_processing.build_masks(processedpath,maskpath,mask_option,config["processing"])      
-        #else:
-        #   config["photogrammetry"].pop("mask_path")
-        #print(f"Building Model {jobname} with photos in {processedpath} and outputting in {outputdir}")
         MetashapeTools.build_basic_model(photodir=processedpath,
                                          projectname=jobname,
                                          projectdir=outputdir, 

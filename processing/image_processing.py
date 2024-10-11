@@ -14,15 +14,19 @@ import subprocess
 import imageio
 import rawpy
 import lensfunpy
+import logging
 import numpy as np
 import cv2
+
 from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
 from processing import processingTools
 from processing import maskingAlgorithms
 
-    
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.DEBUG)
+
 def build_masks(imagepath,outputdir,mode,config):
     starttime = perf_counter()
     if not os.path.exists(outputdir):
@@ -41,11 +45,11 @@ def build_masks(imagepath,outputdir,mode,config):
             build_masks_with_cv2(Path(imagepath),outputdir,mode,config)
 
     stoptime = perf_counter()
-    print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
+    LOGGER.info("Built Mask with mode %s in %s seconds.",mode,str(stoptime-starttime))
 
 def build_masks_with_cv2(imagepath,outputdir,mode,config):
     if not str(imagepath).upper().endswith(config["Destination_Type"].upper()):
-        print(f"{imagepath}")
+        LOGGER.warning("Image %s not of expected type %s to build mask with cv2.", imagepath,config["Destination_Type"])
         return
     outputname = f"{Path(imagepath).stem}{config['CV2_Export_Type']}"
     if mode == util.MaskingOptions.MASK_THRESHOLDING:
@@ -75,16 +79,17 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     dropletpath = config[config["ListenerDefaultMasking"]]
     dropletoutput = config["Droplet_Output"]
     if not dropletpath:
-        print("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
+        LOGGER.error("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
         return
     else:
-        print(f" Using Droplet at {dropletpath}")
+        LOGGER.info(f" Using Droplet at %s to process photos in %s", dropletpath,imagefolder)
     maskdir = outputpath
     if not os.path.exists(maskdir):
         os.mkdir(maskdir)
     if not os.path.exists(dropletoutput):
         os.mkdir(dropletoutput)
     #droplet should dump files in c:\tempmask or \tempmask
+
     subprocess.run([dropletpath,imagefolder],check = False)
     with os.scandir(dropletoutput) as it: #scans through a given directory, returning an interator.
         for f in it:

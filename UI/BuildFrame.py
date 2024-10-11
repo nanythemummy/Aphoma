@@ -5,7 +5,8 @@ from tkinter import filedialog
 from tkinter import messagebox
 from pathlib import Path
 from UI.UIconsts import UIConsts
-from UI.BuildConsole import BuildConsole
+from util import util
+from UI.BuildConsole import BuildConsole, TextHanlder
 import photogrammetryScripts as phscripts
 from threading import Thread
 
@@ -74,6 +75,8 @@ class BuildFrame(ttk.Frame):
         maskoption.grid(column=0,row=9)
         ttk.Button(self,text="Build",command=lambda:self.build(svars)).grid(column=0, row=10)
         self.console = BuildConsole(self)
+        textHandler =  TextHanlder(self.console)
+        util.addLogHandler(textHandler)
         self.console.grid(columnspan=2, row = 11)
         
     
