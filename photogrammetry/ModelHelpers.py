@@ -376,7 +376,7 @@ def find_axes_from_markers(chunk,palette:str):
             lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
             if lookforlabel in palette["axes"]["xpos"] or lookforlabel in palette["axes"]["xneg"]:
                 xaxis.append(m.position)
-            elif lookforlabel in palette["axes"]["zpos"] or lookforlabel in palette["axes"]["zneg"]:
+            if lookforlabel in palette["axes"]["zpos"] or lookforlabel in palette["axes"]["zneg"]:
                 zaxis.append(m.position)
             if len(xaxis)>=2 and len(zaxis)>=2:
                 break
