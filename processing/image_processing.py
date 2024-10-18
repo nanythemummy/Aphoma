@@ -14,21 +14,18 @@ import subprocess
 import imageio
 import rawpy
 import lensfunpy
-import logging
-import numpy as np
 import cv2
 
 from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
-from processing import processingTools
 from processing import maskingAlgorithms
 
-LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
 
 def build_masks(imagepath,outputdir,mode,config):
+    logger = util.getLogger(__name__)
     starttime = perf_counter()
+    logger.info("Building masks.")
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
     if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET:
@@ -45,11 +42,12 @@ def build_masks(imagepath,outputdir,mode,config):
             build_masks_with_cv2(Path(imagepath),outputdir,mode,config)
 
     stoptime = perf_counter()
-    LOGGER.info("Built Mask with mode %s in %s seconds.",mode,str(stoptime-starttime))
+    logger.info("Built Mask with mode %s in %s seconds.",mode,str(stoptime-starttime))
 
 def build_masks_with_cv2(imagepath,outputdir,mode,config):
+    logger = util.getLogger(__name__)
     if not str(imagepath).upper().endswith(config["Destination_Type"].upper()):
-        LOGGER.warning("Image %s not of expected type %s to build mask with cv2.", imagepath,config["Destination_Type"])
+        logger.warning("Image %s not of expected type %s to build mask with cv2.", imagepath,config["Destination_Type"])
         return
     outputname = f"{Path(imagepath).stem}{config['CV2_Export_Type']}"
     if mode == util.MaskingOptions.MASK_THRESHOLDING:
@@ -76,13 +74,14 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
+    logger = util.getLogger(__name__)
     dropletpath = config[config["ListenerDefaultMasking"]]
     dropletoutput = config["Droplet_Output"]
     if not dropletpath:
-        LOGGER.error("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
+        logger.error("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
         return
     else:
-        LOGGER.info(f" Using Droplet at %s to process photos in %s", dropletpath,imagefolder)
+        logger.info(f" Using Droplet at %s to process photos in %s", dropletpath,imagefolder)
     maskdir = outputpath
     if not os.path.exists(maskdir):
         os.mkdir(maskdir)

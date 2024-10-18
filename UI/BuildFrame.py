@@ -6,18 +6,20 @@ from tkinter import messagebox
 from pathlib import Path
 from UI.UIconsts import UIConsts
 from util import util
-from UI.BuildConsole import BuildConsole, TextHanlder
+from UI.PipelineFrame import *
 import photogrammetryScripts as phscripts
-from threading import Thread
 
 
-class BuildFormItems:
+
+class BuildFormItems(FormItemsInterface):
 
     def __init__(self):
         self.proj_base = StringVar()
         self.image_path = StringVar()
         self.mask_option = StringVar()
         self.proj_name= StringVar()
+        self.pal_name = StringVar()
+      
 
     def validate(self)->dict:
         msg = ""
@@ -37,46 +39,47 @@ class BuildFormItems:
             valid = True
         return {"valid":valid,"message":msg}
     
-class BuildFrame(ttk.Frame):
-   
-    def build(self,args:BuildFormItems):
-        validate = args.validate()
-        if not validate["valid"]:
-            messagebox.showerror("Validation Error",validate["message"])
-            return
-        thread = Thread(target = lambda:self.buildThread(args))
-        self.threads.append(thread)
+class BuildFrame(PipelineFrameBase):
+    
+    def task(self,args:BuildFormItems):
+        try:
+            self.disable_enable_all(True)
+            self.config["photogrammetry"]["palette"] = args.pal_name.get()
+            phscripts.build_model(jobname = args.proj_name.get(),
+                                inputdir = args.image_path.get(),
+                                outputdir = args.proj_base.get(),
+                                config = self.config,
+                                mask_option = UIConsts.MASKOPTIONS[args.mask_option.get()])
+        except Exception as e:
+            messagebox.showerror("Build Exception",e)
+            raise e
+        finally:
+            self.disable_enable_all(False)
 
-        thread.start()
+    def __init__(self,container,config):
 
-    def buildThread(self,args:BuildFormItems):
-        phscripts.build_model(jobname = args.proj_name.get(),
-                            inputdir = args.image_path.get(),
-                            outputdir = args.proj_base.get(),
-                            config = phscripts.CONFIG,
-                            mask_option = UIConsts.MASKOPTIONS[args.mask_option.get()])
-
-    def __init__(self,container):
-        super().__init__(container)
-        svars = BuildFormItems()
-        vals = [*UIConsts.MASKOPTIONS.keys()]
-        self.threads = []
-        projnameentry = ttk.Entry(self, width=25, textvariable=svars.proj_name)
+        super().__init__(container,config)
+        self.svars = BuildFormItems()
+        maskoptionvals = [*UIConsts.MASKOPTIONS.keys()]
+        palettevals = util.getPaletteOptions()
+        projnameentry = ttk.Entry(self, width=25, textvariable=self.svars.proj_name)
         projnameentry.grid(column=0,row=2,sticky=(W,E))
         ttk.Label(self,text="Image Folder Path").grid(column=0,row=4)
-        ttk.Label(self,textvariable = svars.image_path,borderwidth=1, relief="solid").grid(column=0,row=5)
-        ttk.Button(self,text="Browse",command = lambda:svars.image_path.set(filedialog.askdirectory())).grid(column=1,row=5)
+        ttk.Label(self,textvariable = self.svars.image_path,borderwidth=1, relief="solid").grid(column=0,row=5)
+        ttk.Button(self,text="Browse",command = lambda:self.svars.image_path.set(filedialog.askdirectory())).grid(column=1,row=5)
         ttk.Label(self,text="Project Base Path").grid(column=0,row=6)
-        ttk.Label(self,textvariable = svars.proj_base,borderwidth=1, relief="solid").grid(column=0,row=7)
-        ttk.Button(self,text="Browse",command = lambda:svars.proj_base.set(filedialog.askdirectory())).grid(column=1,row=7)
+        ttk.Label(self,textvariable = self.svars.proj_base,borderwidth=1, relief="solid").grid(column=0,row=7)
+        ttk.Button(self,text="Browse",command = lambda:self.svars.proj_base.set(filedialog.askdirectory())).grid(column=1,row=7)
         ttk.Label(self,text="Masking Technique").grid(column=0,row=8)
-        maskoption = ttk.Combobox(self,textvariable=svars.mask_option, values=vals,state='readonly')
+        ttk.Label(self,text="Palette").grid(column=0,row=10)
+        maskoption = ttk.Combobox(self,textvariable=self.svars.mask_option, values=maskoptionvals,state='readonly')
         maskoption.current(0)
         maskoption.grid(column=0,row=9)
-        ttk.Button(self,text="Build",command=lambda:self.build(svars)).grid(column=0, row=10)
-        self.console = BuildConsole(self)
-        textHandler =  TextHanlder(self.console)
-        util.addLogHandler(textHandler)
-        self.console.grid(columnspan=2, row = 11)
+        paletteoption = ttk.Combobox(self,textvariable=self.svars.pal_name,values =palettevals,state='readonly')
+        paletteoption.current(0)
+        paletteoption.grid(column=0,row=11)
+        ttk.Button(self,text="Build",command=lambda:self.execute(self.svars)).grid(column=0, row=12)
+
+
         
     

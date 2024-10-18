@@ -1,9 +1,18 @@
 """Utility functions, mainly for dealing with configuration."""
-
+from pathlib import Path, PurePath
 import json
 import logging
 import shutil
 import os
+
+
+
+
+def getPaletteOptions():
+    pals = {}
+    with open(PurePath(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
+        pals = json.load(f)
+    return list(pals["palettes"].keys())
 
 def getLogger(name):
     

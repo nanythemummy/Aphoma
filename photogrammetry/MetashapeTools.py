@@ -10,8 +10,9 @@ import os
 import Metashape
 from util.util import getLogger
 import photogrammetry.ModelHelpers as ModelHelpers
+def get_logger():
+    return getLogger(__name__)
 
-LOGGER = getLogger(__name__)
 def load_photos(chunk, projectdir:str, photodir:str):
     """Tells Metashape to load the photos and masks in specified directories to the given chunk.
     Parameters:
@@ -24,19 +25,19 @@ def load_photos(chunk, projectdir:str, photodir:str):
 
 
     images = os.listdir(photodir)
-    LOGGER.info("Loading images from %s", photodir)
+    get_logger().info("Loading images from %s", photodir)
     for i in images:
         if os.path.splitext(i)[1].upper() in [".JPG", ".TIFF",".TIF"]:
             chunk.addPhotos(os.path.join(photodir,i))
 
 def load_masks(chunk,maskpath:str,projectdir:str):
     if not maskpath or not os.path.exists(os.path.join(projectdir,maskpath)):
-        LOGGER.warning("Mask path %s doesn't exist or wasn't passed corectly. Failing loading masks.",maskpath)
+        get_logger().warning("Mask path %s doesn't exist or wasn't passed corectly. Failing loading masks.",maskpath)
         return
     maskpath = os.path.join(projectdir,maskpath)
     files = os.listdir(maskpath)
     if len(files)>0:
-        LOGGER.info("Loading masks from %s", maskpath)
+        get_logger().info("Loading masks from %s", maskpath)
         ext = os.path.splitext(files[0])[1] #get the ext
         template = f"{maskpath}{os.sep}{{filename}}{ext}"
         chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
@@ -51,7 +52,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     config: the section of config.json containing the photogrammetry configurations, the value for the key "photogrammetry"
     decimate: If this is set to true, a new chunk will be made in which the model is decimated to the configured number of triangles.
     """
-    LOGGER.info('Building model %s in location %s from photos in %s', projectname, photodir,projectdir)
+    get_logger().info('Building model %s in location %s from photos in %s', projectname, photodir,projectdir)
     starttime = time.perf_counter()
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
@@ -61,7 +62,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     doc = Metashape.Document()
     try:
         if os.path.exists(projectpath):
-            LOGGER.info("Loading project %s",projectpath)
+            get_logger().info("Loading project %s",projectpath)
             doc.open(path=projectpath)
         doc.save(path=projectpath)
         #add  a new chunk
@@ -70,16 +71,16 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             current_chunk = doc.addChunk()
             current_chunk.label=projectname
             doc.save()      
-            LOGGER.info('Added chunk %s.', projectname)
+            get_logger().info('Added chunk %s.', projectname)
         else:
             current_chunk=doc.chunks[0]
-            LOGGER.info('A Chunk called %s already exists. Building it.', current_chunk.label)
+            get_logger().info('A Chunk called %s already exists. Building it.', current_chunk.label)
         #build sparse cloud.
         if len(current_chunk.cameras)==0:
             load_photos(current_chunk,projectdir,photodir)
             maskpath =config["mask_path"] if maskoption !=0 else None
             load_masks(current_chunk,maskpath,projectdir)
-            LOGGER.info("Matching photos.")
+            get_logger().info("Matching photos.")
             current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
                 generic_preselection=True,
                 reference_preselection=True,
@@ -89,7 +90,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 filter_stationary_points=True,
                 tiepoint_limit=0,
                 reset_matches=False)
-            LOGGER.info("Aligning Cameras.")
+            get_logger().info("Aligning Cameras.")
             current_chunk.alignCameras()
             doc.save()
 
@@ -103,9 +104,9 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 #print(f"custom facecount is {facecount}")
             targetfacecount = facecount if facecount is not None else 200000
             facecountconst = Metashape.FaceCount.CustomFaceCount if facecount is not None else Metashape.FaceCount.HighFaceCount
-            LOGGER.info("Building Depth Maps.")
+            get_logger().info("Building Depth Maps.")
             current_chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
-            LOGGER.info("Building Model.")
+            get_logger().info("Building Model.")
             current_chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData, 
                                     face_count = facecountconst,
                                     face_count_custom = targetfacecount)
@@ -114,35 +115,35 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         if "palette" in config.keys() and config["palette"] != "None":
             
             palette = ModelHelpers.load_palettes()[config["palette"]]
-            LOGGER.info("Finding markers as defined in %s.", config["palette"])
+            get_logger().info("Finding markers as defined in %s.", config["palette"])
             if not current_chunk.markers:
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
                 doc.save()
             if "scalebars" in palette.keys() and not current_chunk.scalebars:
-                LOGGER.info("Attempting to define scalebars.")
+                get_logger().info("Attempting to define scalebars.")
                 if palette["scalebars"]["type"] == "explicit":
                     ModelHelpers.build_scalebars_from_list(current_chunk,palette["scalebars"]["bars"])
                 elif palette["scalebars"]["type"]=="sequential":
                     ModelHelpers.build_scalebars_from_sequential_targets(current_chunk,palette["scalebars"])
                 doc.save() 
         #remove blobs.
-        LOGGER.info("Cleaning up detached geometry.")
+        get_logger().info("Cleaning up detached geometry.")
         ModelHelpers.cleanup_blobs(current_chunk)    
         doc.save()    
         #close holes
-        LOGGER.info("Closing holes.")
+        get_logger().info("Closing holes.")
         ModelHelpers.close_holes(current_chunk)
         doc.save()
         #decimate model
         if decimate and len(doc.chunks)<2:
-            LOGGER.info("Building a lower poly version of the model from a duplicate chunk.")
+            get_logger().info("Building a lower poly version of the model from a duplicate chunk.")
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
             newchunk.label = f"{current_chunk.label} lowpoly {int(config["low_res_poly_count"]/1000)}K"
             newchunk.decimateModel(replace_asset=True,face_count=config["low_res_poly_count"])
         #build texture for each chunk.
         for c in doc.chunks:
             if not c.model.textures:
-                LOGGER.info("Building UV Map and Texture for chunk %s",c.label)
+                get_logger().info("Building UV Map and Texture for chunk %s",c.label)
                 c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
                 c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
                 doc.save()
@@ -151,7 +152,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             #for now, don't save after model reorient.
             if "palette" in config.keys() and config["palette"] != "None":
                 reorient_model(c,config)
-            LOGGER.info("Finished building.") 
+            get_logger().info("Finished building.") 
             labelname = c.label.replace(" ","")
             ext = config["export_as"]
             outputtypes = []
@@ -162,14 +163,14 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                     outputtypes.append(ext)
                 for extn in outputtypes:
                     name = ModelHelpers.get_export_filename(labelname,config,extn)
-                    LOGGER.info("Now, exporting chunk %s as %s",c.label,name )
+                    get_logger().info("Now, exporting chunk %s as %s",c.label,name )
                     c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                                 texture_format = Metashape.ImageFormat.ImageFormatPNG,
                                 embed_texture=(extn=="ply") )
         stoptime = time.perf_counter()
-        LOGGER.info("Completed model and export in %s seconds.",stoptime-starttime)
+        get_logger().info("Completed model and export in %s seconds.",stoptime-starttime)
     except Exception as e:
-        LOGGER.error(e)
+        get_logger().error(e)
         print(e)
         print(traceback.format_exc())
         raise e
@@ -185,11 +186,11 @@ def reorient_model(chunk,config):
     """
     axes = ModelHelpers.find_axes_from_markers(chunk,config["palette"])
     if len(axes)==0:
-        LOGGER.warning("No axes on which to orient chunk %s",chunk.label)
+        get_logger().warning("No axes on which to orient chunk %s",chunk.label)
         return
     else:
         
-        LOGGER.info("Reorienting chunk %s according to markers on palette.",chunk.label)
+        get_logger().info("Reorienting chunk %s according to markers on palette.",chunk.label)
         ModelHelpers.align_markers_to_axes(chunk,axes)
         ModelHelpers.move_model_to_world_origin(chunk)
 
