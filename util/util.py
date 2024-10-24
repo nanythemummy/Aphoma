@@ -1,15 +1,55 @@
 """Utility functions, mainly for dealing with configuration."""
-from sys import platform
+from pathlib import Path, PurePath
 import json
+import logging
 import shutil
 import os
+
+
+
+
+def getPaletteOptions():
+    pals = {}
+    with open(PurePath(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
+        pals = json.load(f)
+    return list(pals["palettes"].keys())
+
+def getLogger(name):
+    
+    if name == "__main__":
+        logger = logging.getLogger()
+        logging.config.fileConfig('logging.conf')
+    else:
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.DEBUG)
+    return logger
+def addLogHandler(handler):
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(formatter)
+    logger  = logging.getLogger()
+    logger.addHandler(handler)
 class MaskingOptions:
     """Class containing constants for masking options."""
+
     NOMASKS = 0
     MASK_CONTEXT_AWARE_DROPLET = 1
     MASK_MAGIC_WAND_DROPLET =2
     MASK_CANNY = 3
     MASK_THRESHOLDING = 4
+    FRIENDLY = ["None", "SmartSelectDroplet","FuzzySelectDroplet","Thresholding","EdgeDetection"]
+    @staticmethod
+    def numToFriendlyString(num:int):
+        return MaskingOptions.FRIENDLY[num]
+    @staticmethod 
+    def friendlyToNum(friendly:str):
+
+        for i,fr in enumerate(MaskingOptions.FRIENDLY):
+            if fr is friendly:
+                return i
+        return 0
+
+        
 
 def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     """Moves file from source to destination
