@@ -5,6 +5,7 @@ import msvcrt
 import os.path, json, argparse
 import time
 import re
+import pathlib
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from util import util
@@ -88,7 +89,7 @@ def verifyManifest(config:dict, manifest:dict, basedir):
                 foundallfiles &= os.path.exists(maskfile)
   
     return foundallfiles,fullmanifest
-def should_prune(filename: str)->bool:
+def should_prune(filename: str,config:dict)->bool:
     """Takes a file name and figures out based on the number in it whether the picture should be sent or not and added to the manifest or not. It assumes files are named ending in a number and that
     this is sequential based on when the camera took the picture.
     Parameters
@@ -100,8 +101,8 @@ def should_prune(filename: str)->bool:
     if not PRUNE:
         return 
     shouldprune = False
-    numinround = _CONFIG["ortery"]["pics_per_revolution"]
-    numcams = len(_CONFIG["ortery"]["pics_per_cam"].keys())
+    numinround = config["pics_per_revolution"]
+    numcams = len(config["pics_per_cam"].keys())
     basename_with_ext = os.path.split(filename)[1]
     fn = os.path.splitext(basename_with_ext)[0]
     try:
@@ -109,7 +110,7 @@ def should_prune(filename: str)->bool:
         filenum = int(t.group(1)) #ortery counts from zero.
         camnum = int(filenum/numinround)+1
         picinround = filenum%(numinround)+1
-        expected = _CONFIG["ortery"]["pics_per_cam"][str(camnum)]
+        expected = config["pics_per_cam"][str(camnum)]
         print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
         if expected < numinround:
             invert = False
@@ -148,7 +149,7 @@ class WatcherSenderHandler(FileSystemEventHandler):
         if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
             fn = os.path.splitext(event.src_path)[0]
             if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
-                if not should_prune(event.src_path):
+                if not should_prune(event.src_path,WatcherSenderHandler._CONFIGLOCAL["ortery"]):
                     last_size = -1
                     current_size = os.path.getsize(event.src_path)
                     while True:
@@ -156,14 +157,14 @@ class WatcherSenderHandler(FileSystemEventHandler):
                         last_size = current_size
                         current_size = os.path.getsize(event.src_path)
                         get_logger().debug("%s :%s for %s",last_size,current_size,event.src_path)
-                
                         if current_size==last_size:
                             break
                     if current_size >0:    
-                        transferscripts.transferToNetworkDirectory(_CONFIG["watcher"]["networkdrive"], [event.src_path])
+                        transferscripts.transferToNetworkDirectory(WatcherSenderHandler._CONFIGLOCAL["watcher"]["networkdrive"], [event.src_path])
+                        fn = pathlib.Path(event.src_path).name
                         global MANIFEST
-                        MANIFEST.addFile(event.src_path)
-                        get_logger().info("Added file to manifest: %s",event.src_path)
+                        MANIFEST.addFile(fn)
+                        get_logger().info("Added file to manifest: %s",fn)
 
 
 class WatcherRecipientHandler(FileSystemEventHandler):
@@ -277,8 +278,10 @@ class Watcher:
             get_logger().info("Watcher stopping.")
             self.observer.join()
         if  self.isSender and MANIFEST:
-            manifestpath=MANIFEST.finalize(".")
-            transferscripts.transferToNetworkDirectory(self.config["watcher"]["networkdrive"],[os.path.abspath(manifestpath)])
+           
+            manifestpath=MANIFEST.finalize(".").resolve()
+            get_logger().info("Sending manifest %s",manifestpath)
+            transferscripts.transferToNetworkDirectory(self.config["watcher"]["networkdrive"],[manifestpath])
 
 def listen_and_send(args):
     """Listens for incoming cr2 files and sends them to the network drive to be converted to tifs and then processed"

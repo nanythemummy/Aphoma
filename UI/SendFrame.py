@@ -37,7 +37,7 @@ class SendFrame(PipelineFrameBase):
             else:
                 self.after(5,self.update_buttons)
 
-    def stop_watching(self):
+    def stop_sending(self):
         if not self.state=="stopped":
             self.state = "stopped"
             if self.watcher:
@@ -48,8 +48,9 @@ class SendFrame(PipelineFrameBase):
         try:
             self.disable_enable_all(True)
             self.state = "running"
-            phscripts.PRUNE = args.prune.get()
-            self.watcher = phscripts.Watcher(self.config,args.input_dir.get(), True, args.projname) 
+            self.config["ortery"]["networkdrive"] = args.target_dir.get()
+            phscripts.PRUNE = args.should_prune.get()
+            self.watcher = phscripts.Watcher(self.config,args.input_dir.get(), True, args.projectname.get()) 
             self.watcher.maskmode = 0
             self.stopbutton.configure(state="normal")
             self.watcher.run()
@@ -86,7 +87,7 @@ class SendFrame(PipelineFrameBase):
 
         self.watchbutton = ttk.Button(self,text="Watch",command=lambda:self.execute(self.svars))
         self.watchbutton.grid(column=0, row=7)
-        self.stopbutton = ttk.Button(self,text="Stop",state = "disabled",command=self.stop_watching())
+        self.stopbutton = ttk.Button(self,text="Stop",state = "disabled",command=lambda:self.stop_sending())
         self.stopbutton.grid(column=1,row=7)
         self.state  = "stopped"
     

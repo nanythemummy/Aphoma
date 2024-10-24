@@ -41,7 +41,7 @@ class Manifest:
         filenametowrite = PurePath(outputdir,f"{self.projectname}_manifest.txt")
         with open(filenametowrite,'w',encoding='utf-8') as f:
             json.dump(outputjson,f)
-        return filenametowrite
+        return Path(filenametowrite)
     
 def generate_manifest(jobname:str,directory:str ,mode:int):
     """Generates a manifest based on a file full of folders. 
