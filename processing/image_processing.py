@@ -28,11 +28,10 @@ def build_masks(imagepath,outputdir,mode,config):
     logger.info("Building masks.")
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
-    if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET:
-        config["ListenerDefaultMasking"] = "SmartSelectDroplet"
-        build_masks_with_droplet(imagepath,outputdir,config)
-    elif mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
-        config["ListenderDefaultMasking"] = "FuzzySelectDroplet"
+    friendlystring = util.MaskingOptions.numToFriendlyString(mode)
+    config["ListenerDefaultMasking"] = friendlystring
+    if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET or \
+        mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
         build_masks_with_droplet(imagepath,outputdir,config)
     else:
         if Path(imagepath).is_dir():

@@ -31,11 +31,25 @@ def addLogHandler(handler):
     logger.addHandler(handler)
 class MaskingOptions:
     """Class containing constants for masking options."""
+
     NOMASKS = 0
     MASK_CONTEXT_AWARE_DROPLET = 1
     MASK_MAGIC_WAND_DROPLET =2
     MASK_CANNY = 3
     MASK_THRESHOLDING = 4
+    FRIENDLY = ["None", "SmartSelectDroplet","FuzzySelectDroplet","Thresholding","EdgeDetection"]
+    @staticmethod
+    def numToFriendlyString(num:int):
+        return MaskingOptions.FRIENDLY[num]
+    @staticmethod 
+    def friendlyToNum(friendly:str):
+
+        for i,fr in enumerate(MaskingOptions.FRIENDLY):
+            if fr is friendly:
+                return i
+        return 0
+
+        
 
 def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     """Moves file from source to destination

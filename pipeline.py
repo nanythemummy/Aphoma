@@ -5,6 +5,7 @@ from util import util
 import photogrammetryScripts
 from UI.BuildFrame import BuildFrame
 from UI.WatchFrame import WatchFrame
+from UI.SendFrame import SendFrame
 from UI.BuildConsole import BuildConsole, TextHanlder
 LOGGER = util.getLogger(__name__)
 
@@ -35,6 +36,11 @@ class MainApp(tk.Tk):
         self.watch.grid(column=0,row=0, sticky="NSEW")
         self.notebook.add(self.watch,text="Watch")
 
+        #setup send tab
+        self.sender = SendFrame(self.notebook,config)
+        self.sender.configure(padding=10)
+        self.sender.grid(column=0,row=0)
+        self.notebook.add(self.sender,text="Sender")
         #setup logging console
         self.console = BuildConsole(self)
         textHandler =  TextHanlder(self.console)
