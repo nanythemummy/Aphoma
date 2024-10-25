@@ -7,8 +7,11 @@ import json
 import time
 import traceback
 import os
+from pathlib import Path, PurePath
+from datetime import datetime
 import Metashape
-from util.util import getLogger
+
+from util.util import getLogger, Statistics
 import photogrammetry.ModelHelpers as ModelHelpers
 def get_logger():
     return getLogger(__name__)
@@ -53,10 +56,11 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     decimate: If this is set to true, a new chunk will be made in which the model is decimated to the configured number of triangles.
     """
     get_logger().info('Building model %s in location %s from photos in %s', projectname, photodir,projectdir)
-    starttime = time.perf_counter()
+    Statistics.getStatistics().modelstart = datetime.now()
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config["output_path"])
+    fullres_export = None
     if not os.path.exists(outputpath):
         os.mkdir(outputpath)
     doc = Metashape.Document()
@@ -167,13 +171,19 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                     c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                                 texture_format = Metashape.ImageFormat.ImageFormatPNG,
                                 embed_texture=(extn=="ply") )
-        stoptime = time.perf_counter()
-        get_logger().info("Completed model and export in %s seconds.",stoptime-starttime)
+        Statistics.getStatistics().modelend = datetime.now()
+        Statistics.getStatistics().logReport()
+
     except Exception as e:
         get_logger().error(e)
         print(e)
         print(traceback.format_exc())
         raise e
+    finally:
+        Statistics.destroyStatistics()
+        doc = Metashape.Document() #basically forcing metashape to close the old document by starting a new one. Sigh. Metashape document has no
+        #context manager and no close method and tends to leave a lock file or leave its .file folder readonly.
+
 
 def reorient_model(chunk,config):
     """Rotates the object so that the axes on the marker pallette are in line with the world xyz axes and so that the object

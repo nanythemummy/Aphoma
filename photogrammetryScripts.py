@@ -3,14 +3,17 @@ import logging
 import logging.config
 import msvcrt
 import os.path, json, argparse
+from datetime import datetime
 import time
 import re
-import pathlib
+from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from util import util
 from processing import image_processing
 from transfer import transferscripts
+from photogrammetry.ModelHelpers import get_export_filename
+from postprocessing import MeshlabHelpers
 from util.buildManifest import Manifest
 def get_logger():
     return util.getLogger(__name__)
@@ -336,11 +339,10 @@ def build_model_from_manifest(config:dict,manifestfile:str):
         manifest = json.load(f)
     projname = next(iter(manifest))
     masktype = manifest[projname]["maskmode"] = manifest[projname]["maskmode"] or util.MaskingOptions.friendlyToNum(config["processing"]["ListenerDefaultMasking"])
-    photostart = manifest[projname]["photo_start_time"]
-    photoend = manifest[projname]["photo_end_time"]
-    phototime = int(photostart)-int(photoend)
-    get_logger().info("Photography Finished in %s",phototime)
-    start = time.perf_counter()
+    util.Statistics.getStatistics().photoend = datetime.strptime(manifest[projname]["photo_end_time"],"%Y-%m-%d %H:%M:%S.%f")
+    util.Statistics.getStatistics().photostart = datetime.strptime(manifest[projname]["photo_start_time"],"%Y-%m-%d %H:%M:%S.%f")
+    if not util.Statistics.getStatistics().maskingstart:
+        util.Statistics.getStatistics().maskingstart = datetime.now()
     succeeded, filestoprocess = verifyManifest(config,manifest, parentdir)
 
     if succeeded:
@@ -358,15 +360,13 @@ def build_model_from_manifest(config:dict,manifestfile:str):
         util.copy_file_to_dest(filestoprocess["processed"],processed, True)
         source = os.path.join(project_folder,"source")
         util.copy_file_to_dest(filestoprocess["source"],source, True)
-        stop = time.perf_counter()
-        verify_time = stop-start
-        start = time.perf_counter()
-        get_logger().info("Time to build masks and convert files from manifest: %s.",verify_time)
+
         build_model(projname,processed,project_folder,config,masktype)
-
-
-
-        
+        fn  = get_export_filename(projname,config["photogrammetry"],"obj")
+        objpath = Path(project_folder,"output",f"{fn}.obj")
+        if objpath.exists():
+            MeshlabHelpers.snapshot(objpath,False,config)
+                    
 def build_model(jobname,inputdir,outputdir,config,mask_option=0):
     """Given a folder full of pictures, this function builds a 3D Model.
 
@@ -399,11 +399,13 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
                 image_processing.build_masks(processedpath,maskpath,mask_option,config["processing"])      
+        util.Statistics.getStatistics().maskingend = datetime.now()
         MetashapeTools.build_basic_model(photodir=processedpath,
                                          projectname=jobname,
                                          projectdir=outputdir, 
                                          config=config["photogrammetry"],
-                                           maskoption=mask_option)
+                                         maskoption=mask_option)
+        
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e

@@ -6,6 +6,8 @@ from tkinter import messagebox
 from pathlib import Path
 from UI.UIconsts import UIConsts
 from util import util
+from photogrammetry.ModelHelpers import get_export_filename
+from postprocessing import MeshlabHelpers
 from UI.PipelineFrame import *
 import photogrammetryScripts as phscripts
 
@@ -50,8 +52,13 @@ class BuildFrame(PipelineFrameBase):
                                 outputdir = args.proj_base.get(),
                                 config = self.config,
                                 mask_option = UIConsts.MASKOPTIONS[args.mask_option.get()])
+            fn = get_export_filename(args.proj_name.get(),self.config["photogrammetry"],"obj")
+            objpath = Path(args.proj_base.get(),"output",f"{fn}.obj")
+            if objpath.exists():
+                MeshlabHelpers.snapshot(objpath,False,self.config)
         except Exception as e:
             messagebox.showerror("Build Exception",e)
+            util.getLogger(__name__).error(e)
             raise e
         finally:
             self.disable_enable_all(False)

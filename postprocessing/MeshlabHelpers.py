@@ -18,7 +18,7 @@ def execute_blender_script(scriptname:str, args:dict,config):
     for k,v in args.items():
         params += f" --{k}=\"{v}\""
 
-    bexec = os.path.join(config["postprocessing"]["blender_exec"])
+    bexec = Path(config["postprocessing"]["blender_exec"])
     cmd = f"\"{bexec}\" --background --factory-startup --python \"{scriptname}\" {params}"
     print(cmd)
 
@@ -40,14 +40,15 @@ def bottom_to_origin(filename,outputname):
     ms.compute_matrix_from_translation(traslmethod="XYZ translation",axisx=0.0,axisy=yval/2.0, axisz=0.0)
     ms.save_current_mesh(outputname)
 
-def command_snapshot(args,config):
-    
+def snapshot(inputdir:str,flip:bool,config:dict):
     scriptdir = config["postprocessing"]["script_directory"]
     scriptname = "snapshot_with_scale.py"
-    script = os.path.join(os.path.join(scriptdir),scriptname)
-    print(f"Executing Blender Script {script}")
-    params = {"input":args.inputdir,"render":os.path.dirname(args.inputdir),"scale":config["postprocessing"]["scale_path"], "flipx":args.flip}
+    script = Path(scriptdir,scriptname)
+    params = {"input":inputdir,"render":Path(inputdir).parent,"scale":"", "flipx":flip}
     execute_blender_script(script,params,config)
+
+def command_snapshot(args,config):
+    snapshot(args.inputdir,args.flip,config)
 
 def command_bto(args,config):
 

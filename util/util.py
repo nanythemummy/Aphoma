@@ -4,7 +4,7 @@ import json
 import logging
 import shutil
 import os
-
+from datetime import datetime
 
 
 
@@ -93,3 +93,42 @@ def get_camera_lens_profile(cameraprofile,lensprofile):
         setupinfo["lens"] = profiles["lenses"][lensprofile]
     return setupinfo
 
+class Statistics():
+
+    _STATISTICS = None
+
+    def __init__(self):
+        self.photostart = \
+        self.photoend  = \
+        self.maskingstart  = \
+        self.maskingend= \
+        self.modelstart = \
+        self.modelend = None
+    
+    def logReport(self):
+        logger = getLogger(__name__)
+        if self.photoend and self.photostart:
+            phototime = self.photoend-self.photostart
+            logger.info("Time to take photos: %s",phototime)
+
+        if self.maskingstart and self.maskingend:
+            maskingtime = 0
+            if self.maskingend>self.photoend:
+                if self.maskingstart<self.photoend:
+                    maskingtime = self.maskingend-self.photoend #if masking time and photo time overlaps.
+                else:
+                    maskingtime = self.maskingend-self.maskingstart
+            logger.info("Time to mask not overlapping with photography: %s", maskingtime)
+        if self.modelend and self.modelstart:
+            modeltime = self.modelend-self.modelstart
+            logger.info("Time to build model: %s",modeltime)
+
+    @staticmethod
+    def getStatistics():
+        if not Statistics._STATISTICS:
+            Statistics._STATISTICS = Statistics()
+        return Statistics._STATISTICS
+    
+    @staticmethod
+    def destroyStatistics():
+        Statistics._STATISTICS = None

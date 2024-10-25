@@ -1,6 +1,6 @@
 
 import json
-import time
+from datetime import datetime
 import argparse
 from os import listdir
 from pathlib import *
@@ -14,7 +14,7 @@ class Manifest:
         self.sentfiles = []
         self.projectname = projectname
         self.maskmode = maskmode
-        self.starttime = time.perf_counter()
+        self.starttime = datetime.now()
         self.endtime = None
     def addFile(self, filepath):
         """Adds a file to the manifest.
@@ -32,12 +32,14 @@ class Manifest:
         outputdir: the place to write the manifest file.
         returns: the path+filename that it wrote.
         """
-        self.endtime = time.perf_counter()
+        self.endtime = datetime.now()
         outputjson = {self.projectname:
                       {    "maskmode":self.maskmode,
                           "files":self.sentfiles,
-                          "photo_start_time":self.starttime,
-                          "photo_end_time":self.endtime}}
+                          "photo_start_time":datetime.strftime(self.starttime,"%Y-%m-%d %H:%M:%S.%f"),
+                          "photo_end_time":datetime.strftime(self.endtime,"%Y-%m-%d %H:%M:%S.%f")
+                      }
+        }
         filenametowrite = PurePath(outputdir,f"{self.projectname}_manifest.txt")
         with open(filenametowrite,'w',encoding='utf-8') as f:
             json.dump(outputjson,f)

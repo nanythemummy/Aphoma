@@ -9,7 +9,6 @@ Author: Kea Johnston, June 2024
 import os
 from pathlib import Path
 import shutil
-from time import perf_counter
 import subprocess
 import imageio
 import rawpy
@@ -24,7 +23,6 @@ from processing import maskingAlgorithms
 
 def build_masks(imagepath,outputdir,mode,config):
     logger = util.getLogger(__name__)
-    starttime = perf_counter()
     logger.info("Building masks.")
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
@@ -39,9 +37,6 @@ def build_masks(imagepath,outputdir,mode,config):
                 build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
         else:
             build_masks_with_cv2(Path(imagepath),outputdir,mode,config)
-
-    stoptime = perf_counter()
-    logger.info("Built Mask with mode %s in %s seconds.",mode,str(stoptime-starttime))
 
 def build_masks_with_cv2(imagepath,outputdir,mode,config):
     logger = util.getLogger(__name__)
@@ -222,15 +217,13 @@ def convert_CR2_to_TIF(input: str ,output: str, config: dict) -> str:
 
     returns: the full path and filename of the new tif file.
     """
-    starttime = perf_counter()
+
     fn = Path(input).stem
     outputname = os.path.join(output,fn+".tif")
     
     with rawpy.imread(input) as raw:
         rgb = raw.postprocess(use_camera_wb=True)
         imageio.imsave(outputname,rgb)
-    stoptime = perf_counter()
-    print(f"Converted CR2 to TIF in {stoptime-starttime} seconds")
     return outputname
 
 def convertToJPG(input: str, output: str) -> str:
