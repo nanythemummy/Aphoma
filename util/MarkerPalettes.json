@@ -41,6 +41,31 @@
                 "zpos":[74,73,72,71,70],
                 "zneg":[54,53,52,51,50]
             }
+        },
+        "protractor":{
+            "type":"12bit",
+            "unit":"mm",
+            "scalebars":{
+                "type":"explicit",
+                "bars":[
+                {
+                "points":[1,2],
+                "distance":60,
+                "units":"mm"
+                },
+                {
+                "points":[1,3],
+                "distance":60.3,
+                "units":"mm"
+                }
+            ]
+            },
+            "axes":{
+                "xpos":[2,3],
+                "xneg":[],
+                "zpos":[3,1],
+                "zneg":[]
+            }
         }
     }
 }

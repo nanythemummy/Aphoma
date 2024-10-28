@@ -9,29 +9,27 @@ Author: Kea Johnston, June 2024
 import os
 from pathlib import Path
 import shutil
-from time import perf_counter
 import subprocess
 import imageio
 import rawpy
 import lensfunpy
-import numpy as np
 import cv2
+
 from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
-from processing import processingTools
 from processing import maskingAlgorithms
 
-    
+
 def build_masks(imagepath,outputdir,mode,config):
-    starttime = perf_counter()
+    logger = util.getLogger(__name__)
+    logger.info("Building masks.")
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
-    if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET:
-        config["ListenerDefaultMasking"] = "SmartSelectDroplet"
-        build_masks_with_droplet(imagepath,outputdir,config)
-    elif mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
-        config["ListenderDefaultMasking"] = "FuzzySelectDroplet"
+    friendlystring = util.MaskingOptions.numToFriendlyString(mode)
+    config["ListenerDefaultMasking"] = friendlystring
+    if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET or \
+        mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
         build_masks_with_droplet(imagepath,outputdir,config)
     else:
         if Path(imagepath).is_dir():
@@ -40,12 +38,10 @@ def build_masks(imagepath,outputdir,mode,config):
         else:
             build_masks_with_cv2(Path(imagepath),outputdir,mode,config)
 
-    stoptime = perf_counter()
-    print(f"Build Mask using a droplet in {stoptime-starttime} seconds.")
-
 def build_masks_with_cv2(imagepath,outputdir,mode,config):
+    logger = util.getLogger(__name__)
     if not str(imagepath).upper().endswith(config["Destination_Type"].upper()):
-        print(f"{imagepath}")
+        logger.warning("Image %s not of expected type %s to build mask with cv2.", imagepath,config["Destination_Type"])
         return
     outputname = f"{Path(imagepath).stem}{config['CV2_Export_Type']}"
     if mode == util.MaskingOptions.MASK_THRESHOLDING:
@@ -72,19 +68,21 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
+    logger = util.getLogger(__name__)
     dropletpath = config[config["ListenerDefaultMasking"]]
     dropletoutput = config["Droplet_Output"]
     if not dropletpath:
-        print("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
+        logger.error("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
         return
     else:
-        print(f" Using Droplet at {dropletpath}")
+        logger.info(f" Using Droplet at %s to process photos in %s", dropletpath,imagefolder)
     maskdir = outputpath
     if not os.path.exists(maskdir):
         os.mkdir(maskdir)
     if not os.path.exists(dropletoutput):
         os.mkdir(dropletoutput)
     #droplet should dump files in c:\tempmask or \tempmask
+
     subprocess.run([dropletpath,imagefolder],check = False)
     with os.scandir(dropletoutput) as it: #scans through a given directory, returning an interator.
         for f in it:
@@ -219,15 +217,13 @@ def convert_CR2_to_TIF(input: str ,output: str, config: dict) -> str:
 
     returns: the full path and filename of the new tif file.
     """
-    starttime = perf_counter()
+
     fn = Path(input).stem
     outputname = os.path.join(output,fn+".tif")
     
     with rawpy.imread(input) as raw:
         rgb = raw.postprocess(use_camera_wb=True)
         imageio.imsave(outputname,rgb)
-    stoptime = perf_counter()
-    print(f"Converted CR2 to TIF in {stoptime-starttime} seconds")
     return outputname
 
 def convertToJPG(input: str, output: str) -> str:

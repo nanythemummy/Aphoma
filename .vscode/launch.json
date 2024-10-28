@@ -10,6 +10,7 @@
 
 
 
+
         {
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
@@ -39,6 +40,17 @@
             "console": "integratedTerminal",
 
             "args":["watch", "--inputdir","e:\\photogrammetry"]
+
+
+        },        
+        {
+            "name": "GUI",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "pipeline.py",
+            "console": "integratedTerminal",
+
+            "args":[""]
 
 
         },

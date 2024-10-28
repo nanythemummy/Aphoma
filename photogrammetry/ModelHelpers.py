@@ -5,7 +5,9 @@ import json
 import math
 from os import path
 import Metashape
+from util import util
 
+LOGGER = util.getLogger(__name__)
 targetTypes = {
     "Circular":Metashape.TargetType.CircularTarget,
     "12bit":Metashape.TargetType.CircularTarget12bit,
@@ -189,7 +191,7 @@ def close_holes(chunk):
     Chunk: the metashape chunk we want to act on.
     """
   if chunk.model:
-      threshold = 50
+      threshold = 100
       chunk.model.closeHoles(level = threshold)
 
 def cleanup_blobs(chunk):
@@ -266,7 +268,7 @@ def refine_sparse_cloud(doc,chunk,config):
     config: the config.json subdictionary under the key "photogrammetry"
 
     """
-    
+    LOGGER.info("Refining sparse cloud on chunk %s", chunk)
     #copied from the script RefineSparseCloud.py     
     optimize_cameras(chunk,False)
     doc.save()
@@ -374,7 +376,7 @@ def find_axes_from_markers(chunk,palette:str):
             lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
             if lookforlabel in palette["axes"]["xpos"] or lookforlabel in palette["axes"]["xneg"]:
                 xaxis.append(m.position)
-            elif lookforlabel in palette["axes"]["zpos"] or lookforlabel in palette["axes"]["zneg"]:
+            if lookforlabel in palette["axes"]["zpos"] or lookforlabel in palette["axes"]["zneg"]:
                 zaxis.append(m.position)
             if len(xaxis)>=2 and len(zaxis)>=2:
                 break
