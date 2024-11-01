@@ -348,7 +348,7 @@ def build_model_from_manifest(config:dict,manifestfile:str):
     sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_TAKE_PHOTO,
                                                         manifest[projname]["photo_start_time"])
     statistics.getStatistics().timeEventEnd(sid,
-                                             manifest[projname]["photo_start_time"])
+                                             manifest[projname]["photo_end_time"])
     succeeded, filestoprocess = verifyManifest(config,manifest, parentdir)
 
     if succeeded:

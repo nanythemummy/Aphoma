@@ -91,7 +91,7 @@ class InstrumentationStatistics():
                 evt.end(endtime)
         else:
             evt.end()
-        if str(evt.type) not in self.completed.keys(): #using the string for the key for readability
+        if evt.type.name not in self.completed.keys(): #using the string for the key for readability
             self.completed[evt.type.name] = []
         self.completed[evt.type.name].append(evt)
 
