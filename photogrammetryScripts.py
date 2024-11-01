@@ -109,8 +109,8 @@ class WatcherSenderHandler(FileSystemEventHandler):
         ext = os.path.splitext(event.src_path)[1].upper()
         if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
             fn = os.path.splitext(event.src_path)[0]
-            if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
-                if not should_prune(event.src_path,WatcherSenderHandler._CONFIGLOCAL["ortery"]):
+            if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.               
+                if not PRUNE or not should_prune(event.src_path,WatcherSenderHandler._CONFIGLOCAL["ortery"]):
                     last_size = -1
                     current_size = os.path.getsize(event.src_path)
                     while True:

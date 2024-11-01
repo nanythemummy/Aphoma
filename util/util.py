@@ -145,8 +145,7 @@ def should_prune(filename: str,config:dict)->bool:
 
     returns: True or false based on whether the file ought to be omitted.
     """
-    if not PRUNE:
-        return
+
     shouldprune = False
     numinround = config["pics_per_revolution"]
     numcams = len(config["pics_per_cam"].keys())
