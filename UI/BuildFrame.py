@@ -5,12 +5,9 @@ from tkinter import filedialog
 from tkinter import messagebox
 from pathlib import Path
 from UI.UIconsts import UIConsts
-from util import util
-from util.InstrumentationStatistics import InstrumentationStatistics
-from util.util import get_export_filename
-from postprocessing import MeshlabHelpers
 from UI.PipelineFrame import *
 import photogrammetryScripts as phscripts
+from util import util
 
 
 class BuildFormItems(FormItemsInterface):

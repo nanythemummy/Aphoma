@@ -5,24 +5,25 @@ from functools import reduce
 from uuid import uuid4
 
 class Statistic_Event_Types(Enum):
-    EVENT_CONVERT_PHOTO = 0
-    EVENT_BUILD_MASK = 1
-    EVENT_BUILD_MODEL = 2
-    EVENT_SNAPSHOT = 3
-    EVENT_TAKE_PHOTO = 4
+    EVENT_TAKE_PHOTO = 0
+    EVENT_CONVERT_PHOTO = 1
+    EVENT_BUILD_MASK = 2
+    EVENT_BUILD_MODEL = 3
+    EVENT_SNAPSHOT = 4
+
 
     @classmethod
     def getPrettyString(cls, value:int):
-        pretty_event_strings = ["Conversion of photos",
+        pretty_event_strings = ["Photography",
+                                "Conversion of photos",
                                 "Building Masks",
                                 "Building Models",
-                                "Model Snapshot",
-                                "Photography"]
+                                "Model Snapshot"]
         return pretty_event_strings[value]
     
     @classmethod
     def getIteratable(cls):
-        return[cls.EVENT_CONVERT_PHOTO,cls.EVENT_BUILD_MASK,cls.EVENT_BUILD_MODEL,cls.EVENT_SNAPSHOT,cls.EVENT_TAKE_PHOTO]
+        return[cls.EVENT_TAKE_PHOTO,cls.EVENT_CONVERT_PHOTO,cls.EVENT_BUILD_MASK,cls.EVENT_BUILD_MODEL,cls.EVENT_SNAPSHOT]
 
 
 
@@ -60,6 +61,7 @@ class InstrumentationStatistics():
     def logReport(self):
         logger = util.getLogger(__name__)
         accumulatedtime = timedelta(0)
+        phototime = timedelta(0)
         for s in Statistic_Event_Types.getIteratable():
             if s.name in self.completed.keys():
                 arrayofevents = self.completed[s.name]
@@ -67,7 +69,17 @@ class InstrumentationStatistics():
                 for e in arrayofevents:
                     totaltime += e.getDuration()
                 ave = totaltime/len(arrayofevents)
-                accumulatedtime += totaltime
+                #if we are building with the ortery, most of the masking and  conversion time overlaps with the  
+                #photo taking time, so don't count it in the total.
+                if s.name is Statistic_Event_Types.EVENT_TAKE_PHOTO.name:
+                    phototime = totaltime
+                    accumulatedtime+=phototime
+                elif s.name is Statistic_Event_Types.EVENT_BUILD_MASK.name or s.name is Statistic_Event_Types.EVENT_CONVERT_PHOTO.name:
+                    phototime-=totaltime
+                    if phototime < timedelta(0):
+                        accumulatedtime -= phototime
+                else:
+                    accumulatedtime+=totaltime
                 logger.info("Time for %s: %s, on average, %s.",Statistic_Event_Types.getPrettyString(s.value),
                             totaltime,ave)
         logger.info("Total build time: %s",accumulatedtime)
