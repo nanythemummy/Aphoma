@@ -4,6 +4,7 @@ import json
 import logging
 import shutil
 import os
+from enum import Enum
 from datetime import datetime
 
 
@@ -23,30 +24,36 @@ def getLogger(name):
         logger = logging.getLogger(name)
         logger.setLevel(logging.DEBUG)
     return logger
+
 def addLogHandler(handler):
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(formatter)
     logger  = logging.getLogger()
     logger.addHandler(handler)
-class MaskingOptions:
-    """Class containing constants for masking options."""
 
+class MaskingOptions(Enum):
+    """Class containing constants for masking options."""
     NOMASKS = 0
     MASK_CONTEXT_AWARE_DROPLET = 1
     MASK_MAGIC_WAND_DROPLET =2
     MASK_CANNY = 3
     MASK_THRESHOLDING = 4
-    FRIENDLY = ["None", "SmartSelectDroplet","FuzzySelectDroplet","Thresholding","EdgeDetection"]
-    @staticmethod
-    def numToFriendlyString(num:int):
-        return MaskingOptions.FRIENDLY[num]
-    @staticmethod 
-    def friendlyToNum(friendly:str):
-
-        for i,fr in enumerate(MaskingOptions.FRIENDLY):
+     
+    @classmethod 
+    def getFriendlyStrings(cls):
+        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","Thresholding","EdgeDetection"]
+    @classmethod
+    def numToFriendlyString(cls, num): 
+        if isinstance(num, MaskingOptions):
+            num = num.value
+        return MaskingOptions.getFriendlyStrings()[num]
+    @classmethod 
+    def friendlyToEnum(cls, friendly:str):
+        friendly = MaskingOptions.getFriendlyStrings()
+        for i,fr in enumerate(friendly):
             if fr is friendly:
-                return i
+                return MaskingOptions(i)
         return 0
 
         
@@ -94,4 +101,49 @@ def get_camera_lens_profile(cameraprofile,lensprofile):
     if lensprofile in profiles["lenses"].keys():
         setupinfo["lens"] = profiles["lenses"][lensprofile]
     return setupinfo
+
+
+def should_prune(filename: str,config:dict)->bool:
+    """Takes a file name and figures out based on the number in it whether the picture should be sent or not and added to the manifest or not. It assumes files are named ending in a number and that
+    this is sequential based on when the camera took the picture.
+    Parameters
+    -----------------
+    filename: The filename in question.
+
+    returns: True or false based on whether the file ought to be omitted.
+    """
+    if not PRUNE:
+        return
+    shouldprune = False
+    numinround = config["pics_per_revolution"]
+    numcams = len(config["pics_per_cam"].keys())
+    basename_with_ext = os.path.split(filename)[1]
+    fn = os.path.splitext(basename_with_ext)[0]
+    try:
+        t = re.match(r"[a-zA-Z]*_*(\d+)$",fn)
+        filenum = int(t.group(1)) #ortery counts from zero.
+        camnum = int(filenum/numinround)+1
+        picinround = filenum%(numinround)+1
+        expected = config["pics_per_cam"][str(camnum)]
+        print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
+        if expected < numinround:
+            invert = False
+            if (numinround-expected)/numinround <0.5:
+                divisor = round(numinround/(numinround-expected))
+            else:
+                divisor = round(numinround/expected)
+                invert = True
+            if (picinround %divisor==0) and invert is False:
+                shouldprune=True
+                print("Prune Me")
+            elif (picinround % divisor != 0) and invert is True:
+                shouldprune = True
+                print("Prune me")
+            else:
+                print("Don't Prune Me.")
+    except AttributeError:
+        print(f"Filename {fn} were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
+        shouldprune = False
+    finally:
+        return shouldprune
 

@@ -5,7 +5,6 @@ import msvcrt
 import os.path, json, argparse
 from datetime import datetime
 import time
-import re
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -17,6 +16,7 @@ from transfer import transferscripts
 from photogrammetry.ModelHelpers import get_export_filename
 from postprocessing import MeshlabHelpers
 from util.buildManifest import Manifest
+from util.util import should_prune
 def get_logger():
     return util.getLogger(__name__)
 #Global Variables
@@ -93,50 +93,7 @@ def verifyManifest(config:dict, manifest:dict, basedir):
                 fullmanifest["masks"].append(maskfile)
                 foundallfiles &= os.path.exists(maskfile)
     return foundallfiles,fullmanifest
-def should_prune(filename: str,config:dict)->bool:
-    """Takes a file name and figures out based on the number in it whether the picture should be sent or not and added to the manifest or not. It assumes files are named ending in a number and that
-    this is sequential based on when the camera took the picture.
-    Parameters
-    -----------------
-    filename: The filename in question.
-    
-    returns: True or false based on whether the file ought to be omitted.
-    """
-    if not PRUNE:
-        return 
-    shouldprune = False
-    numinround = config["pics_per_revolution"]
-    numcams = len(config["pics_per_cam"].keys())
-    basename_with_ext = os.path.split(filename)[1]
-    fn = os.path.splitext(basename_with_ext)[0]
-    try:
-        t = re.match(r"[a-zA-Z]*_*(\d+)$",fn)
-        filenum = int(t.group(1)) #ortery counts from zero.
-        camnum = int(filenum/numinround)+1
-        picinround = filenum%(numinround)+1
-        expected = config["pics_per_cam"][str(camnum)]
-        print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
-        if expected < numinround:
-            invert = False
-            if (numinround-expected)/numinround <0.5:
-                divisor = round(numinround/(numinround-expected))
-            else:
-                divisor = round(numinround/expected)
-                invert = True
-            if (picinround %divisor==0) and invert is False:
-                shouldprune=True
-                print("Prune Me")
-            elif (picinround % divisor != 0) and invert is True:
-                shouldprune = True
-                print("Prune me")
-            else:
-                print("Don't Prune Me.")
-    except AttributeError:
-        print(f"Filename {fn} were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
-        shouldprune = False
-    finally:
-        return shouldprune
-    
+
 class WatcherSenderHandler(FileSystemEventHandler):
     _CONFIGLOCAL = {}
     """Listen in the specified directory for cr2 files. It extends Watchdog.FilesystemEventHandler"""
@@ -198,7 +155,7 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                 print("Unrecognized filetype: {eventpathext}")
                 return
             defmask = WatcherRecipientHandler._CONFIGLOCAL["processing"]["ListenerDefaultMasking"]
-            mode = util.MaskingOptions.friendlyToNum(defmask)
+            mode = util.MaskingOptions.friendlyToEnum(defmask)
             if mode != util.MaskingOptions.NOMASKS:
                 image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode, WatcherRecipientHandler._CONFIGLOCAL["processing"])
 
@@ -344,7 +301,7 @@ def build_model_from_manifest(config:dict,manifestfile:str):
     with open(manifestfile,"r",encoding="utf-8") as f:
         manifest = json.load(f)
     projname = next(iter(manifest))
-    masktype = manifest[projname]["maskmode"] = manifest[projname]["maskmode"] or util.MaskingOptions.friendlyToNum(config["processing"]["ListenerDefaultMasking"])
+    masktype = manifest[projname]["maskmode"] = util.MaskingOptions(manifest[projname]["maskmode"]) or util.MaskingOptions.friendlyToEnum(config["processing"]["ListenerDefaultMasking"])
     sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_TAKE_PHOTO,
                                                         manifest[projname]["photo_start_time"])
     statistics.getStatistics().timeEventEnd(sid,
@@ -371,7 +328,7 @@ def build_model_from_manifest(config:dict,manifestfile:str):
         
 
                     
-def build_model(jobname,inputdir,outputdir,config,mask_option=0,snapshot=False):
+def build_model(jobname,inputdir,outputdir,config,mask_option=util.MaskingOptions.NOMASKS,snapshot=False):
     """Given a folder full of pictures, this function builds a 3D Model.
 
     Parameters:
@@ -429,7 +386,7 @@ def build_model_cmd(args):
     photoinput = args.photos
     outputdir = args.outputdirectory
     maskoption = int(args.maskoption)
-    build_model(job,photoinput,outputdir,_CONFIG,maskoption)
+    build_model(job,photoinput,outputdir,_CONFIG,util.MaskingOptions(maskoption))
     
 
 

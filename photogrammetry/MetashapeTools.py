@@ -64,7 +64,10 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config["output_path"])
-    fullres_export = None
+    palette = None
+    if "palette" in config.keys() and config["palette"] != "None":
+        palette = ModelHelpers.load_palettes()[config["palette"]]
+
     if not os.path.exists(outputpath):
         os.mkdir(outputpath)
     doc = Metashape.Document()
@@ -83,6 +86,12 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         else:
             current_chunk=doc.chunks[0]
             get_logger().info('A Chunk called %s already exists. Building it.', current_chunk.label)
+        #detect markers.
+        if palette:
+            get_logger().info("Finding markers as defined in %s.", config["palette"])
+            if not current_chunk.markers:
+                ModelHelpers.detect_markers(current_chunk,palette["type"])
+                doc.save()
         #build sparse cloud.
         if len(current_chunk.cameras)==0:
             load_photos(current_chunk,projectdir,photodir)
@@ -119,14 +128,8 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                                     face_count = facecountconst,
                                     face_count_custom = targetfacecount)
             doc.save()
-        #detect markers
-        if "palette" in config.keys() and config["palette"] != "None":
-            
-            palette = ModelHelpers.load_palettes()[config["palette"]]
-            get_logger().info("Finding markers as defined in %s.", config["palette"])
-            if not current_chunk.markers:
-                ModelHelpers.detect_markers(current_chunk,palette["type"])
-                doc.save()
+        #detect build scalebars
+        if palette:
             if "scalebars" in palette.keys() and not current_chunk.scalebars:
                 get_logger().info("Attempting to define scalebars.")
                 if palette["scalebars"]["type"] == "explicit":
