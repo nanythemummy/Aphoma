@@ -74,7 +74,7 @@ class InstrumentationStatistics():
                 if s.name is Statistic_Event_Types.EVENT_TAKE_PHOTO.name:
                     phototime = totaltime
                     accumulatedtime+=phototime
-                elif s.name is Statistic_Event_Types.EVENT_BUILD_MASK.name or s is Statistic_Event_Types.EVENT_CONVERT_PHOTO.name:
+                elif s.name is Statistic_Event_Types.EVENT_BUILD_MASK.name or s.name is Statistic_Event_Types.EVENT_CONVERT_PHOTO.name:
                     phototime-=totaltime
                     if phototime < timedelta(0):
                         accumulatedtime -= phototime
