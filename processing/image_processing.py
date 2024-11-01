@@ -19,9 +19,11 @@ from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
 from processing import maskingAlgorithms
+from util.InstrumentationStatistics import InstrumentationStatistics, Statistic_Event_Types
 
 
 def build_masks(imagepath,outputdir,mode,config):
+    sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_BUILD_MASK)
     logger = util.getLogger(__name__)
     logger.info("Building masks.")
     if not os.path.exists(outputdir):
@@ -37,7 +39,7 @@ def build_masks(imagepath,outputdir,mode,config):
                 build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
         else:
             build_masks_with_cv2(Path(imagepath),outputdir,mode,config)
-
+    sid = InstrumentationStatistics.getStatistics().timeEventEnd(sid)
 def build_masks_with_cv2(imagepath,outputdir,mode,config):
     logger = util.getLogger(__name__)
     if not str(imagepath).upper().endswith(config["Destination_Type"].upper()):
@@ -105,6 +107,7 @@ def process_image(filepath: str, output: str, config: dict):
     config : a dictionary of config values. These are found in the config.json file under "processing", which is the dict that gets passed in.
 
     """
+    sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_CONVERT_PHOTO)
     processedpath = ""
     if not os.path.exists(output):
         os.mkdir(output)    
@@ -121,6 +124,7 @@ def process_image(filepath: str, output: str, config: dict):
     else:
         util.copy_file_to_dest([filepath],output,False)
         processedpath = os.path.join(output,f"{Path(filepath).stem}.{config['Destination_Type']}")
+    InstrumentationStatistics.getStatistics().timeEventEnd(sid)
     return processedpath 
 
 

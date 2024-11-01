@@ -10,6 +10,8 @@ from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from util import util
+from util.InstrumentationStatistics import InstrumentationStatistics as statistics
+from util.InstrumentationStatistics import Statistic_Event_Types
 from processing import image_processing
 from transfer import transferscripts
 from photogrammetry.ModelHelpers import get_export_filename
@@ -90,7 +92,6 @@ def verifyManifest(config:dict, manifest:dict, basedir):
                 maskfile = os.path.join(maskpath,f"{basename}{maskext}")
                 fullmanifest["masks"].append(maskfile)
                 foundallfiles &= os.path.exists(maskfile)
-  
     return foundallfiles,fullmanifest
 def should_prune(filename: str,config:dict)->bool:
     """Takes a file name and figures out based on the number in it whether the picture should be sent or not and added to the manifest or not. It assumes files are named ending in a number and that
@@ -164,7 +165,7 @@ class WatcherSenderHandler(FileSystemEventHandler):
                             break
                     if current_size >0:    
                         transferscripts.transferToNetworkDirectory(WatcherSenderHandler._CONFIGLOCAL["watcher"]["networkdrive"], [event.src_path])
-                        fn = pathlib.Path(event.src_path).name
+                        fn = Path(event.src_path).name
                         global MANIFEST
                         MANIFEST.addFile(fn)
                         get_logger().info("Added file to manifest: %s",fn)
@@ -323,6 +324,11 @@ def watch_and_process_cmd(args):
         return
     watcher = Watcher(_CONFIG,inputdir,isSender=False)
     watcher.run()
+def build_snapshot(projname,basefolder,config):
+    fn  = get_export_filename(projname,config["photogrammetry"],"obj")
+    objpath = Path(basefolder,"output",f"{fn}.obj")
+    if objpath.exists():
+        MeshlabHelpers.snapshot(objpath,False,config)
 
 #This script contains the full automation flow and is triggered by the watcher
 def build_model_from_manifest(config:dict,manifestfile:str):
@@ -339,10 +345,10 @@ def build_model_from_manifest(config:dict,manifestfile:str):
         manifest = json.load(f)
     projname = next(iter(manifest))
     masktype = manifest[projname]["maskmode"] = manifest[projname]["maskmode"] or util.MaskingOptions.friendlyToNum(config["processing"]["ListenerDefaultMasking"])
-    util.Statistics.getStatistics().photoend = datetime.strptime(manifest[projname]["photo_end_time"],"%Y-%m-%d %H:%M:%S.%f")
-    util.Statistics.getStatistics().photostart = datetime.strptime(manifest[projname]["photo_start_time"],"%Y-%m-%d %H:%M:%S.%f")
-    if not util.Statistics.getStatistics().maskingstart:
-        util.Statistics.getStatistics().maskingstart = datetime.now()
+    sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_TAKE_PHOTO,
+                                                        manifest[projname]["photo_start_time"])
+    statistics.getStatistics().timeEventEnd(sid,
+                                             manifest[projname]["photo_start_time"])
     succeeded, filestoprocess = verifyManifest(config,manifest, parentdir)
 
     if succeeded:
@@ -361,13 +367,11 @@ def build_model_from_manifest(config:dict,manifestfile:str):
         source = os.path.join(project_folder,"source")
         util.copy_file_to_dest(filestoprocess["source"],source, True)
 
-        build_model(projname,processed,project_folder,config,masktype)
-        fn  = get_export_filename(projname,config["photogrammetry"],"obj")
-        objpath = Path(project_folder,"output",f"{fn}.obj")
-        if objpath.exists():
-            MeshlabHelpers.snapshot(objpath,False,config)
+        build_model(projname,processed,project_folder,config,masktype,True)
+        
+
                     
-def build_model(jobname,inputdir,outputdir,config,mask_option=0):
+def build_model(jobname,inputdir,outputdir,config,mask_option=0,snapshot=False):
     """Given a folder full of pictures, this function builds a 3D Model.
 
     Parameters:
@@ -384,7 +388,8 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
         if not os.path.exists(outputdir):
             os.mkdir(outputdir)
 
-        processedpath = inputdir                   
+        processedpath = inputdir 
+              
         with os.scandir(inputdir) as it:
             for f in it:
                 if os.path.isfile(f):
@@ -398,14 +403,17 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=0):
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
-                image_processing.build_masks(processedpath,maskpath,mask_option,config["processing"])      
-        util.Statistics.getStatistics().maskingend = datetime.now()
+                image_processing.build_masks(processedpath,maskpath,mask_option,config["processing"])
         MetashapeTools.build_basic_model(photodir=processedpath,
                                          projectname=jobname,
                                          projectdir=outputdir, 
                                          config=config["photogrammetry"],
                                          maskoption=mask_option)
+        if snapshot:
+            build_snapshot(jobname,outputdir,config)
         
+        statistics.getStatistics().logReport()
+        statistics.destroyStatistics()
     except ImportError as e:
         print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
         raise e

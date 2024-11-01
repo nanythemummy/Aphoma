@@ -4,6 +4,7 @@ from tkinter import messagebox, filedialog
 from pathlib import Path
 from UI.UIconsts import UIConsts
 from util.util import MaskingOptions
+from util.InstrumentationStatistics import InstrumentationStatistics
 import photogrammetryScripts as phscripts
 from UI.PipelineFrame import FormItemsInterface,PipelineFrameBase
 

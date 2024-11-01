@@ -11,8 +11,12 @@ from pathlib import Path, PurePath
 from datetime import datetime
 import Metashape
 
-from util.util import getLogger, Statistics
+from util.util import getLogger
+from util.InstrumentationStatistics import InstrumentationStatistics
+
 import photogrammetry.ModelHelpers as ModelHelpers
+from util.InstrumentationStatistics import InstrumentationStatistics,Statistic_Event_Types
+
 def get_logger():
     return getLogger(__name__)
 
@@ -56,7 +60,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     decimate: If this is set to true, a new chunk will be made in which the model is decimated to the configured number of triangles.
     """
     get_logger().info('Building model %s in location %s from photos in %s', projectname, photodir,projectdir)
-    Statistics.getStatistics().modelstart = datetime.now()
+    sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_BUILD_MODEL)
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config["output_path"])
@@ -171,16 +175,14 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                     c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                                 texture_format = Metashape.ImageFormat.ImageFormatPNG,
                                 embed_texture=(extn=="ply") )
-        Statistics.getStatistics().modelend = datetime.now()
-        Statistics.getStatistics().logReport()
 
+        InstrumentationStatistics.getStatistics().timeEventEnd(sid)
     except Exception as e:
         get_logger().error(e)
         print(e)
         print(traceback.format_exc())
         raise e
     finally:
-        Statistics.destroyStatistics()
         doc = Metashape.Document() #basically forcing metashape to close the old document by starting a new one. Sigh. Metashape document has no
         #context manager and no close method and tends to leave a lock file or leave its .file folder readonly.
 

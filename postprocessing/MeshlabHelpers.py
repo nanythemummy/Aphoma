@@ -1,5 +1,7 @@
 import argparse
 import pymeshlab
+from util.InstrumentationStatistics import InstrumentationStatistics as statistics
+from util.InstrumentationStatistics import Statistic_Event_Types
 from pathlib import Path
 import os
 import subprocess
@@ -41,11 +43,13 @@ def bottom_to_origin(filename,outputname):
     ms.save_current_mesh(outputname)
 
 def snapshot(inputdir:str,flip:bool,config:dict):
+    sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_SNAPSHOT)
     scriptdir = config["postprocessing"]["script_directory"]
     scriptname = "snapshot_with_scale.py"
     script = Path(scriptdir,scriptname)
     params = {"input":inputdir,"render":Path(inputdir).parent,"scale":"", "flipx":flip}
     execute_blender_script(script,params,config)
+    statistics.getStatistics().timeEventEnd(sid)
 
 def command_snapshot(args,config):
     snapshot(args.inputdir,args.flip,config)
