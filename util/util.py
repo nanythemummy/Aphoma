@@ -1,4 +1,5 @@
 """Utility functions, mainly for dealing with configuration."""
+from os import path
 from pathlib import Path, PurePath
 import json
 import logging
@@ -8,9 +9,10 @@ from datetime import datetime
 
 
 
+
 def getPaletteOptions():
     pals = {}
-    with open(PurePath(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
+    with open(Path(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
         pals = json.load(f)
     return list(pals["palettes"].keys())
 
@@ -94,4 +96,37 @@ def get_camera_lens_profile(cameraprofile,lensprofile):
     if lensprofile in profiles["lenses"].keys():
         setupinfo["lens"] = profiles["lenses"][lensprofile]
     return setupinfo
+
+
+def load_palettes():
+    """Loads MarkerPalettes.json and returns a dictionary of different palettes.
+    Different marker palettes may be used while doing photo capture in order to perform various calculations at the 
+    model building stage. The palette used is specified in config.json->photogrammetry-> palette, which is used as a key to locate
+    the specific data needed for each palette. This data is stored in MarkerPalettes.json
+    """
+
+    #going to hardcode this path for now. Maybe come back and configure it.
+    palette = {}
+    with open(path.join("util/MarkerPalettes.json"), encoding = "utf-8") as f:
+        palette = json.load(f)
+    return palette["palettes"]
+
+
+def get_export_filename(chunkname:str,config:dict, type:str):
+    """Constructs a filename for the export encoding features of the model such as the scale unit and filetype.
+
+    Parameters:
+    ------------------
+    chunkname: Should be the acession nubmer of the object.
+    config: a dictionary of config values, probably under Photogrammetry in config.json"
+
+    returns:string with proposed filename for export file. """
+    scaleunit ="mm"
+    if config["palette"]:
+        palette = load_palettes()[config["palette"]]
+        scaleunit = palette["unit"]
+    type = type.replace('.','')
+    exporttype = type.upper()
+    exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
+    return exportname
 

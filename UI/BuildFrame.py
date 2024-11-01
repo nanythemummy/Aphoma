@@ -7,7 +7,7 @@ from pathlib import Path
 from UI.UIconsts import UIConsts
 from util import util
 from util.InstrumentationStatistics import InstrumentationStatistics
-from photogrammetry.ModelHelpers import get_export_filename
+from util.util import get_export_filename
 from postprocessing import MeshlabHelpers
 from UI.PipelineFrame import *
 import photogrammetryScripts as phscripts

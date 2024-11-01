@@ -14,7 +14,7 @@ from util.InstrumentationStatistics import InstrumentationStatistics as statisti
 from util.InstrumentationStatistics import Statistic_Event_Types
 from processing import image_processing
 from transfer import transferscripts
-from photogrammetry.ModelHelpers import get_export_filename
+from util.util import get_export_filename
 from postprocessing import MeshlabHelpers
 from util.buildManifest import Manifest
 def get_logger():

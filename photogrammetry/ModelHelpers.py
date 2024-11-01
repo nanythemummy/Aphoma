@@ -1,11 +1,10 @@
 """This module does a lot of metashape specific operations on the model, such as marker detection and loading the different marker palettes.
 The code in MetashapeTools.py should focus on orchestration, and most number-crunching should happen here."""
 
-import json
 import math
-from os import path
 import Metashape
 from util import util
+from util.util import load_palettes
 
 LOGGER = util.getLogger(__name__)
 targetTypes = {
@@ -16,19 +15,6 @@ targetTypes = {
     "20bit":Metashape.TargetType.CircularTarget20bit,
     "Cross":Metashape.TargetType.CrossTarget
 }
-
-def load_palettes():
-    """Loads MarkerPalettes.json and returns a dictionary of different palettes.
-    Different marker palettes may be used while doing photo capture in order to perform various calculations at the 
-    model building stage. The palette used is specified in config.json->photogrammetry-> palette, which is used as a key to locate
-    the specific data needed for each palette. This data is stored in MarkerPalettes.json
-    """
-
-    #going to hardcode this path for now. Maybe come back and configure it.
-    palette = {}
-    with open(path.join("util/MarkerPalettes.json"), encoding = "utf-8") as f:
-        palette = json.load(f)
-    return palette["palettes"]
 
 def set_chunk_accuracy(chunk):
 
@@ -302,24 +288,6 @@ def refine_sparse_cloud(doc,chunk,config):
         num_points = len(chunk.tie_points.points)
     optimize_cameras(chunk,True)
     doc.save()
-
-def get_export_filename(chunkname:str,config:dict, type:str):
-    """Constructs a filename for the export encoding features of the model such as the scale unit and filetype.
-
-    Parameters:
-    ------------------
-    chunkname: Should be the acession nubmer of the object.
-    config: a dictionary of config values, probably under Photogrammetry in config.json"
-    
-    returns:string with proposed filename for export file. """
-    scaleunit ="mm"
-    if config["palette"]:
-        palette = load_palettes()[config["palette"]]
-        scaleunit = palette["unit"]
-    type = type.replace('.','')
-    exporttype = type.upper()
-    exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
-    return exportname
 
 def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
     """ This attempts to select and remove all points above a given error threshold in max_error, up to a maximum percentage of acceptable points to remove, max_points. 

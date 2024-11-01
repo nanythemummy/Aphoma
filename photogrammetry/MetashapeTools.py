@@ -16,6 +16,7 @@ from util.InstrumentationStatistics import InstrumentationStatistics
 
 import photogrammetry.ModelHelpers as ModelHelpers
 from util.InstrumentationStatistics import InstrumentationStatistics,Statistic_Event_Types
+import util.util
 
 def get_logger():
     return getLogger(__name__)
@@ -122,7 +123,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         #detect markers
         if "palette" in config.keys() and config["palette"] != "None":
             
-            palette = ModelHelpers.load_palettes()[config["palette"]]
+            palette = util.util.load_palettes()[config["palette"]]
             get_logger().info("Finding markers as defined in %s.", config["palette"])
             if not current_chunk.markers:
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
@@ -170,7 +171,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 else:
                     outputtypes.append(ext)
                 for extn in outputtypes:
-                    name = ModelHelpers.get_export_filename(labelname,config,extn)
+                    name = util.util.get_export_filename(labelname,config,extn)
                     get_logger().info("Now, exporting chunk %s as %s",c.label,name )
                     c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                                 texture_format = Metashape.ImageFormat.ImageFormatPNG,
