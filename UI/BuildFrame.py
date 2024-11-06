@@ -55,7 +55,7 @@ class BuildFrame(PipelineFrameBase):
             fn = get_export_filename(args.proj_name.get(),self.config["photogrammetry"],"obj")
             objpath = Path(args.proj_base.get(),"output",f"{fn}.obj")
             if objpath.exists():
-                MeshlabHelpers.snapshot(objpath,False,self.config)
+                MeshlabHelpers.snapshotparser(objpath,False,self.config)
         except Exception as e:
             messagebox.showerror("Build Exception",e)
             util.getLogger(__name__).error(e)

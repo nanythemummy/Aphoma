@@ -365,7 +365,7 @@ def build_model_from_manifest(config:dict,manifestfile:str):
         fn  = get_export_filename(projname,config["photogrammetry"],"obj")
         objpath = Path(project_folder,"output",f"{fn}.obj")
         if objpath.exists():
-            MeshlabHelpers.snapshot(objpath,False,config)
+            MeshlabHelpers.snapshotparser(objpath,config)
                     
 def build_model(jobname,inputdir,outputdir,config,mask_option=0):
     """Given a folder full of pictures, this function builds a 3D Model.

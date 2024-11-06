@@ -40,15 +40,20 @@ def bottom_to_origin(filename,outputname):
     ms.compute_matrix_from_translation(traslmethod="XYZ translation",axisx=0.0,axisy=yval/2.0, axisz=0.0)
     ms.save_current_mesh(outputname)
 
-def snapshot(inputdir:str,flip:bool,config:dict):
+def snapshot(inputdir:str, config:dict, rx:float, ry:float, rz:float, scale:bool):
     scriptdir = config["postprocessing"]["script_directory"]
     scriptname = "snapshot_with_scale.py"
     script = Path(scriptdir,scriptname)
-    params = {"input":inputdir,"render":Path(inputdir).parent,"scale":"", "flipx":flip}
+    params = {"input":inputdir,"render":Path(inputdir).parent,"scale":scale, "rx":rx, "ry":ry, "rz":rz}
     execute_blender_script(script,params,config)
 
 def command_snapshot(args,config):
-    snapshot(args.inputdir,args.flip,config)
+    inputdir = args.inputdir
+    rx = args.rx or 0.0
+    ry = args.ry or 0.0
+    rz = args.rz or 0.0
+    scale = not args.noscale
+    snapshot(inputdir,config,rx,ry,rz, scale)
 
 def command_bto(args,config):
 
@@ -65,10 +70,13 @@ if __name__=="__main__":
     translateprocessor.add_argument("inputdir", help="Directory of raw files to operate on.", type=str)
     translateprocessor.add_argument("outputdir", help="Directory to put the output processed files.", type=str)
     translateprocessor.set_defaults(func=command_bto)
-    snapshot = subparsers.add_parser("snapshot", help="Uses blender to build a scene with the object and a scale and to take a snapshot of it.")
-    snapshot.add_argument("inputdir", help="Directory of the ply file to operate on.", type=str)
-    snapshot.add_argument("--flip", help="Directory of the ply file to operate on.", action="store_true")
-    snapshot.set_defaults(func=command_snapshot)
+    snapshotparser = subparsers.add_parser("snapshot", help="Uses blender to build a scene with the object and a scale and to take a snapshot of it.")
+    snapshotparser.add_argument("inputdir", help="Directory of the ply file to operate on.", type=str)
+    snapshotparser.add_argument("--rx", help="Rotate given degrees around x axis.", type=float)
+    snapshotparser.add_argument("--ry", help="Rotate given degrees around y axis.", type=float)
+    snapshotparser.add_argument("--rz", help="Rotate given degrees around z axis.", type=float)
+    snapshotparser.add_argument("--noscale", help="D not include 5mm scale", action="store_true")
+    snapshotparser.set_defaults(func=command_snapshot)
     args = parser.parse_args()
     if hasattr(args,"func"):
         parentpath = Path(__file__).parent.parent.absolute()

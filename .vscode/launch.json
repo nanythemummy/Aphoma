@@ -11,6 +11,8 @@
 
 
 
+
+
         {
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
@@ -51,8 +53,15 @@
             "console": "integratedTerminal",
 
             "args":[""]
+        },
+        {
+            "name": "Snapshot",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "postprocessing\\MeshlabHelpers.py",
+            "console": "integratedTerminal",
 
-
+            "args":["snapshot","C:/Users/keajohnston/Documents/Projects/Sin Temple Bricks/Sin Temple Bricks Crate 39 TSB 5205/Output/TSB5205_PhotogrammetryScaledInmmOBJ.obj","--rx","180.0"]
         },
         {
             "name": "ListenSend",
