@@ -64,6 +64,8 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config["output_path"])
+    
+    maskpath =config["mask_path"] if maskoption !=0 else None
     palette = None
     if "palette" in config.keys() and config["palette"] != "None":
         palette = ModelHelpers.load_palettes()[config["palette"]]
@@ -86,18 +88,15 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         else:
             current_chunk=doc.chunks[0]
             get_logger().info('A Chunk called %s already exists. Building it.', current_chunk.label)
-        #detect markers.
-        if palette:
-            get_logger().info("Finding markers as defined in %s.", config["palette"])
-            if not current_chunk.markers:
-                ModelHelpers.detect_markers(current_chunk,palette["type"])
-                doc.save()
+
         #build sparse cloud.
         if len(current_chunk.cameras)==0:
             load_photos(current_chunk,projectdir,photodir)
-            maskpath =config["mask_path"] if maskoption !=0 else None
             load_masks(current_chunk,maskpath,projectdir)
             get_logger().info("Matching photos.")
+
+
+        if not current_chunk.point_cloud:   
             current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
                 generic_preselection=True,
                 reference_preselection=True,
@@ -110,9 +109,17 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             get_logger().info("Aligning Cameras.")
             current_chunk.alignCameras()
             doc.save()
-
+                    #detect markers.
+        if palette:
+            get_logger().info("Finding markers as defined in %s.", config["palette"])
+            if not current_chunk.markers:
+                ModelHelpers.detect_markers(current_chunk,palette["type"])
+                doc.save()
+        if current_chunk.point_cloud and not current_chunk.model:
+            
             ModelHelpers.refine_sparse_cloud(doc, current_chunk, config)
             doc.save()
+        
         #build model.
         if not current_chunk.model:
             facecount = None
