@@ -5,12 +5,9 @@ from tkinter import filedialog
 from tkinter import messagebox
 from pathlib import Path
 from UI.UIconsts import UIConsts
-from util import util
-from util.InstrumentationStatistics import InstrumentationStatistics
-from photogrammetry.ModelHelpers import get_export_filename
-from postprocessing import MeshlabHelpers
 from UI.PipelineFrame import *
 import photogrammetryScripts as phscripts
+from util import util
 
 
 class BuildFormItems(FormItemsInterface):
@@ -51,11 +48,10 @@ class BuildFrame(PipelineFrameBase):
                                 inputdir = args.image_path.get(),
                                 outputdir = args.proj_base.get(),
                                 config = self.config,
+
                                 mask_option = UIConsts.MASKOPTIONS[args.mask_option.get()],
                                 snapshot=True)
 
-            
-            
         except Exception as e:
             messagebox.showerror("Build Exception",e)
             util.getLogger(__name__).error(e)

@@ -1,6 +1,7 @@
 {
     "config":
     {
+
         "processing":
         {
             "DNG_Converter":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
@@ -22,7 +23,9 @@
         {
             "script_directory":"",
             "blender_exec":"",
-            "scale_path":""
+            "scale_path":"",
+            "sketchfab_api_key":"Don't put this on github",
+            "sketchfab_api_url":"https://api.sketchfab.com/v3"
         },
         "ortery":
         {

@@ -37,7 +37,6 @@ def thresholdingMask(picpath: Path, maskout: Path, lowerthreshold:int):
     #mask = cv2.adaptiveThreshold(grayscale,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY_INV,11,2)
     mask = cv2.threshold(grayscale,lowerthreshold,255,cv2.THRESH_BINARY)[1]
     mask = 255-mask #invert the colors
-    print("Hi")
     cv2.imwrite(str(maskout),mask)
 
 def edgeDetectionMask(picpath: Path, maskout: Path, threshold1: int, threshold2: int):
