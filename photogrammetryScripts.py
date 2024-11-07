@@ -285,7 +285,7 @@ def build_snapshot(projname,basefolder,config):
     fn  = get_export_filename(projname,config["photogrammetry"],"obj")
     objpath = Path(basefolder,"output",f"{fn}.obj")
     if objpath.exists():
-        MeshlabHelpers.snapshot(objpath,False,config)
+        MeshlabHelpers.snapshot(objpath,config,0.0,0.0,0.0,True)
 
 #This script contains the full automation flow and is triggered by the watcher
 def build_model_from_manifest(config:dict,manifestfile:str):
@@ -370,7 +370,6 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=util.MaskingOption
                                          maskoption=mask_option)
         if snapshot:
             build_snapshot(jobname,outputdir,config)
-        
         statistics.getStatistics().logReport()
         statistics.destroyStatistics()
     except ImportError as e:
