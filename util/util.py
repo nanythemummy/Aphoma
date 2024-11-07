@@ -4,6 +4,8 @@ import json
 import logging
 import shutil
 import os
+import re
+import argparse
 from enum import Enum
 from datetime import datetime
 
@@ -112,8 +114,6 @@ def should_prune(filename: str,config:dict)->bool:
 
     returns: True or false based on whether the file ought to be omitted.
     """
-    if not PRUNE:
-        return
     shouldprune = False
     numinround = config["pics_per_revolution"]
     numcams = len(config["pics_per_cam"].keys())
@@ -135,15 +135,43 @@ def should_prune(filename: str,config:dict)->bool:
                 invert = True
             if (picinround %divisor==0) and invert is False:
                 shouldprune=True
-                print("Prune Me")
             elif (picinround % divisor != 0) and invert is True:
                 shouldprune = True
-                print("Prune me")
-            else:
-                print("Don't Prune Me.")
+            
     except AttributeError:
         print(f"Filename {fn} were not in format expected: [a-zA-Z]*_*\\d+$.xxx . Forgoing pruning.")
         shouldprune = False
-    finally:
-        return shouldprune
 
+    return shouldprune
+
+def cmd_test_prune(args):
+
+    pat = re.compile(r"[a-zA-Z]*_*(\d+)$")
+    def sortonpat(x):
+        x = Path(x).stem
+        t1= re.match(pat,x)
+        g = t1.group(1)
+        return int(g)
+    cpath = Path(Path(__file__).parent.parent,"config.json")
+    config = {}
+    prunelist = []
+    with open(cpath,"r",encoding = 'utf-8') as f:
+        config=json.load(f)["config"]
+    paths = list(Path(args.imagedir).glob("*.jpg"))
+    paths.sort(key=sortonpat)
+    for f in paths:
+        if should_prune(f,config["ortery"]):
+            print(f"pruning {f}")
+        else:
+            prunelist.append(f)
+    prunelist.sort()
+    print(prunelist)
+    print(len(prunelist))
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog="buildManifest")
+    parser.add_argument("imagedir",help="Directory of images for which to build a manifest")
+    args = parser.parse_args()
+    cmd_test_prune(args)

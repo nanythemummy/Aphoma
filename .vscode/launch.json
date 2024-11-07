@@ -5,19 +5,20 @@
     "version": "0.2.0",
     "configurations": [
 
-
-
-
-
-
-
+        {
+            "name": "test_prune",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "util/util.py",
+            "console": "integratedTerminal",
+            "args":["C:/Users/kjohnston/Desktop/temp/"]
+        },
         {
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
             "request": "launch",
             "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
-
             "args":["photogrammetry", "TSB_5209", "E:\\automation\\TSB_5209_Crate21\\JPG","E:\\automation\\TSB_5209_Crate21\\","--maskoption","0"]
 
         },
