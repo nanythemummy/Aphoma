@@ -48,11 +48,10 @@ class BuildFrame(PipelineFrameBase):
                                 inputdir = args.image_path.get(),
                                 outputdir = args.proj_base.get(),
                                 config = self.config,
+
                                 mask_option = UIConsts.MASKOPTIONS[args.mask_option.get()],
                                 snapshot=True)
 
-            
-            
         except Exception as e:
             messagebox.showerror("Build Exception",e)
             util.getLogger(__name__).error(e)

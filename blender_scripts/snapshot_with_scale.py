@@ -184,9 +184,9 @@ def setup_light(targetobjectname, lightpos):
     bpy.context.object.data.energy = 0.1
 
 
-def scene_setup(inputpath, scalepath, render_path, flip):
+def scene_setup(inputpath, scale, render_path, x_rot_deg=0.0,y_rot_deg=0.0,z_rot_deg=0.0):
 
-    fliptrue = flip == True
+
     # Clear existing objects.
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
@@ -200,15 +200,23 @@ def scene_setup(inputpath, scalepath, render_path, flip):
     elif inputpath.lower().endswith("ply"):
         bpy.ops.wm.ply_import(filepath = inputpath)
     world_and_local_to_origin(objectname)
-    if fliptrue:
-        print("Flipping model.")
-        rotate_on_axis(objectname,'x',180.0)
+
+    print("Positioning")
+    print(f"Scale is {scale}")
+    rotate_on_axis(objectname,'x',x_rot_deg)
+    rotate_on_axis(objectname, 'y',y_rot_deg)
+    rotate_on_axis(objectname,'z',z_rot_deg)
+
+
     scale_to_cm(objectname)
     bottom_to_origin(objectname)
     export_model_obj(containingdir,objectname)
-    scalename = build_position_scale(5.0,objectname)
-    #scalename = import_position_scale(scalepath,objectname)
-    setup_camera([objectname,scalename],0)
+    snapshotobjects = [objectname]
+    if scale:
+        print("Building scale.")
+        scalename = build_position_scale(5.0,objectname) 
+        snapshotobjects.append(scalename)
+    setup_camera(snapshotobjects,0)
     setup_light(objectname,bpy.data.objects["Camera"].location)
     set_background([255,255,255])
     save_blend(containingdir,objectname)
@@ -245,15 +253,23 @@ def main():
     )
     parser.add_argument(
         "-s","--scale",dest="scale",metavar="SCALE",
-        help="The obj or file containing the scale to place in the scene."
+        help="A boolean determining whether a scale ought to be used."
                         )
     parser.add_argument(
         "-r", "--render", dest="render_path", metavar='FILE',
         help="Render an image to the specified path",
     )
     parser.add_argument(
-        "-f","--flipx",dest="flip",metavar="FLIP",
-        help="Whether the file needs to be flipped on the X axis because it was generated with the mouth of the vessel down."
+        "-x","--rx",dest="rot_x",metavar="ROT_X",
+        help="Rotate a given number of degrees around x axis."
+    )   
+    parser.add_argument(
+        "-y","--ry",dest="rot_y",metavar="ROT_Y",
+        help="Rotate a given number of degrees around y axis."
+    )
+    parser.add_argument(
+        "-z","--rz",dest="rot_z",metavar="ROT_Z",
+        help="Rotate a given number of degrees around y axis."
     )
 
     args = parser.parse_args(argv) 
@@ -262,7 +278,11 @@ def main():
         return
 
     # Run the snapshot function
-    scene_setup(args.input, args.scale, args.render_path,args.flip=="True")
+    rotx = args.rot_x or 0.0
+    roty = args.rot_y or 0.0
+    rotz = args.rot_z or 0.0
+    scale = args.scale == "True" 
+    scene_setup(args.input, scale, args.render_path,float(rotx),float(roty),float(rotz))
 
     print("Finished!")
 
