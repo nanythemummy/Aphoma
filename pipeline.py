@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk
-import logging
 from util import util
 import photogrammetryScripts
 from UI.BuildFrame import BuildFrame

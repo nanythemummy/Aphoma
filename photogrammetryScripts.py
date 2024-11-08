@@ -1,6 +1,5 @@
 
-import logging
-import logging.config
+
 import msvcrt
 import os.path, json, argparse
 from datetime import datetime
@@ -8,17 +7,18 @@ import time
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from util import util
+from util.util import MaskingOptions, copy_file_to_dest, should_prune, get_export_filename
+from util.util import getLogger as getGlobalLogger
 from util.InstrumentationStatistics import InstrumentationStatistics as statistics
 from util.InstrumentationStatistics import Statistic_Event_Types
 from processing import image_processing
 from transfer import transferscripts
-from photogrammetry.ModelHelpers import get_export_filename
+
 from postprocessing import MeshlabHelpers
 from util.buildManifest import Manifest
-from util.util import should_prune
+
 def get_logger():
-    return util.getLogger(__name__)
+    return getGlobalLogger(__name__)
 #Global Variables
 #because the callback methods are static for the watchers, we need a place to store the manifest of the files they are transfering.
 MANIFEST = None
@@ -114,7 +114,7 @@ class WatcherSenderHandler(FileSystemEventHandler):
                     last_size = -1
                     current_size = os.path.getsize(event.src_path)
                     while True:
-                        time.sleep(3)
+                        time.sleep(1)
                         last_size = current_size
                         current_size = os.path.getsize(event.src_path)
                         get_logger().debug("%s :%s for %s",last_size,current_size,event.src_path)
@@ -150,13 +150,13 @@ class WatcherRecipientHandler(FileSystemEventHandler):
             if eventpathext in imagetypes and eventpathext != desttype.upper():
                 image_processing.process_image(eventpath,processedpath,WatcherRecipientHandler._CONFIGLOCAL["processing"])
             elif eventpathext ==desttype.upper():
-                util.copy_file_to_dest([eventpath],processedpath, False)
+                copy_file_to_dest([eventpath],processedpath, False)
             else:
                 print("Unrecognized filetype: {eventpathext}")
                 return
             defmask = WatcherRecipientHandler._CONFIGLOCAL["processing"]["ListenerDefaultMasking"]
-            mode = util.MaskingOptions.friendlyToEnum(defmask)
-            if mode != util.MaskingOptions.NOMASKS:
+            mode = MaskingOptions.friendlyToEnum(defmask)
+            if mode !=  MaskingOptions.NOMASKS:
                 image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode, WatcherRecipientHandler._CONFIGLOCAL["processing"])
 
 
@@ -210,7 +210,6 @@ class Watcher:
         and sleeps until there is either an exception or the user presses the F key. Note that this non-blocking user input check is 
         Windows Only and will have to be fixed to make this script mac/linux compatible. When the user hits the F key, if they are running
         the listen_and_send scripts, it will send a manifest of the files that were transfered."""
-        logger = util.logging.getLogger()
         WatcherRecipientHandler._CONFIGLOCAL = WatcherSenderHandler._CONFIGLOCAL = self.config
         if not self.isSender:
             handler = WatcherRecipientHandler()
@@ -301,7 +300,7 @@ def build_model_from_manifest(config:dict,manifestfile:str):
     with open(manifestfile,"r",encoding="utf-8") as f:
         manifest = json.load(f)
     projname = next(iter(manifest))
-    masktype = manifest[projname]["maskmode"] = util.MaskingOptions(manifest[projname]["maskmode"]) or util.MaskingOptions.friendlyToEnum(config["processing"]["ListenerDefaultMasking"])
+    masktype = manifest[projname]["maskmode"] = MaskingOptions(manifest[projname]["maskmode"]) or MaskingOptions.friendlyToEnum(config["processing"]["ListenerDefaultMasking"])
     sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_TAKE_PHOTO,
                                                         manifest[projname]["photo_start_time"])
     statistics.getStatistics().timeEventEnd(sid,
@@ -318,11 +317,11 @@ def build_model_from_manifest(config:dict,manifestfile:str):
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
         masks = os.path.join(project_folder,config["photogrammetry"]["mask_path"])
-        util.copy_file_to_dest(filestoprocess["masks"],masks, True)
+        copy_file_to_dest(filestoprocess["masks"],masks, True)
         processed= os.path.join(project_folder,"processed")
-        util.copy_file_to_dest(filestoprocess["processed"],processed, True)
+        copy_file_to_dest(filestoprocess["processed"],processed, True)
         source = os.path.join(project_folder,"source")
-        util.copy_file_to_dest(filestoprocess["source"],source, True)
+        copy_file_to_dest(filestoprocess["source"],source, True)
 
         build_model(projname,processed,project_folder,config,masktype,snapshot=True)
         #fn  = get_export_filename(projname,config["photogrammetry"],"obj")
@@ -330,7 +329,7 @@ def build_model_from_manifest(config:dict,manifestfile:str):
         #if objpath.exists():
         #    MeshlabHelpers.snapshot(objpath,config)
                     
-def build_model(jobname,inputdir,outputdir,config,mask_option=util.MaskingOptions.NOMASKS,snapshot=False):
+def build_model(jobname,inputdir,outputdir,config,mask_option=MaskingOptions.NOMASKS,snapshot=False):
     """Given a folder full of pictures, this function builds a 3D Model.
 
     Parameters:
@@ -358,7 +357,7 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=util.MaskingOption
                             os.mkdir(tifpath)
                         image_processing.process_image(f.path,tifpath,config['processing'])
                         processedpath = tifpath       
-        if mask_option != util.MaskingOptions.NOMASKS:
+        if mask_option != MaskingOptions.NOMASKS:
             maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
@@ -387,7 +386,7 @@ def build_model_cmd(args):
     photoinput = args.photos
     outputdir = args.outputdirectory
     maskoption = int(args.maskoption)
-    build_model(job,photoinput,outputdir,_CONFIG,util.MaskingOptions(maskoption))
+    build_model(job,photoinput,outputdir,_CONFIG, MaskingOptions(maskoption))
     
 
 

@@ -7,18 +7,14 @@ import json
 import time
 import traceback
 import os
-from pathlib import Path, PurePath
-from datetime import datetime
 import Metashape
-
-from util.util import getLogger
-from util.InstrumentationStatistics import InstrumentationStatistics
-
 import photogrammetry.ModelHelpers as ModelHelpers
 from util.InstrumentationStatistics import InstrumentationStatistics,Statistic_Event_Types
+from util.util import get_export_filename, load_palettes
+from util.util import getLogger as getGlobalLogger
 
 def get_logger():
-    return getLogger(__name__)
+    return getGlobalLogger(__name__)
 
 def load_photos(chunk, projectdir:str, photodir:str):
     """Tells Metashape to load the photos and masks in specified directories to the given chunk.
@@ -68,7 +64,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     maskpath =config["mask_path"] if maskoption !=0 else None
     palette = None
     if "palette" in config.keys() and config["palette"] != "None":
-        palette = ModelHelpers.load_palettes()[config["palette"]]
+        palette = load_palettes()[config["palette"]]
 
     if not os.path.exists(outputpath):
         os.mkdir(outputpath)
@@ -180,7 +176,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 else:
                     outputtypes.append(ext)
                 for extn in outputtypes:
-                    name = ModelHelpers.get_export_filename(labelname,config,extn)
+                    name = get_export_filename(labelname,config,extn)
                     get_logger().info("Now, exporting chunk %s as %s",c.label,name )
                     c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                                 texture_format = Metashape.ImageFormat.ImageFormatPNG,
