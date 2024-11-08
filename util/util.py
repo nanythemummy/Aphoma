@@ -15,7 +15,7 @@ from enum import Enum
 
 def getPaletteOptions():
     pals = {}
-    with open(PurePath(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
+    with open(Path(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
         pals = json.load(f)
     return list(pals["palettes"].keys())
 
@@ -46,17 +46,17 @@ class MaskingOptions(Enum):
      
     @classmethod 
     def getFriendlyStrings(cls):
-        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","Thresholding","EdgeDetection"]
+        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","EdgeDetection","Thresholding"]
     @classmethod
     def numToFriendlyString(cls, num): 
         if isinstance(num, MaskingOptions):
             num = num.value
         return MaskingOptions.getFriendlyStrings()[num]
     @classmethod 
-    def friendlyToEnum(cls, friendly:str):
+    def friendlyToEnum(cls, searchstring:str):
         friendly = MaskingOptions.getFriendlyStrings()
         for i,fr in enumerate(friendly):
-            if fr is friendly:
+            if fr is searchstring:
                 return MaskingOptions(i)
         return 0
 
@@ -188,7 +188,7 @@ def load_palettes():
 
     #going to hardcode this path for now. Maybe come back and configure it.
     palette = {}
-    with open(path.join("util/MarkerPalettes.json"), encoding = "utf-8") as f:
+    with open(Path(Path(__file__).parent,"MarkerPalettes.json"), encoding = "utf-8") as f:
         palette = json.load(f)
     return palette["palettes"]
 

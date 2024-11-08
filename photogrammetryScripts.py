@@ -156,7 +156,7 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                 return
             defmask = WatcherRecipientHandler._CONFIGLOCAL["processing"]["ListenerDefaultMasking"]
             mode = MaskingOptions.friendlyToEnum(defmask)
-            if mode !=  MaskingOptions.NOMASKS:
+            if mode !=  MaskingOptions.NOMASKS.value:
                 image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode, WatcherRecipientHandler._CONFIGLOCAL["processing"])
 
 
@@ -225,7 +225,7 @@ class Watcher:
             listening=True
             print("Type F to Finish.")           
             while listening :
-                time.sleep(5)
+                time.sleep(1)
                 if msvcrt.kbhit() or self.stoprequest:
                     if self.stoprequest or (msvcrt.getch()=='F'):
                         listening=False
@@ -280,6 +280,7 @@ def watch_and_process_cmd(args):
         return
     watcher = Watcher(_CONFIG,inputdir,isSender=False)
     watcher.run()
+
 def build_snapshot(projname,basefolder,config):
     fn  = get_export_filename(projname,config["photogrammetry"],"obj")
     objpath = Path(basefolder,"output",f"{fn}.obj")

@@ -47,6 +47,7 @@ class WatchFrame(PipelineFrameBase):
             self.disable_enable_all(True)
             self.state = "running"
             mask_option = UIConsts.MASKOPTIONS[args.masking_option.get()]
+            print(mask_option)
             self.config["processing"]["ListenerDefaultMasking"] = MaskingOptions.numToFriendlyString(mask_option)
             self.watcher = phscripts.Watcher(self.config,args.input_dir.get(), False) 
             self.stopbutton.configure(state="normal")
