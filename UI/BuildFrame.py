@@ -7,7 +7,9 @@ from pathlib import Path
 from UI.UIconsts import UIConsts
 from UI.PipelineFrame import *
 import photogrammetryScripts as phscripts
-from util import util
+from util.util import getPaletteOptions
+from util.Configurator import Configurator
+import util.PipelineLogging
 
 
 class BuildFormItems(FormItemsInterface):
@@ -43,28 +45,26 @@ class BuildFrame(PipelineFrameBase):
     def task(self,args:BuildFormItems):
         try:
             self.disable_enable_all(True)
-            self.config["photogrammetry"]["palette"] = args.pal_name.get()
+            Configurator.getConfig().setProperty("photogrammetry","palette", args.pal_name.get())
             phscripts.build_model(jobname = args.proj_name.get(),
                                 inputdir = args.image_path.get(),
                                 outputdir = args.proj_base.get(),
-                                config = self.config,
-
                                 mask_option = UIConsts.MASKOPTIONS[args.mask_option.get()],
                                 snapshot=True)
 
         except Exception as e:
             messagebox.showerror("Build Exception",e)
-            util.getLogger(__name__).error(e)
+            util.PipelineLogging.getLogger(__name__).error(e)
             raise e
         finally:
             self.disable_enable_all(False)
 
-    def __init__(self,container,config):
+    def __init__(self,container):
 
-        super().__init__(container,config)
+        super().__init__(container)
         self.svars = BuildFormItems()
         maskoptionvals = [*UIConsts.MASKOPTIONS.keys()]
-        palettevals = util.getPaletteOptions()
+        palettevals = getPaletteOptions()
         projnameentry = ttk.Entry(self, width=25, textvariable=self.svars.proj_name)
         projnameentry.grid(column=0,row=2,sticky=(W,E))
         ttk.Label(self,text="Image Folder Path").grid(column=0,row=4)

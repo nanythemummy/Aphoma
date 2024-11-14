@@ -8,6 +8,7 @@ import os
 import re
 import argparse
 from enum import Enum
+from util.Configurator import Configurator
 
 
 
@@ -18,23 +19,6 @@ def getPaletteOptions():
     with open(Path(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
         pals = json.load(f)
     return list(pals["palettes"].keys())
-
-def getLogger(name):
-    
-    if name == "__main__":
-        logger = logging.getLogger()
-        logging.config.fileConfig('logging.conf')
-    else:
-        logger = logging.getLogger(name)
-        logger.setLevel(logging.DEBUG)
-    return logger
-
-def addLogHandler(handler):
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(formatter)
-    logger  = logging.getLogger()
-    logger.addHandler(handler)
 
 class MaskingOptions(Enum):
     """Class containing constants for masking options."""
@@ -98,7 +82,7 @@ def get_camera_lens_profile(cameraprofile,lensprofile):
     setupinfo = {"lens":None,
                  "camera":None}
     profiles = {}
-    with open("util/CameraProfiles.json") as f:
+    with open("util/CameraProfiles.json",'r',encoding="utf-8") as f:
         profiles= json.load(f)
     if cameraprofile in profiles["cameras"].keys():
         setupinfo["camera"] = profiles["cameras"][cameraprofile]
@@ -107,7 +91,7 @@ def get_camera_lens_profile(cameraprofile,lensprofile):
     return setupinfo
 
 
-def should_prune(filename: str,config:dict)->bool:
+def should_prune(filename: str)->bool:
     """Takes a file name and figures out based on the number in it whether the picture should be sent or not and added to the manifest or not. It assumes files are named ending in a number and that
     this is sequential based on when the camera took the picture.
     Parameters
@@ -116,9 +100,11 @@ def should_prune(filename: str,config:dict)->bool:
 
     returns: True or false based on whether the file ought to be omitted.
     """
+    config = Configurator.getConfig()
     shouldprune = False
-    numinround = config["pics_per_revolution"]
-    numcams = len(config["pics_per_cam"].keys())
+    numinround = config.getProperty("ortery","pics_per_revolution")
+    picspercam = config.getProperty("ortery","pics_per_cam")
+    numcams = len(picspercam.keys())
     basename_with_ext = os.path.split(filename)[1]
     fn = os.path.splitext(basename_with_ext)[0]
     try:
@@ -126,7 +112,7 @@ def should_prune(filename: str,config:dict)->bool:
         filenum = int(t.group(1)) #ortery counts from zero.
         camnum = int(filenum/numinround)+1
         picinround = filenum%(numinround)+1
-        expected = config["pics_per_cam"][str(camnum)]
+        expected = picspercam[str(camnum)]
         print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
         if expected < numinround:
             invert = False
@@ -154,15 +140,12 @@ def cmd_test_prune(args):
         t1= re.match(pat,x)
         g = t1.group(1)
         return int(g)
-    cpath = Path(Path(__file__).parent.parent,"config.json")
-    config = {}
+    
     prunelist = []
-    with open(cpath,"r",encoding = 'utf-8') as f:
-        config=json.load(f)["config"]
     paths = list(Path(args.imagedir).glob("*.jpg"))
     paths.sort(key=sortonpat)
     for f in paths:
-        if should_prune(f,config["ortery"]):
+        if should_prune(f):
             print(f"pruning {f}")
         else:
             prunelist.append(f)
@@ -193,7 +176,7 @@ def load_palettes():
     return palette["palettes"]
 
 
-def get_export_filename(chunkname:str,config:dict, type:str):
+def get_export_filename(chunkname:str, type:str):
     """Constructs a filename for the export encoding features of the model such as the scale unit and filetype.
 
     Parameters:
@@ -202,9 +185,10 @@ def get_export_filename(chunkname:str,config:dict, type:str):
     config: a dictionary of config values, probably under Photogrammetry in config.json"
 
     returns:string with proposed filename for export file. """
+    palettename = Configurator.getConfig().getProperty("photogrammetry","palette")
     scaleunit ="mm"
-    if config["palette"]:
-        palette = load_palettes()[config["palette"]]
+    if palettename:
+        palette = load_palettes()[palettename]
         scaleunit = palette["unit"]
     type = type.replace('.','')
     exporttype = type.upper()

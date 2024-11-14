@@ -1,7 +1,6 @@
 from enum import Enum
 from datetime import datetime,timedelta
-from util import util
-from functools import reduce
+from util import PipelineLogging
 from uuid import uuid4
 
 class Statistic_Event_Types(Enum):
@@ -59,7 +58,7 @@ class InstrumentationStatistics():
         self.completed = {}
 
     def logReport(self):
-        logger = util.getLogger(__name__)
+        logger = PipelineLogging.getLogger(__name__)
         accumulatedtime = timedelta(0)
         phototime = timedelta(0)
         for s in Statistic_Event_Types.getIteratable():

@@ -18,36 +18,41 @@ import cv2
 from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
+from util.Configurator import Configurator
 from processing import maskingAlgorithms
 from util.InstrumentationStatistics import InstrumentationStatistics, Statistic_Event_Types
+from util.PipelineLogging import getLogger
 
 
-def build_masks(imagepath,outputdir,mode,config):
+def build_masks(imagepath,outputdir,mode):
     sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_BUILD_MASK)
-    logger = util.getLogger(__name__)
+    logger = getLogger(__name__)
     logger.info("Building masks.")
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
     friendlystring = util.MaskingOptions.numToFriendlyString(mode)
-    config["ListenerDefaultMasking"] = friendlystring
-    if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET or \
-        mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
-        build_masks_with_droplet(imagepath,outputdir,config)
+    #config.setProperty("processing","ListenerDefaultMasking") = friendlystring
+    if mode.value == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET or \
+        mode.value == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
+        build_masks_with_droplet(imagepath,outputdir,friendlystring)
     else:
         if Path(imagepath).is_dir():
             for f in os.listdir(imagepath):
-                build_masks_with_cv2(Path(imagepath,f),outputdir,mode,config)
+                build_masks_with_cv2(Path(imagepath,f),outputdir,mode)
         else:
-            build_masks_with_cv2(Path(imagepath),outputdir,mode,config)
+            build_masks_with_cv2(Path(imagepath),outputdir,mode)
     sid = InstrumentationStatistics.getStatistics().timeEventEnd(sid)
-def build_masks_with_cv2(imagepath,outputdir,mode,config):
-    logger = util.getLogger(__name__)
-    if not str(imagepath).upper().endswith(config["Destination_Type"].upper()):
-        logger.warning("Image %s not of expected type %s to build mask with cv2.", imagepath,config["Destination_Type"])
+def build_masks_with_cv2(imagepath,outputdir,mode):
+    logger = getLogger(__name__)
+    desttype = Configurator.getConfig().getProperty("processing","Destination_Type")
+    cv2exporttype = Configurator.getConfig().getProperty("processing","CV2_Export_Type")
+    lgt = Configurator.getConfig().getProperty("processing","thresholding_lower_gray_threshold")
+    if not str(imagepath).upper().endswith(desttype.upper()):
+        logger.warning("Image %s not of expected type %s to build mask with cv2.", imagepath,desttype)
         return
-    outputname = f"{Path(imagepath).stem}{config['CV2_Export_Type']}"
-    if mode == util.MaskingOptions.MASK_THRESHOLDING:
-        maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),config["thresholding_lower_gray_threshold"])
+    outputname = f"{Path(imagepath).stem}{cv2exporttype}"
+    if mode.value == util.MaskingOptions.MASK_THRESHOLDING:
+        maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),lgt)
     else:
         maskingAlgorithms.otsuThresholding(imagepath,Path(outputdir,outputname))
         #canny edge detection
@@ -56,7 +61,7 @@ def build_masks_with_cv2(imagepath,outputdir,mode,config):
                                             #config["canny_lower_intensity_threshold"], 
                                             #config["canny_higher_intensity_threshold"])
 
-def build_masks_with_droplet( imagefolder, outputpath, config):
+def build_masks_with_droplet( imagefolder, outputpath, masktype):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
     The droplet runs a context aware select on the central pixel of an image and then dumps the mask in a temp directory. 
     This directory is set in photoshop when creating the droplet, but it must be configured in config.json so that the script
@@ -70,9 +75,10 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
-    logger = util.getLogger(__name__)
-    dropletpath = config[config["ListenerDefaultMasking"]]
-    dropletoutput = config["Droplet_Output"]
+    logger = util.PipelineLogging.getLogger(__name__)
+    dropletpath = Configurator.getConfig().getProperty("processing",masktype)
+
+    dropletoutput = Configurator.getConfig().getProperty("processing","Droplet_Output")
     if not dropletpath:
         logger.error("Cannot build mask with a non-existent droplet. Please specify the droplet path in the config under processing->Masking_Droplet.")
         return
@@ -95,7 +101,7 @@ def build_masks_with_droplet( imagefolder, outputpath, config):
     shutil.rmtree(dropletoutput)
 
 
-def process_image(filepath: str, output: str, config: dict):
+def process_image(filepath: str, output: str, destinationtype:str):
     """Runs non-filter corrections on a file format and then exports it as a tiff
     
     Checks to see if a file is a canon RAW file (CR2), and converts the file to tiff. 
@@ -104,31 +110,30 @@ def process_image(filepath: str, output: str, config: dict):
     -------------
     filepath : the path to an image file.
     output : the path where you want the new tiff file to be written.
-    config : a dictionary of config values. These are found in the config.json file under "processing", which is the dict that gets passed in.
 
     """
     sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_CONVERT_PHOTO)
     processedpath = ""
     if not os.path.exists(output):
         os.mkdir(output)    
-    if not filepath.upper().endswith(config["Destination_Type"].upper()):
+    if not filepath.upper().endswith(destinationtype.upper()):
         if filepath.upper().endswith("CR2"):
             #exif = get_exif_data(filepath)
-            if config["Destination_Type"].upper() == ".TIF":
-                processedpath = convert_CR2_to_TIF(filepath,output,config)
-            elif config["Destination_Type"].upper() == ".JPG":
+            if destinationtype.upper() == ".TIF":
+                processedpath = convert_CR2_to_TIF(filepath,output)
+            elif destinationtype.upper() == ".JPG":
                 processedpath = convertToJPG(filepath,output)
         elif filepath.upper().endswith("TIF"):
-            if config["Destination_Type"].upper() == ".JPG":
+            if destinationtype.upper() == ".JPG":
                 processedpath = convertToJPG(filepath,output)
     else:
         util.copy_file_to_dest([filepath],output,False)
-        processedpath = os.path.join(output,f"{Path(filepath).stem}.{config['Destination_Type']}")
+        processedpath = os.path.join(output,f"{Path(filepath).stem}.{destinationtype}")
     InstrumentationStatistics.getStatistics().timeEventEnd(sid)
     return processedpath 
 
 
-def lens_profile_correction(tifhandle ,config: dict, exif: dict):
+def lens_profile_correction(tifhandle , exif: dict):
     """Does lens profile correction and vignetting removal on an image using the FNumber and Focal length from the Exif file.
      
     Parameters:
@@ -139,12 +144,15 @@ def lens_profile_correction(tifhandle ,config: dict, exif: dict):
 
     returns: an array of modified pixels.
     """
+
+    cam = Configurator.getConfig().getProperty("processing","Camera")
+    lens = Configurator.getConfig().getProperty("processing","Lens")
     #do lens profile correction This code was borrowed from here: https://pypi.org/project/lensfunpy/
-    clprofile = util.get_camera_lens_profile(config["Camera"],config["Lens"])
+    clprofile = util.get_camera_lens_profile(cam,lens)
     lensdb = lensfunpy.Database()
     #both of these return a list, the first item of which should be our camera. If not, we need to be more specific.
-    cam = lensdb.find_cameras(clprofile["camera"]["maker"],clprofile["camera"]["model"])[0]
-    lens = lensdb.find_lenses(cam,clprofile["lens"]["maker"],clprofile["lens"]["model"])[0]
+    caminfo = lensdb.find_cameras(clprofile["camera"]["maker"],clprofile["camera"]["model"])[0]
+    lensinfo = lensdb.find_lenses(caminfo,clprofile["lens"]["maker"],clprofile["lens"]["model"])[0]
     #get data needed for calc from exif data
     focal_length = exif["FocalLength"] if "FocalLength" in exif.keys() else 0
     aperture = exif["FNumber"] if "FNumber" in exif.keys() else 0
@@ -155,7 +163,7 @@ def lens_profile_correction(tifhandle ,config: dict, exif: dict):
     img_width = tifhandle.shape[1]
     img_height = tifhandle.shape[0]
     modifier = lensfunpy.Modifier(lens,cam.crop_factor,img_width,img_height)
-    print(f"focal_length = {focal_length}, aperture ={aperture}, distance={distance}, cam:{cam}, lens:{lens}")
+    print(f"focal_length = {focal_length}, aperture ={aperture}, distance={distance}, cam:{caminfo}, lens:{lensinfo}")
     modifier.initialize(focal_length,aperture,distance,pixel_format = tifhandle.dtype.type ) #demo code has this as just dtype, but it has a keyerror exception.
     undist_coords = modifier.apply_geometry_distortion()
     newimg = cv2.remap(tifhandle,undist_coords, None, cv2.INTER_LANCZOS4)
@@ -163,7 +171,7 @@ def lens_profile_correction(tifhandle ,config: dict, exif: dict):
         print("WARNING: Failed to remove vignetting.")
     return newimg
 
-def convert_CR2_to_DNG(input,output,config):
+def convert_CR2_to_DNG(input,output):
     """ Uses the Adobe DNG converter to convert CR2 or NEF files to DNG.
 
     Parameters:
@@ -172,9 +180,7 @@ def convert_CR2_to_DNG(input,output,config):
     output: the path where you want the TIF saved.
     config: the dictionary of values under "processing" in the config.json file"
     """
-
-    outputcmd = f"-d \"{output}/\""
-    converterpath = config["DNG_Converter"]
+    converterpath = Configurator.getConfig().getProperty("processing","DNG_Converter")
     subprocess.run([converterpath,"-d",output,"-c", input], check = False)
 
 def get_exif_data(filename: str) -> dict:
@@ -208,7 +214,7 @@ def get_exif_data(filename: str) -> dict:
                 exif[tagname]=val
     return exif
 
-def convert_CR2_to_TIF(input: str ,output: str, config: dict) -> str:
+def convert_CR2_to_TIF(input: str ,output: str) -> str:
     """Converts a Canon RAW file to a TIF using the Rawpy library
     
     Currently sets the white balance to the camera white balance. TODO: Allow the white balance to be taken from a gray card.

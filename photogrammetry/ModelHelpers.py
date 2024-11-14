@@ -4,7 +4,7 @@ The code in MetashapeTools.py should focus on orchestration, and most number-cru
 import math
 import Metashape
 from util.util import load_palettes
-from util.util import getLogger as getGlobalLogger
+from util.PipelineLogging import getLogger as getGlobalLogger
 
 LOGGER = getGlobalLogger(__name__)
 targetTypes = {
@@ -99,7 +99,7 @@ def are_points_colinear(point1,point2,point3):
         lengdet = math.sqrt(det.x**2+det.y**2+det.z**2)
         return abs(lengdet) < smol
     except AttributeError:
-        return False #Turns out points can have no position. who would have t
+        return False #Turns out points can have no position. who would have thought it.
     
 
 def build_scalebars_from_sequential_targets(chunk, scalebardefinitions):
@@ -244,7 +244,7 @@ def optimize_cameras(chunk, final_optimization=False):
                           tiepoint_covariance=False)
     
 
-def refine_sparse_cloud(doc,chunk,config):
+def refine_sparse_cloud(doc,chunk,error_thresholds:dict):
     """Performs the error reduction/optimization algorithm as described by Neffra Matthews and Noble,Tommy. "In the Round Tutorial", 2018. 
     
     Parameters:
@@ -261,7 +261,6 @@ def refine_sparse_cloud(doc,chunk,config):
     #get number of points before refinement:
     
     #Remove points with reconstruction uncertainty error above threshold.
-    error_thresholds = config["error_thresholds"]
     remove_above_error_threshold(chunk,
                               Metashape.TiePoints.Filter.ReconstructionUncertainty,
                               error_thresholds["reconstruction_uncertainty"],
@@ -331,7 +330,7 @@ def find_axes_from_markers(chunk,palette:str):
 
     returns: a list of unit vectors corresponding to x,y, and z axes.
     """
-    palette = load_palettes()[palette]
+
     if not chunk.markers:
         print("No marker palette defined or markers detected. Cannot detect orientation from palette.")
         return []

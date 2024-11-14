@@ -1,13 +1,13 @@
 import argparse
-import pymeshlab
 from util.InstrumentationStatistics import InstrumentationStatistics as statistics
 from util.InstrumentationStatistics import Statistic_Event_Types
+from util.Configurator import Configurator
 from pathlib import Path
 import os
 import subprocess
 import json
 
-def execute_blender_script(scriptname:str, args:dict,config):
+def execute_blender_script(scriptname:str, args:dict):
     """Executes the named blender script and using the blender executable
     specified in the same place.
 
@@ -20,7 +20,7 @@ def execute_blender_script(scriptname:str, args:dict,config):
     for k,v in args.items():
         params += f" --{k}=\"{v}\""
 
-    bexec = Path(config["postprocessing"]["blender_exec"])
+    bexec = Path(Configurator.getConfig().getProperty("postprocessing","blender_exec"))
     cmd = f"\"{bexec}\" --background --factory-startup --python \"{scriptname}\" {params}"
     print(cmd)
 
@@ -34,7 +34,8 @@ def bottom_to_origin(filename,outputname):
     --------------------
     filename: The path of the file to be input.
     outputname: the full path of the file you want written out."""
-    
+    import pymeshlab
+
     ms = pymeshlab.MeshSet()
     ms.load_new_mesh(filename)
     ms.compute_matrix_from_translation(traslmethod ='Center on Layer BBox')
@@ -42,24 +43,25 @@ def bottom_to_origin(filename,outputname):
     ms.compute_matrix_from_translation(traslmethod="XYZ translation",axisx=0.0,axisy=yval/2.0, axisz=0.0)
     ms.save_current_mesh(outputname)
 
-def snapshot(inputdir:str, config:dict, rx:float, ry:float, rz:float, scale:bool):
+def snapshot(inputdir:str, rx:float, ry:float, rz:float, scale:bool):
     sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_SNAPSHOT)
-    scriptdir = config["postprocessing"]["script_directory"]
+
+    scriptdir = Configurator.getConfig().getProperty("postprocessing","script_directory")
     scriptname = "snapshot_with_scale.py"
     script = Path(scriptdir,scriptname)
     params = {"input":inputdir,"render":Path(inputdir).parent,"scale":scale, "rx":rx, "ry":ry, "rz":rz}
-    execute_blender_script(script,params,config)
+    execute_blender_script(script,params)
     statistics.getStatistics().timeEventEnd(sid)
 
-def command_snapshot(args,config):
+def command_snapshot(args):
     inputdir = args.inputdir
     rx = args.rx or 0.0
     ry = args.ry or 0.0
     rz = args.rz or 0.0
     scale = not args.noscale
-    snapshot(inputdir,config,rx,ry,rz, scale)
+    snapshot(inputdir,rx,ry,rz, scale)
 
-def command_bto(args,config):
+def command_bto(args):
 
     if os.path.isfile(args.inputdir) and os.path.isdir(os.path.dirname(args.outputdir)):
         bottom_to_origin(args.inputdir,args.outputdir)
@@ -84,9 +86,7 @@ if __name__=="__main__":
     args = parser.parse_args()
     if hasattr(args,"func"):
         parentpath = Path(__file__).parent.parent.absolute()
-        with open(Path(parentpath,"config.json"),'r') as f:
-            config = json.load(f)["config"]
-        args.func(args,config)
+        args.func(args)
     else:
         parser.print_help()
     

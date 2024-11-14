@@ -3,15 +3,15 @@ Code requiring number crunching probably ought to go in the associated utility c
 """
 
 import argparse
-import json
-import time
 import traceback
 import os
 import Metashape
 import photogrammetry.ModelHelpers as ModelHelpers
 from util.InstrumentationStatistics import InstrumentationStatistics,Statistic_Event_Types
 from util.util import get_export_filename, load_palettes
-from util.util import getLogger as getGlobalLogger
+from util.PipelineLogging import getLogger as getGlobalLogger
+from util.Configurator import Configurator
+
 
 def get_logger():
     return getGlobalLogger(__name__)
@@ -45,7 +45,7 @@ def load_masks(chunk,maskpath:str,projectdir:str):
         template = f"{maskpath}{os.sep}{{filename}}{ext}"
         chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
 
-def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict, decimate = True, maskoption = 0):
+def build_basic_model(photodir:str, projectname:str, projectdir:str, decimate = True, maskoption = 0):
     """Uses Agisoft Metashape to build and export a model using the photos in the directory specified.
     Parameters:
     ------------------
@@ -56,16 +56,14 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
     decimate: If this is set to true, a new chunk will be made in which the model is decimated to the configured number of triangles.
     """
     get_logger().info('Building model %s in location %s from photos in %s', projectname, photodir,projectdir)
+    config = Configurator.getConfig()
     sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_BUILD_MODEL)
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
-    outputpath = os.path.join(projectdir,config["output_path"])
+    outputpath = os.path.join(projectdir,config.getProperty("photogrammetry","output_path"))
     
-    maskpath =config["mask_path"] if maskoption !=0 else None
-    palette = None
-    if "palette" in config.keys() and config["palette"] != "None":
-        palette = load_palettes()[config["palette"]]
-
+    maskpath =config.getProperty("photogrammetry","mask_path") if maskoption !=0 else None
+    palette =  load_palettes()[config.getProperty("photogrammetry","palette")]
     if not os.path.exists(outputpath):
         os.mkdir(outputpath)
     doc = Metashape.Document()
@@ -93,7 +91,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
 
 
         if not current_chunk.point_cloud:   
-            current_chunk.matchPhotos(downscale=config["sparse_cloud_quality"],
+            current_chunk.matchPhotos(downscale=config.getProperty("photogrammetry","sparse_cloud_quality"),
                 generic_preselection=True,
                 reference_preselection=True,
                 reference_preselection_mode=Metashape.ReferencePreselectionMode.ReferencePreselectionSource,
@@ -107,25 +105,22 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
             doc.save()
                     #detect markers.
         if palette:
-            get_logger().info("Finding markers as defined in %s.", config["palette"])
+            get_logger().info("Finding markers as defined in %s.", config.getProperty("photogrammetry","palette"))
             if not current_chunk.markers:
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
                 doc.save()
         if current_chunk.point_cloud and not current_chunk.model:
-            
-            ModelHelpers.refine_sparse_cloud(doc, current_chunk, config)
+            thresholds = config.getProperty("photogrammetry","error_thresholds")
+            ModelHelpers.refine_sparse_cloud(doc, current_chunk,thresholds)
             doc.save()
         
         #build model.
         if not current_chunk.model:
-            facecount = None
-            if "custom_face_count" in config.keys():
-                facecount = config["custom_face_count"]
-                #print(f"custom facecount is {facecount}")
-            targetfacecount = facecount if facecount is not None else 200000
-            facecountconst = Metashape.FaceCount.CustomFaceCount if facecount is not None else Metashape.FaceCount.HighFaceCount
+            facecount = None or config.getProperty("photogrammetry","custom_face_count")
+            targetfacecount = facecount or 200000
+            facecountconst = Metashape.FaceCount.CustomFaceCount if facecount else Metashape.FaceCount.HighFaceCount
             get_logger().info("Building Depth Maps.")
-            current_chunk.buildDepthMaps(downscale=config["model_quality"], filter_mode = Metashape.FilterMode.MildFiltering)
+            current_chunk.buildDepthMaps(downscale=config.getProperty("photogrammetry","model_quality"), filter_mode = Metashape.FilterMode.MildFiltering)
             get_logger().info("Building Model.")
             current_chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData, 
                                     face_count = facecountconst,
@@ -152,23 +147,24 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         if decimate and len(doc.chunks)<2:
             get_logger().info("Building a lower poly version of the model from a duplicate chunk.")
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
-            newchunk.label = f"{current_chunk.label} lowpoly {int(config["low_res_poly_count"]/1000)}K"
-            newchunk.decimateModel(replace_asset=True,face_count=config["low_res_poly_count"])
+            lrpolycount = int(config.getProperty("photogrammetry","low_res_poly_count"))
+            newchunk.label = f"{current_chunk.label} lowpoly {lrpolycount/1000}K"
+            newchunk.decimateModel(replace_asset=True,face_count=lrpolycount)
         #build texture for each chunk.
         for c in doc.chunks:
             if not c.model.textures:
                 get_logger().info("Building UV Map and Texture for chunk %s",c.label)
-                c.buildUV(page_count=config["texture_count"], texture_size=config["texture_size"])
-                c.buildTexture(texture_size=config["texture_size"], ghosting_filter=True)
+                c.buildUV(page_count=config.getProperty("photogrammetry","texture_count"), texture_size=config.getProperty("photogrammetry","texture_size"))
+                c.buildTexture(texture_size=config.getProperty("photogrammetry","texture_size"), ghosting_filter=True)
                 doc.save()
         #reorient model and export.
         for c in doc.chunks:
             #for now, don't save after model reorient.
-            if "palette" in config.keys() and config["palette"] != "None":
-                reorient_model(c,config)
+            if palette:
+                reorient_model(c,palette)
             get_logger().info("Finished building.") 
             labelname = c.label.replace(" ","")
-            ext = config["export_as"]
+            ext = config.getProperty("photogrammetry","export_as")
             outputtypes = []
             if not ext == "none":
                 if ext == "all":
@@ -176,7 +172,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
                 else:
                     outputtypes.append(ext)
                 for extn in outputtypes:
-                    name = get_export_filename(labelname,config,extn)
+                    name = get_export_filename(labelname,extn)
                     get_logger().info("Now, exporting chunk %s as %s",c.label,name )
                     c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
                                 texture_format = Metashape.ImageFormat.ImageFormatPNG,
@@ -193,16 +189,15 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, config:dict
         #context manager and no close method and tends to leave a lock file or leave its .file folder readonly.
 
 
-def reorient_model(chunk,config):
+def reorient_model(chunk,palette):
     """Rotates the object so that the axes on the marker pallette are in line with the world xyz axes and so that the object
     is centered on the origin.
     
     Parameters:
     ----------
     chunk: the chunk wht the model on which we are operating.
-    config: the section of config.json under photogrammetry.
     """
-    axes = ModelHelpers.find_axes_from_markers(chunk,config["palette"])
+    axes = ModelHelpers.find_axes_from_markers(chunk,palette)
     if len(axes)==0:
         get_logger().warning("No axes on which to orient chunk %s",chunk.label)
         return
@@ -213,19 +208,7 @@ def reorient_model(chunk,config):
         ModelHelpers.move_model_to_world_origin(chunk)
 
 if __name__=="__main__":
-    def load_config_file(configpath):
-        """Loads config.json into a dictionary
-        
-        Parameters:
-        ---------------
-        configpath: path to config.json
-        
-        returns: dictionary of key value configurations.
-        """
-        cfg = {}
-        with open(configpath, encoding='utf-8') as f:
-            cfg = json.load(f)
-        return cfg["config"]
+
     
     def command_build_model(args):
         """Command line interface for building a one-off model. Can also be run from the parent directory via photogrammetryScripts.py
@@ -233,8 +216,7 @@ if __name__=="__main__":
         -------------
         args: the args passed in from the command line for the orient command.
         """
-        cfg = load_config_file(args.config)
-        build_basic_model(args.photos,args.jobname,args.outputdirectory,cfg["photogrammetry"])
+        build_basic_model(args.photos,args.jobname,args.outputdirectory)
     
     def orient_model(args):
         """Command line interface for reorienting the model.
@@ -243,11 +225,13 @@ if __name__=="__main__":
         ------------
         args: the args passed in from the command line for the orient command.
         """
-        cfg = load_config_file(args.config)
         doc = Metashape.Document()
+        cfg = Configurator.getConfig()
+        palette =  load_palettes()[cfg.getProperty("photogrammetry","palette")]
+
         if os.path.exists(args.psxpath):
             doc.open(path=args.psxpath)
-        reorient_model(doc.chunks[0],cfg["photogrammetry"])
+        reorient_model(doc.chunks[0],palette)
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="MetashapeTools")

@@ -8,74 +8,78 @@ import json
 import functools
 import photogrammetryScripts as phscripts
 from UI.PipelineFrame import *
+from util.Configurator import Configurator
 
 class ConfigFormItems(FormItemsInterface):
 
-    def __init__(self,config):
-        for k,v in config.items():
-            if isinstance(v,dict):
-                setattr(self,k,{})
-                for k1,v1 in v.items():
-                    val = v1
-                    sv = tk.StringVar()
-                    t = "string"
-                    if isinstance(v1,float):
-                        t="float"
-                    if isinstance(v1,int):
-                        t ="int"
-                    elif isinstance(v1,dict):
-                        val = json.dumps(v1)
-                        t="dict"
-                    elif isinstance(v1,list):
-                        val = json.dumps(v1)
-                        t="list"
-                    else:
-                        if v1 and Path(v1).exists():
-                            t = "path"
+    def __init__(self):
+        config = Configurator.getConfig()
+        for section in config.getSections():
+            setattr(self,section,{})
+            for prop in config.getPropertiesForSection(section):
+                val = config.getProperty(section,prop)
+                sv = tk.StringVar()
+                t = "string"
+                if isinstance(val,float):
+                    t="float"
+                if isinstance(val,int):
+                    t ="int"
+                elif isinstance(val,dict):
+                    val = json.dumps(val)
+                    t="dict"
+                elif isinstance(val,list):
+                    val = json.dumps(val)
+                    t="list"
+                else:
+                    if val and Path(val).exists():
+                        t = "path"
 
-                    sv.set(val)
-                    getattr(self,k)[k1]=(sv,t) 
+                sv.set(val)
+                getattr(self,section)[prop]=(sv,t) 
 
     def validate(self)->dict:
         msg = ""
         floatpat  = re.compile(r"^\d+\.\d+$")
         intpat = re.compile(r"^\d+$")
         valid = True
-        for attr in dir(self):
-            if isinstance(getattr(self,attr),dict):
-                for k,v in getattr(self,attr):
-
-                    try:
-                        if v[0].get():
-                            msg = f"Expecting value {k}:{v[0]} to be of type{v[1]}"
-                            if v[1] == "int":
-                                if not re.match(intpat,v[0].get()):
-                                    valid = False
-                            elif v[1]=="float":
-                                if not re.match(floatpat,v[0].get()):
+        config = Configurator.getConfig()
+        for section in config.getSections():
+            props = getattr(self,section)
+            for k,v in props.items():
+                try:
+                    itemval = v[0].get()
+                    if itemval:
+                        msg = f"Expecting value {k}:{v[0].get()} to be of type {v[1]}"
+                        if v[1] == "int":
+                            if not re.match(intpat,itemval):
+                                valid = False
+                        elif v[1]=="float":
+                            if not re.match(floatpat,itemval):
+                                valid=False
+                        elif v[1] =="path":
+                            pathitem = Path(itemval)
+                            if not pathitem.exists():
+                                valid = False
+                        elif v[1] == "dict":
+                            try:
+                                isinstance(json.loads(itemval),dict)
+                            except json.decoder.JSONDecodeError:
+                                valid = False
+                        elif v[1] == "list":
+                            try:
+                                if not isinstance(json.loads(itemval),list):
                                     valid=False
-                            elif v[1] =="path":
-                                if not Path(v[0].get()).exists():
-                                    valid = False
-                            elif v[1] == "dict":
-                                try:
-                                    isinstance(json.loads(v[0].get),dict)
-                                except json.decoder.JSONDecodeError:
-                                    valid = False
-                            elif v[1] == "list":
-                                try:
-                                    if not isinstance(json.loads(v[0].get),list):
-                                        valid=False
-                                except json.decoder.JSONDecodeError:
-                                    valid = False
-                            if not valid:
-                                break
-                        else:
-                            valid = False
-                            msg = "Expecting Value in {k}"
-                    except Exception:
-                        continue
+                            except json.decoder.JSONDecodeError:
+                                valid = False
+                        if not valid:
+                            break
+                    else:
+                        valid = False
+                        msg = "Expecting Value in {k}"
+                except Exception as e:
+                    raise e
         return {"valid":valid,"message":msg}
+    
     
                     
 
@@ -83,9 +87,19 @@ class ConfigWindow(tk.Toplevel):
 
 
     def resetConfig(self):
-        with open("config.json", "r",encoding="utf-8") as f:
-            self.config = json.load(f)["config"]
-        self.svars = ConfigFormItems(self.config)
+        Configurator.reloadConfigFromFile()
+
+    def setConfigVals(self):
+        #validate = self.svars.validate()
+        #if validate["valid"]:
+        config = Configurator.getConfig()
+        for section in config.getSections():
+            sectionconfig = getattr(self.svars,section)
+            for prop in config.getPropertiesForSection(section):
+                config.setProperty(section,prop,sectionconfig[prop][0].get())
+        #else:
+        #    messagebox.showerror("Validation Error", validate["message"])
+
 
     def __init__(self,container):
         def set_path(configname,variablename):
@@ -119,17 +133,18 @@ class ConfigWindow(tk.Toplevel):
 
 
         rowcounter = 0
-        self.resetConfig()
-        for k,v in self.config.items():
-            if isinstance(v,dict):
-                ttk.Label(interiorframe,text=k).grid(column=0,row=rowcounter)
-                ttk.Separator(interiorframe,orient="horizontal")
+        config = Configurator.getConfig()
+        self.svars = ConfigFormItems()
+        for k in config.getSections():
+            ttk.Label(interiorframe,text=k).grid(column=0,row=rowcounter)
+            ttk.Separator(interiorframe,orient="horizontal")
+            rowcounter+=1
+            for a in config.getPropertiesForSection(k):
+                ttk.Label(interiorframe,text=a).grid(column=0,row = rowcounter)
+                ttk.Entry(interiorframe,textvariable=getattr(self.svars,k)[a][0]).grid(column=1,row=rowcounter)
+                if getattr(self.svars,k)[a][1]=="path":
+                    ttk.Button(interiorframe,text="Browse",
+                                command=functools.partial(set_path,configname=k,variablename=a)).grid(column=2,row=rowcounter)
                 rowcounter+=1
-                for a in v.keys():
-                    ttk.Label(interiorframe,text=a).grid(column=0,row = rowcounter)
-                    ttk.Entry(interiorframe,textvariable=getattr(self.svars,k)[a][0]).grid(column=1,row=rowcounter)
-                    if getattr(self.svars,k)[a][1]=="path":
-                        ttk.Button(interiorframe,text="Browse",
-                                   command=functools.partial(set_path,configname=k,variablename=a)).grid(column=2,row=rowcounter)
-                    rowcounter+=1
+        ttk.Button(interiorframe, text="OK",command = lambda:self.setConfigVals()).grid(column=1,row=rowcounter)
     

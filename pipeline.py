@@ -1,13 +1,16 @@
 import tkinter as tk
 from tkinter import ttk
 from util import util
+from util.Configurator import Configurator
 import photogrammetryScripts
 from UI.BuildFrame import BuildFrame
 from UI.WatchFrame import WatchFrame
 from UI.SendFrame import SendFrame
 from UI.BuildConsole import BuildConsole, TextHanlder
 from UI.PipelineConfigFrame import ConfigWindow
-LOGGER = util.getLogger(__name__)
+import util.PipelineLogging as PipelineLogging
+
+LOGGER = PipelineLogging.getLogger(__name__)
 
 
 
@@ -30,24 +33,23 @@ class MainApp(tk.Tk):
         self.grid_rowconfigure(0,weight=1)
         self.grid_rowconfigure(0,weight=1)
         self.title("FM/ISAC Photogrammetry Pipeline")
-        config = photogrammetryScripts.load_config()
         self.notebook = ttk.Notebook(self)
         self.notebook.grid(column=0,row=0,sticky="NSEW")
 
         #setup build tab
-        self.build = BuildFrame(self.notebook, config)
+        self.build = BuildFrame(self.notebook)
         self.build.configure(padding=10)
         self.build.grid(column=0,row=0, sticky="NSEW")
         self.notebook.add(self.build, text="Build")
         
         #setup watch tab
-        self.watch = WatchFrame(self.notebook,config)
+        self.watch = WatchFrame(self.notebook)
         self.watch.configure(padding=10)
         self.watch.grid(column=0,row=0, sticky="NSEW")
         self.notebook.add(self.watch,text="Watch")
 
         #setup send tab
-        self.sender = SendFrame(self.notebook,config)
+        self.sender = SendFrame(self.notebook)
         self.sender.configure(padding=10)
         self.sender.grid(column=0,row=0)
         self.notebook.add(self.sender,text="Sender")
@@ -56,7 +58,7 @@ class MainApp(tk.Tk):
         self.console = BuildConsole(self)
         textHandler =  TextHanlder(self.console)
         self.console.grid(column=0,row=1,padx=3, pady=3, sticky="NSEW")
-        util.addLogHandler(textHandler)
+        PipelineLogging.addLogHandler(textHandler)
 
         #setup config panel
         configbutton = tk.Button(self,text="Configure", command = self.OpenConfigWindow)
