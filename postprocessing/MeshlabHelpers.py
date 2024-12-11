@@ -1,5 +1,7 @@
 import argparse
 import pymeshlab
+import sys
+sys.path.insert(0,'..')
 from util.InstrumentationStatistics import InstrumentationStatistics as statistics
 from util.InstrumentationStatistics import Statistic_Event_Types
 from pathlib import Path
