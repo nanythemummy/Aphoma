@@ -373,7 +373,6 @@ def move_model_to_world_origin(chunk):
     height = chunk.region.size.y
     print(chunk.region.size)
 
-   # chunk.resetRegion()
 
     newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
                                     [0,1,0,regioncenter[1]],
@@ -382,6 +381,7 @@ def move_model_to_world_origin(chunk):
     chunk.transform.matrix *=newtranslation.inv()
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()
+
 def align_markers_to_axes(chunk,axes): 
     """Takes the local coordinates y axis of the model as calculated from a marker pallette and aligns it with world Y axis in metashape.
     

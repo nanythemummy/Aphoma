@@ -22,7 +22,7 @@ class ConfigFormItems(FormItemsInterface):
                 t = "string"
                 if isinstance(val,float):
                     t="float"
-                if isinstance(val,int):
+                elif isinstance(val,int):
                     t ="int"
                 elif isinstance(val,dict):
                     val = json.dumps(val)

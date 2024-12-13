@@ -282,11 +282,14 @@ def watch_and_process_cmd(args):
     watcher.run()
 
 def build_snapshot(projname,basefolder):
-
+    cfg=Configurator.getConfig()
     fn  = get_export_filename(projname,"obj")
     objpath = Path(basefolder,"output",f"{fn}.obj")
     if objpath.exists():
-        MeshlabHelpers.snapshot(objpath,0.0,0.0,0.0,True)
+        MeshlabHelpers.snapshot(objpath,
+                                cfg.getProperty("postprocessing","rot_x"),
+                                cfg.getProperty("postprocessing","rot_y"),
+                                cfg.getProperty("postprocessing","rot_z"),True)
 
 #This script contains the full automation flow and is triggered by the watcher
 def build_model_from_manifest(manifestfile:str):
