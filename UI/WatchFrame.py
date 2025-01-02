@@ -51,7 +51,7 @@ class WatchFrame(PipelineFrameBase):
             print(mask_option)
 
             Configurator.getConfig().setProperty("processing","ListenerDefaultMasking", MaskingOptions.numToFriendlyString(mask_option))
-            self.watcher = phscripts.Watcher(self.config,args.input_dir.get(), False) 
+            self.watcher = phscripts.Watcher(args.input_dir.get(), False) 
             self.stopbutton.configure(state="normal")
             self.watcher.run()
         except Exception as e:

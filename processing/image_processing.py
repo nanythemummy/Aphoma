@@ -32,8 +32,8 @@ def build_masks(imagepath,outputdir,mode):
         os.mkdir(outputdir)
     friendlystring = util.MaskingOptions.numToFriendlyString(mode)
     #config.setProperty("processing","ListenerDefaultMasking") = friendlystring
-    if mode.value == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET or \
-        mode.value == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
+    if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET or \
+        mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
         build_masks_with_droplet(imagepath,outputdir,friendlystring)
     else:
         if Path(imagepath).is_dir():
@@ -75,7 +75,7 @@ def build_masks_with_droplet( imagefolder, outputpath, masktype):
     outputpath: the folder where the masks will ultimately be stored.
     config: a dictionary of config values--the whole dictionary under config.json->processing.
     """
-    logger = util.PipelineLogging.getLogger(__name__)
+    logger = getLogger(__name__)
     dropletpath = Configurator.getConfig().getProperty("processing",masktype)
 
     dropletoutput = Configurator.getConfig().getProperty("processing","Droplet_Output")

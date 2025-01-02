@@ -196,7 +196,7 @@ class Watcher:
     __init__(self,directory):initializes the class to watch a particular directory, configurabe in config.json.
     run(): makes a watcherHandler object and waits for it to intercept filesystem events.
     """
-    def __init__(self, watchdir:str, isSender = False, projectname=""):
+    def __init__(self,  watchdir:str, isSender = False, projectname=""):
         self.observer = Observer()
         self.watched_dir = watchdir
         self.isSender = isSender
