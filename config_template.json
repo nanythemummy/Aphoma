@@ -19,14 +19,7 @@
             "CV2_Export_Type":".png"
 
         },
-        "postprocessing":
-        {
-            "script_directory":"",
-            "blender_exec":"",
-            "scale_path":"",
-            "sketchfab_api_key":"Don't put this on github",
-            "sketchfab_api_url":"https://api.sketchfab.com/v3"
-        },
+
         "ortery":
         {
             "pics_per_revolution":24,
@@ -49,6 +42,15 @@
             "temp_scratch":"E:\\temp",
             "networkdrive":""
         },
+        "postprocessing":
+        {
+            "script_directory":"",
+            "blender_exec":"",
+            "scale_path":"",
+            "rot_x":0.0,
+            "rot_y":0.0,
+            "rot_z":0.0
+        },
         "photogrammetry":
         {
             "sparse_cloud_quality":1,
@@ -70,7 +72,8 @@
             "texture_size":4096,
             "texture_count":1,
             "export_as":"",
-            "palette":"small_axes_palette"
+            "palette":"small_axes_palette",
+            "build_low_res":false
         }
 
     }

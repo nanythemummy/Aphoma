@@ -4,6 +4,7 @@ from tkinter import messagebox, filedialog
 from pathlib import Path
 import photogrammetryScripts as phscripts
 from UI.PipelineFrame import *
+from util.Configurator import Configurator
 
 
 class SendFormItems(FormItemsInterface):
@@ -48,9 +49,9 @@ class SendFrame(PipelineFrameBase):
         try:
             self.disable_enable_all(True)
             self.state = "running"
-            self.config["ortery"]["networkdrive"] = args.target_dir.get()
+            Configurator.getConfig().setProperty("ortery","networkdrive",args.target_dir.get())
             phscripts.PRUNE = args.should_prune.get()
-            self.watcher = phscripts.Watcher(self.config,args.input_dir.get(), True, args.projectname.get()) 
+            self.watcher = phscripts.Watcher(args.input_dir.get(), True, args.projectname.get()) 
             self.watcher.maskmode = 0
             self.stopbutton.configure(state="normal")
             self.watcher.run()
@@ -60,9 +61,9 @@ class SendFrame(PipelineFrameBase):
         finally:
             self.disable_enable_all(False)
 
-    def __init__(self,container,config):
+    def __init__(self,container):
 
-        super().__init__(container,config)
+        super().__init__(container)
         self.watcher = None
         self.svars = SendFormItems()
 
@@ -71,13 +72,13 @@ class SendFrame(PipelineFrameBase):
         projectname.grid(column=0,row=1,sticky=("WE"))
 
         ttk.Label(self,text="Ortery Temp Directory").grid(column=0,row=2)
-        self.svars.input_dir.set(config["watcher"]["listen_and_send"])
+        self.svars.input_dir.set(Configurator.getConfig().getProperty("watcher","listen_and_send"))
         directory = ttk.Entry(self, width=25, textvariable=self.svars.input_dir)
         directory.grid(column=0,row=3,sticky=("WE"))
         ttk.Button(self,text="Browse",command = lambda:self.svars.input_dir.set(filedialog.askdirectory())).grid(column=1,row=3)
        
         ttk.Label(self,text="Network Transfer Directory").grid(column=0,row=4)
-        self.svars.target_dir.set(config["watcher"]["networkdrive"])
+        self.svars.target_dir.set(Configurator.getConfig().getProperty("watcher","networkdrive"))
         transferdir = ttk.Entry(self, width=25, textvariable=self.svars.target_dir)
         transferdir.grid(column=0,row=5,sticky=("WE"))
         ttk.Button(self,text="Browse",command = lambda:self.svars.target_dir.set(filedialog.askdirectory())).grid(column=1,row=5)

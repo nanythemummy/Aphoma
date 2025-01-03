@@ -1,13 +1,12 @@
 """This module does a lot of metashape specific operations on the model, such as marker detection and loading the different marker palettes.
 The code in MetashapeTools.py should focus on orchestration, and most number-crunching should happen here."""
 
-import json
 import math
-from os import path
 import Metashape
-from util import util
+from util.util import load_palettes
+from util.PipelineLogging import getLogger as getGlobalLogger
 
-LOGGER = util.getLogger(__name__)
+LOGGER = getGlobalLogger(__name__)
 targetTypes = {
     "Circular":Metashape.TargetType.CircularTarget,
     "12bit":Metashape.TargetType.CircularTarget12bit,
@@ -16,19 +15,6 @@ targetTypes = {
     "20bit":Metashape.TargetType.CircularTarget20bit,
     "Cross":Metashape.TargetType.CrossTarget
 }
-
-def load_palettes():
-    """Loads MarkerPalettes.json and returns a dictionary of different palettes.
-    Different marker palettes may be used while doing photo capture in order to perform various calculations at the 
-    model building stage. The palette used is specified in config.json->photogrammetry-> palette, which is used as a key to locate
-    the specific data needed for each palette. This data is stored in MarkerPalettes.json
-    """
-
-    #going to hardcode this path for now. Maybe come back and configure it.
-    palette = {}
-    with open(path.join("util/MarkerPalettes.json"), encoding = "utf-8") as f:
-        palette = json.load(f)
-    return palette["palettes"]
 
 def set_chunk_accuracy(chunk):
 
@@ -113,7 +99,7 @@ def are_points_colinear(point1,point2,point3):
         lengdet = math.sqrt(det.x**2+det.y**2+det.z**2)
         return abs(lengdet) < smol
     except AttributeError:
-        return False #Turns out points can have no position. who would have t
+        return False #Turns out points can have no position. who would have thought it.
     
 
 def build_scalebars_from_sequential_targets(chunk, scalebardefinitions):
@@ -195,15 +181,24 @@ def close_holes(chunk):
       chunk.model.closeHoles(level = threshold)
 
 def cleanup_blobs(chunk):
-    """Cleans up freestanding floating geometry that has less <= 60% of the faces of the total faces in the model.
+    """Cleans up freestanding floating geometry leaving the largest object behind.
     
     Parameters:
     ---------------
     Chunk: the metashape chunk we want to act on.
     """
     if chunk.model:
-        threshold = int(len(chunk.model.faces) * 0.6)
-        chunk.model.removeComponents(threshold)
+        stats = chunk.model.statistics()
+        while stats.components>1:
+            #when there are a lot of blobs, assume that the largest one is the one we want to keep. We don't have a list of the blobs, but we do know how many there are.
+            #so, take the average and keep filtering until there is one left, and that will be the largest.
+            faceave = math.ceil(stats.faces/stats.components)
+            stats = removeComponentsUnderFaceThreshold(chunk,faceave)
+        removeComponentsUnderFaceThreshold(chunk,0)
+
+def removeComponentsUnderFaceThreshold(chunk,threshold):
+    chunk.model.removeComponents(threshold)
+    return chunk.model.statistics()
     
 def detect_markers(chunk, markertype:str):
     """Given a metashape chunk, detect the markers that occur in that chunk. These will be stored by metashape under chunk->markers
@@ -258,7 +253,7 @@ def optimize_cameras(chunk, final_optimization=False):
                           tiepoint_covariance=False)
     
 
-def refine_sparse_cloud(doc,chunk,config):
+def refine_sparse_cloud(doc,chunk,error_thresholds:dict):
     """Performs the error reduction/optimization algorithm as described by Neffra Matthews and Noble,Tommy. "In the Round Tutorial", 2018. 
     
     Parameters:
@@ -275,7 +270,6 @@ def refine_sparse_cloud(doc,chunk,config):
     #get number of points before refinement:
     
     #Remove points with reconstruction uncertainty error above threshold.
-    error_thresholds = config["error_thresholds"]
     remove_above_error_threshold(chunk,
                               Metashape.TiePoints.Filter.ReconstructionUncertainty,
                               error_thresholds["reconstruction_uncertainty"],
@@ -302,24 +296,6 @@ def refine_sparse_cloud(doc,chunk,config):
         num_points = len(chunk.tie_points.points)
     optimize_cameras(chunk,True)
     doc.save()
-
-def get_export_filename(chunkname:str,config:dict, type:str):
-    """Constructs a filename for the export encoding features of the model such as the scale unit and filetype.
-
-    Parameters:
-    ------------------
-    chunkname: Should be the acession nubmer of the object.
-    config: a dictionary of config values, probably under Photogrammetry in config.json"
-    
-    returns:string with proposed filename for export file. """
-    scaleunit ="mm"
-    if config["palette"]:
-        palette = load_palettes()[config["palette"]]
-        scaleunit = palette["unit"]
-    type = type.replace('.','')
-    exporttype = type.upper()
-    exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
-    return exportname
 
 def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
     """ This attempts to select and remove all points above a given error threshold in max_error, up to a maximum percentage of acceptable points to remove, max_points. 
@@ -363,7 +339,7 @@ def find_axes_from_markers(chunk,palette:str):
 
     returns: a list of unit vectors corresponding to x,y, and z axes.
     """
-    palette = load_palettes()[palette]
+
     if not chunk.markers:
         print("No marker palette defined or markers detected. Cannot detect orientation from palette.")
         return []
@@ -406,7 +382,6 @@ def move_model_to_world_origin(chunk):
     height = chunk.region.size.y
     print(chunk.region.size)
 
-   # chunk.resetRegion()
 
     newtranslation = Metashape.Matrix([[1,0,0,regioncenter[0]],
                                     [0,1,0,regioncenter[1]],
@@ -415,6 +390,7 @@ def move_model_to_world_origin(chunk):
     chunk.transform.matrix *=newtranslation.inv()
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()
+
 def align_markers_to_axes(chunk,axes): 
     """Takes the local coordinates y axis of the model as calculated from a marker pallette and aligns it with world Y axis in metashape.
     

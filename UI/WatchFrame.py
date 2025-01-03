@@ -1,9 +1,11 @@
 from tkinter import *
 from tkinter import ttk
+import shutil
 from tkinter import messagebox, filedialog
 from pathlib import Path
 from UI.UIconsts import UIConsts
-from util.util import MaskingOptions
+from util.util import MaskingOptions, delete_manifests_images
+from util.Configurator import Configurator
 from util.InstrumentationStatistics import InstrumentationStatistics
 import photogrammetryScripts as phscripts
 from UI.PipelineFrame import FormItemsInterface,PipelineFrameBase
@@ -41,14 +43,23 @@ class WatchFrame(PipelineFrameBase):
             if self.watcher:
                 self.watcher.stoprequest=True
                 self.after(5,self.update_buttons)
-                
+
+    def clear_directories(self):
+        temp = Configurator.getConfig().getProperty("watcher","temp_scratch")
+        listen = Configurator.getConfig().getProperty("watcher","listen_directory")
+        proceed= messagebox.askokcancel("Clear Directories?",f"This operation will clear the temp directory {temp} \n and the listen directory {listen}. \n Proceed?")
+        if proceed:
+            delete_manifests_images(listen)
+            if Path(temp).exists():
+                shutil.rmtree(temp)
+        
     def task(self,args:WatchFormItems):
         try:
             self.disable_enable_all(True)
             self.state = "running"
             mask_option = UIConsts.MASKOPTIONS[args.masking_option.get()]
-            self.config["processing"]["ListenerDefaultMasking"] = MaskingOptions.numToFriendlyString(mask_option)
-            self.watcher = phscripts.Watcher(self.config,args.input_dir.get(), False) 
+            Configurator.getConfig().setProperty("processing","ListenerDefaultMasking", MaskingOptions.numToFriendlyString(mask_option))
+            self.watcher = phscripts.Watcher(args.input_dir.get(), False) 
             self.stopbutton.configure(state="normal")
             self.watcher.run()
         except Exception as e:
@@ -57,14 +68,15 @@ class WatchFrame(PipelineFrameBase):
         finally:
             self.disable_enable_all(False)
 
-    def __init__(self,container,config):
+    def __init__(self,container):
 
-        super().__init__(container,config)
+        super().__init__(container)
         maskoptionvals = [*UIConsts.MASKOPTIONS.keys()]
         self.watcher = None
         self.svars = WatchFormItems()
         ttk.Label(self,text="Listen Directory").grid(column=0,row=1)
-        self.svars.input_dir.set(config["watcher"]["listen_directory"])
+
+        self.svars.input_dir.set(Configurator.getConfig().getProperty("watcher","listen_directory"))
         directory = ttk.Entry(self, width=25, textvariable=self.svars.input_dir)
         directory.grid(column=0,row=2,sticky=("WE"))
         ttk.Button(self,text="Browse",command = lambda:self.svars.input_dir.set(filedialog.askdirectory())).grid(column=1,row=2)
@@ -76,5 +88,7 @@ class WatchFrame(PipelineFrameBase):
         self.watchbutton.grid(column=0, row=5)
         self.stopbutton = ttk.Button(self,text="Stop",state = "disabled",command=lambda:self.stop_watching())
         self.stopbutton.grid(column=1,row=5)
+        self.clearbutton = ttk.Button(self,text="Purge Temp Directories",command=lambda:self.clear_directories())
+        self.clearbutton.grid(column=3,row=5)
         self.state  = "stopped"
     

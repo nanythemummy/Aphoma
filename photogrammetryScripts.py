@@ -1,6 +1,5 @@
 
-import logging
-import logging.config
+
 import msvcrt
 import os.path, json, argparse
 from datetime import datetime
@@ -8,17 +7,19 @@ import time
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from util import util
+from util.util import MaskingOptions, copy_file_to_dest, should_prune, get_export_filename
+from util.PipelineLogging import getLogger as getGlobalLogger
+from util.Configurator import Configurator
 from util.InstrumentationStatistics import InstrumentationStatistics as statistics
 from util.InstrumentationStatistics import Statistic_Event_Types
 from processing import image_processing
 from transfer import transferscripts
-from photogrammetry.ModelHelpers import get_export_filename
+
 from postprocessing import MeshlabHelpers
 from util.buildManifest import Manifest
-from util.util import should_prune
+
 def get_logger():
-    return util.getLogger(__name__)
+    return getGlobalLogger(__name__)
 #Global Variables
 #because the callback methods are static for the watchers, we need a place to store the manifest of the files they are transfering.
 MANIFEST = None
@@ -44,7 +45,7 @@ def process_images(args):
     image_processing.process_image(args.inputimage,args.outputdir,_CONFIG["processing"])
 
 
-def verifyManifest(config:dict, manifest:dict, basedir):
+def verifyManifest( manifest:dict, basedir):
     """Goes through a dictionary taken from a manifest file on disk and checks to see that all of
     the RAW files are there, all the mask files have been made, and all of the tifs have been made.
     
@@ -56,14 +57,15 @@ def verifyManifest(config:dict, manifest:dict, basedir):
     returns: succeeded, full_manifest, where succeeded is true if all the masks and tifs and raw files expected were found, and 
     manifest contains each of these files and their full paths in the format {"raw":[],"tif":[],"masks":[]}"""
     #check to see if all the masks and tifs have been made for this manifest.
-    scratchdir = config["watcher"]["temp_scratch"]
+    config = Configurator.getConfig()
+    scratchdir = config.getProperty("watcher","temp_scratch")
     foundallfiles=True
     project = next(iter(manifest))
     files = manifest[project]["files"]
-    destformat = config["processing"]["Destination_Type"].upper()
+    destformat = config.getProperty("processing","Destination_Type").upper()
     fullmanifest = {"source":[],"masks":[],"processed":[]}
     maskpath = os.path.join(scratchdir,"Masks")
-    maskext=config["photogrammetry"]["mask_ext"]
+    maskext=config.getProperty("photogrammetry","mask_ext")
     isMasked = manifest[project]["maskmode"] !=0
     for f in files:
         basename_with_ext = os.path.split(f)[1]
@@ -77,7 +79,7 @@ def verifyManifest(config:dict, manifest:dict, basedir):
             processedpath = os.path.join(scratchdir,"processed")
             if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
                 get_logger().info("Did not find %s  file for %s in %s. Attempting to convert or transfer.",destformat,basename_with_ext,processedpath)
-                image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,config["processing"])                   
+                image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,destformat)                   
 
             processedfile = os.path.join(processedpath,f"{basename}{destformat}")
             fullmanifest["processed"].append(processedfile)
@@ -87,15 +89,13 @@ def verifyManifest(config:dict, manifest:dict, basedir):
                     get_logger().info("Warning: did not find mask for %s in %s. Attempting to make one.", basename_with_ext,maskpath)
                     image_processing.build_masks(processedfile,
                                                  maskpath,
-                                                 manifest[project]["maskmode"],
-                                                 config["processing"])
+                                                 manifest[project]["maskmode"])
                 maskfile = os.path.join(maskpath,f"{basename}{maskext}")
                 fullmanifest["masks"].append(maskfile)
                 foundallfiles &= os.path.exists(maskfile)
     return foundallfiles,fullmanifest
 
 class WatcherSenderHandler(FileSystemEventHandler):
-    _CONFIGLOCAL = {}
     """Listen in the specified directory for cr2 files. It extends Watchdog.FilesystemEventHandler"""
     @staticmethod
     def on_any_event(event):
@@ -110,18 +110,19 @@ class WatcherSenderHandler(FileSystemEventHandler):
         if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
             fn = os.path.splitext(event.src_path)[0]
             if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
-                if not should_prune(event.src_path,WatcherSenderHandler._CONFIGLOCAL["ortery"]):
+                if not should_prune(event.src_path):
                     last_size = -1
                     current_size = os.path.getsize(event.src_path)
                     while True:
-                        time.sleep(3)
+                        time.sleep(1)
                         last_size = current_size
                         current_size = os.path.getsize(event.src_path)
                         get_logger().debug("%s :%s for %s",last_size,current_size,event.src_path)
                         if current_size==last_size:
                             break
                     if current_size >0:    
-                        transferscripts.transferToNetworkDirectory(WatcherSenderHandler._CONFIGLOCAL["watcher"]["networkdrive"], [event.src_path])
+                        netdrive = Configurator.getConfig().getProperty("watcher","networkdrive")
+                        transferscripts.transferToNetworkDirectory(netdrive, [event.src_path])
                         fn = Path(event.src_path).name
                         global MANIFEST
                         MANIFEST.addFile(fn)
@@ -131,16 +132,15 @@ class WatcherSenderHandler(FileSystemEventHandler):
 class WatcherRecipientHandler(FileSystemEventHandler):
     """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
     It extends Watchdog.FilesystemEventHandler."""
-    _CONFIGLOCAL = {}
     @staticmethod
     def process_incomming_file(eventpath):
-
+        config = Configurator.getConfig()
         if eventpath.endswith("_manifest.txt"):
-            build_model_from_manifest(WatcherRecipientHandler._CONFIGLOCAL,eventpath)
+            build_model_from_manifest(eventpath)
         else:
-            scratchdir = WatcherRecipientHandler._CONFIGLOCAL["watcher"]["temp_scratch"]
-            maskpath = os.path.join(scratchdir,WatcherRecipientHandler._CONFIGLOCAL["photogrammetry"]["mask_path"])
-            desttype = WatcherRecipientHandler._CONFIGLOCAL["processing"]["Destination_Type"]
+            scratchdir = config.getProperty("watcher","temp_scratch")
+            maskpath = os.path.join(scratchdir,config.getProperty("photogrammetry","mask_path"))
+            desttype =config.getProperty("processing","Destination_Type")
             imagetypes = [".CR2",".JPG",".TIF"]
             eventpathext = os.path.splitext(eventpath)[1].upper()
             processedpath = os.path.join(scratchdir,"processed")
@@ -148,16 +148,16 @@ class WatcherRecipientHandler(FileSystemEventHandler):
             basename = os.path.splitext(basename_with_ext)[0]
             
             if eventpathext in imagetypes and eventpathext != desttype.upper():
-                image_processing.process_image(eventpath,processedpath,WatcherRecipientHandler._CONFIGLOCAL["processing"])
+                image_processing.process_image(eventpath,processedpath,desttype)
             elif eventpathext ==desttype.upper():
-                util.copy_file_to_dest([eventpath],processedpath, False)
+                copy_file_to_dest([eventpath],processedpath, False)
             else:
                 print("Unrecognized filetype: {eventpathext}")
                 return
-            defmask = WatcherRecipientHandler._CONFIGLOCAL["processing"]["ListenerDefaultMasking"]
-            mode = util.MaskingOptions.friendlyToEnum(defmask)
-            if mode != util.MaskingOptions.NOMASKS:
-                image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode, WatcherRecipientHandler._CONFIGLOCAL["processing"])
+            defmask = config.getProperty("processing","ListenerDefaultMasking")
+            mode = MaskingOptions.friendlyToEnum(defmask)
+            if mode !=  MaskingOptions.NOMASKS.value:
+                image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode)
 
 
     @staticmethod
@@ -196,9 +196,8 @@ class Watcher:
     __init__(self,directory):initializes the class to watch a particular directory, configurabe in config.json.
     run(): makes a watcherHandler object and waits for it to intercept filesystem events.
     """
-    def __init__(self,config:dict, watchdir:str, isSender = False, projectname=""):
+    def __init__(self,  watchdir:str, isSender = False, projectname=""):
         self.observer = Observer()
-        self.config = config
         self.watched_dir = watchdir
         self.isSender = isSender
         self.projectname = projectname
@@ -210,8 +209,7 @@ class Watcher:
         and sleeps until there is either an exception or the user presses the F key. Note that this non-blocking user input check is 
         Windows Only and will have to be fixed to make this script mac/linux compatible. When the user hits the F key, if they are running
         the listen_and_send scripts, it will send a manifest of the files that were transfered."""
-        logger = util.logging.getLogger()
-        WatcherRecipientHandler._CONFIGLOCAL = WatcherSenderHandler._CONFIGLOCAL = self.config
+
         if not self.isSender:
             handler = WatcherRecipientHandler()
             
@@ -219,6 +217,7 @@ class Watcher:
             global MANIFEST
             MANIFEST = Manifest(self.projectname, self.maskmode)
             handler = WatcherSenderHandler()
+
         self.observer.schedule(handler,self.watched_dir,recursive=True)
         self.observer.start()
         try:
@@ -226,7 +225,7 @@ class Watcher:
             listening=True
             print("Type F to Finish.")           
             while listening :
-                time.sleep(5)
+                time.sleep(1)
                 if msvcrt.kbhit() or self.stoprequest:
                     if self.stoprequest or (msvcrt.getch()=='F'):
                         listening=False
@@ -242,7 +241,8 @@ class Watcher:
            
             manifestpath=MANIFEST.finalize(".").resolve()
             get_logger().info("Sending manifest %s",manifestpath)
-            transferscripts.transferToNetworkDirectory(self.config["watcher"]["networkdrive"],[manifestpath])
+            netdrive = Configurator.getConfig().getProperty("watcher","networkdrive")
+            transferscripts.transferToNetworkDirectory(netdrive,[manifestpath])
 
 def listen_and_send(args):
     """Listens for incoming cr2 files and sends them to the network drive to be converted to tifs and then processed"
@@ -253,13 +253,13 @@ def listen_and_send(args):
     pics will be created by the photography software . 
     Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
     """
-    inputdir =  _CONFIG["watcher"]["listen_and_send"]
+    inputdir =  Configurator.getConfig().getProperty("watcher","listen_and_send")
     global PRUNE
     PRUNE = args.prune
     masktype = int(args.maskoption) if args.maskoption else 0
     if not os.path.exists(inputdir):
         print(f"Cannot listen on a directory that does not exist: {inputdir}")
-    watcher = Watcher(_CONFIG,inputdir,isSender=True, projectname = args.projectname)
+    watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
     watcher.maskmode = masktype
 
     watcher.run()
@@ -272,65 +272,67 @@ def watch_and_process_cmd(args):
     inputdir: a directory to listen on. If this is not specified in the command line, the watcher->listen directory 
     will be used from config.json.
     """
-    inputdir = args.inputdir if args.inputdir else _CONFIG["watcher"]["listen_directory"]
-    scratchdir = _CONFIG["watcher"]["temp_scratch"]
+    inputdir = args.inputdir if args.inputdir else Configurator.getConfig().getProperty("watcher","listen_directory")
+    scratchdir = Configurator.getConfig().getProperty("watcher","temp_scratch")
     if not os.path.exists(scratchdir):
         os.mkdir(scratchdir)
     if not inputdir:
         print("Input Directory needed if not provided in config.json. (Check Watcher:Listen_Directory)")
         return
-    watcher = Watcher(_CONFIG,inputdir,isSender=False)
+    watcher = Watcher(inputdir,isSender=False)
     watcher.run()
-def build_snapshot(projname,basefolder,config):
-    fn  = get_export_filename(projname,config["photogrammetry"],"obj")
+
+def build_snapshot(projname,basefolder):
+    cfg=Configurator.getConfig()
+    fn  = get_export_filename(projname,"obj")
     objpath = Path(basefolder,"output",f"{fn}.obj")
     if objpath.exists():
-        MeshlabHelpers.snapshot(objpath,config,0.0,0.0,0.0,True)
+        MeshlabHelpers.snapshot(objpath,
+                                cfg.getProperty("postprocessing","rot_x"),
+                                cfg.getProperty("postprocessing","rot_y"),
+                                cfg.getProperty("postprocessing","rot_z"),True)
 
 #This script contains the full automation flow and is triggered by the watcher
-def build_model_from_manifest(config:dict,manifestfile:str):
+def build_model_from_manifest(manifestfile:str):
     """Builds a model from the files listed in a text file manifest.
 
     Parameters:
     -----------
     manifest: A path to a text file manifest with a comma seperated list of paths to image files.
     """
+    config = Configurator.getConfig()
     filestoprocess=[]
     parentdir= os.path.abspath(os.path.join(manifestfile,os.pardir))
     manifest = {}
     with open(manifestfile,"r",encoding="utf-8") as f:
         manifest = json.load(f)
     projname = next(iter(manifest))
-    masktype = manifest[projname]["maskmode"] = util.MaskingOptions(manifest[projname]["maskmode"]) or util.MaskingOptions.friendlyToEnum(config["processing"]["ListenerDefaultMasking"])
+    masktype = manifest[projname]["maskmode"] = MaskingOptions(manifest[projname]["maskmode"]) or MaskingOptions.friendlyToEnum(config.getProperty("processing","ListenerDefaultMasking"))
     sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_TAKE_PHOTO,
                                                         manifest[projname]["photo_start_time"])
     statistics.getStatistics().timeEventEnd(sid,
                                              manifest[projname]["photo_end_time"])
-    succeeded, filestoprocess = verifyManifest(config,manifest, parentdir)
+    succeeded, filestoprocess = verifyManifest(manifest, parentdir)
 
     if succeeded:
         #if the configured project directory doesn't exist, make it.
-        project_base =os.path.join(config["watcher"]["project_base"])
+        project_base =os.path.join(config.getProperty("watcher","project_base"))
         if not os.path.exists(project_base):
             os.mkdir(project_base)
         #setup project directories.
         project_folder = os.path.join(project_base,projname)
         if not os.path.exists(project_folder):
             os.mkdir(project_folder)
-        masks = os.path.join(project_folder,config["photogrammetry"]["mask_path"])
-        util.copy_file_to_dest(filestoprocess["masks"],masks, True)
+        masks = os.path.join(project_folder,config.getProperty("photogrammetry","mask_path"))
+        copy_file_to_dest(filestoprocess["masks"],masks, True)
         processed= os.path.join(project_folder,"processed")
-        util.copy_file_to_dest(filestoprocess["processed"],processed, True)
+        copy_file_to_dest(filestoprocess["processed"],processed, True)
         source = os.path.join(project_folder,"source")
-        util.copy_file_to_dest(filestoprocess["source"],source, True)
+        copy_file_to_dest(filestoprocess["source"],source, True)
+        build_model(projname,processed,project_folder,masktype,snapshot=True)
 
-        build_model(projname,processed,project_folder,config,masktype,snapshot=True)
-        #fn  = get_export_filename(projname,config["photogrammetry"],"obj")
-        #objpath = Path(project_folder,"output",f"{fn}.obj")
-        #if objpath.exists():
-        #    MeshlabHelpers.snapshot(objpath,config)
                     
-def build_model(jobname,inputdir,outputdir,config,mask_option=util.MaskingOptions.NOMASKS,snapshot=False):
+def build_model(jobname,inputdir,outputdir,mask_option=MaskingOptions.NOMASKS,snapshot=False):
     """Given a folder full of pictures, this function builds a 3D Model.
 
     Parameters:
@@ -341,7 +343,7 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=util.MaskingOption
     config: the full contents of config.json.
     nomasks: boolean value determining whether to build masks or not.
     """
-
+    config = Configurator.getConfig()
     try:
         from photogrammetry import MetashapeTools
         if not os.path.exists(outputdir):
@@ -352,24 +354,23 @@ def build_model(jobname,inputdir,outputdir,config,mask_option=util.MaskingOption
         with os.scandir(inputdir) as it:
             for f in it:
                 if os.path.isfile(f):
-                    if f.name.upper().endswith(config["processing"]["Source_Type"]):
-                        tifpath = os.path.join(outputdir,config["processing"]["Destination_Type"][1:])
+                    if f.name.upper().endswith(config.getProperty("processing","Source_Type")):
+                        tifpath = os.path.join(outputdir,config.getProperty("processing","Destination_Type")[1:])
                         if not os.path.exists(tifpath):
                             os.mkdir(tifpath)
-                        image_processing.process_image(f.path,tifpath,config['processing'])
+                        image_processing.process_image(f.path,tifpath,config.getProperty("processing","Destination_Type"))
                         processedpath = tifpath       
-        if mask_option != util.MaskingOptions.NOMASKS:
-            maskpath = os.path.join(outputdir,config["photogrammetry"]["mask_path"])
+        if mask_option != MaskingOptions.NOMASKS:
+            maskpath = os.path.join(outputdir,config.getProperty("photogrammetry","mask_path"))
             if not os.path.exists(maskpath):
                 os.mkdir(maskpath)
-                image_processing.build_masks(processedpath,maskpath,mask_option,config["processing"])
+                image_processing.build_masks(processedpath,maskpath,mask_option)
         MetashapeTools.build_basic_model(photodir=processedpath,
                                          projectname=jobname,
-                                         projectdir=outputdir, 
-                                         config=config["photogrammetry"],
+                                         projectdir=outputdir,
                                          maskoption=mask_option)
         if snapshot:
-            build_snapshot(jobname,outputdir,config)
+            build_snapshot(jobname,outputdir)
         statistics.getStatistics().logReport()
         statistics.destroyStatistics()
     except ImportError as e:
@@ -387,7 +388,7 @@ def build_model_cmd(args):
     photoinput = args.photos
     outputdir = args.outputdirectory
     maskoption = int(args.maskoption)
-    build_model(job,photoinput,outputdir,_CONFIG,util.MaskingOptions(maskoption))
+    build_model(job,photoinput,outputdir, MaskingOptions(maskoption))
     
 
 
@@ -431,7 +432,7 @@ def build_masks_cmd(args):
     """
     input = args.inputdir
     output = args.outputdir
-    image_processing.build_masks(input,output,int(args.maskoption),_CONFIG["processing"])
+    image_processing.build_masks(input,output,int(args.maskoption))
 
 def convert_raw_to_format_cmd(args):
     """wrapper script for using the RAW image conversion fucntions via the command line.
@@ -451,9 +452,9 @@ def convert_raw_to_format_cmd(args):
             if os.path.isfile(f):
                 if f.name.upper().endswith(".CR2"): #CANON CAMERA!
                     if args.dng:
-                        image_processing.convert_CR2_to_DNG(os.path.join(f),outputdir, _CONFIG["processing"])
+                        image_processing.convert_CR2_to_DNG(os.path.join(f),outputdir)
                     if args.tif:
-                        image_processing.convert_CR2_to_TIF(os.path.join(f),outputdir, _CONFIG["processing"])
+                        image_processing.convert_CR2_to_TIF(os.path.join(f),outputdir)
                     if args.jpg:
                         image_processing.convertToJPG(os.path.join(f),outputdir)
                 elif f.name.upper().endswith("TIF") and args.jpg:

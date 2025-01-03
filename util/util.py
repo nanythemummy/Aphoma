@@ -1,38 +1,24 @@
 """Utility functions, mainly for dealing with configuration."""
+
 from pathlib import Path, PurePath
 import json
-import logging
+import logging.config
 import shutil
 import os
 import re
 import argparse
 from enum import Enum
-from datetime import datetime
+from util.Configurator import Configurator
+
+
 
 
 
 def getPaletteOptions():
     pals = {}
-    with open(PurePath(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
+    with open(Path(Path(__file__).parent,"MarkerPalettes.json"), 'r',encoding="utf-8") as f:
         pals = json.load(f)
     return list(pals["palettes"].keys())
-
-def getLogger(name):
-    
-    if name == "__main__":
-        logger = logging.getLogger()
-        logging.config.fileConfig('logging.conf')
-    else:
-        logger = logging.getLogger(name)
-        logger.setLevel(logging.DEBUG)
-    return logger
-
-def addLogHandler(handler):
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(formatter)
-    logger  = logging.getLogger()
-    logger.addHandler(handler)
 
 class MaskingOptions(Enum):
     """Class containing constants for masking options."""
@@ -44,22 +30,31 @@ class MaskingOptions(Enum):
      
     @classmethod 
     def getFriendlyStrings(cls):
-        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","Thresholding","EdgeDetection"]
+        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","EdgeDetection","Thresholding"]
     @classmethod
     def numToFriendlyString(cls, num): 
         if isinstance(num, MaskingOptions):
             num = num.value
         return MaskingOptions.getFriendlyStrings()[num]
     @classmethod 
-    def friendlyToEnum(cls, friendly:str):
+    def friendlyToEnum(cls, searchstring:str):
         friendly = MaskingOptions.getFriendlyStrings()
         for i,fr in enumerate(friendly):
-            if fr is friendly:
+            if fr is searchstring:
                 return MaskingOptions(i)
         return 0
 
         
+def delete_manifests_images(directory):
+    dir = Path(directory)
+    imtypes = ["cr2","jpg","tif","nef"]
+    if dir.exists():
+        files = [f for f in os.listdir(dir) if Path(dir,f).is_file()]
+        for fl in files:
+            if Path(fl).suffix in imtypes or Path(fl).stem.endswith("_manifest"):
+                os.remove(Path(dir,fl))
 
+           
 
     
 def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
@@ -71,7 +66,7 @@ def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     * destpath: a string path to move them to.
     """
     if not os.path.exists(destpath):
-         os.mkdir(destpath)
+         os.makedirs(destpath)
     for f in sourcefiles:
         try:
             if deleteoriginal:
@@ -96,7 +91,7 @@ def get_camera_lens_profile(cameraprofile,lensprofile):
     setupinfo = {"lens":None,
                  "camera":None}
     profiles = {}
-    with open("util/CameraProfiles.json") as f:
+    with open("util/CameraProfiles.json",'r',encoding="utf-8") as f:
         profiles= json.load(f)
     if cameraprofile in profiles["cameras"].keys():
         setupinfo["camera"] = profiles["cameras"][cameraprofile]
@@ -105,7 +100,7 @@ def get_camera_lens_profile(cameraprofile,lensprofile):
     return setupinfo
 
 
-def should_prune(filename: str,config:dict)->bool:
+def should_prune(filename: str)->bool:
     """Takes a file name and figures out based on the number in it whether the picture should be sent or not and added to the manifest or not. It assumes files are named ending in a number and that
     this is sequential based on when the camera took the picture.
     Parameters
@@ -114,9 +109,11 @@ def should_prune(filename: str,config:dict)->bool:
 
     returns: True or false based on whether the file ought to be omitted.
     """
+    config = Configurator.getConfig()
     shouldprune = False
-    numinround = config["pics_per_revolution"]
-    numcams = len(config["pics_per_cam"].keys())
+    numinround = config.getProperty("ortery","pics_per_revolution")
+    picspercam = config.getProperty("ortery","pics_per_cam")
+    numcams = len(picspercam.keys())
     basename_with_ext = os.path.split(filename)[1]
     fn = os.path.splitext(basename_with_ext)[0]
     try:
@@ -124,7 +121,7 @@ def should_prune(filename: str,config:dict)->bool:
         filenum = int(t.group(1)) #ortery counts from zero.
         camnum = int(filenum/numinround)+1
         picinround = filenum%(numinround)+1
-        expected = config["pics_per_cam"][str(camnum)]
+        expected = picspercam[str(camnum)]
         print(f"{fn} is pic number {picinround} of camera {camnum}. The expected number in this round is {expected}")
         if expected < numinround:
             invert = False
@@ -152,15 +149,12 @@ def cmd_test_prune(args):
         t1= re.match(pat,x)
         g = t1.group(1)
         return int(g)
-    cpath = Path(Path(__file__).parent.parent,"config.json")
-    config = {}
+    
     prunelist = []
-    with open(cpath,"r",encoding = 'utf-8') as f:
-        config=json.load(f)["config"]
     paths = list(Path(args.imagedir).glob("*.jpg"))
     paths.sort(key=sortonpat)
     for f in paths:
-        if should_prune(f,config["ortery"]):
+        if should_prune(f):
             print(f"pruning {f}")
         else:
             prunelist.append(f)
@@ -175,3 +169,37 @@ if __name__ == "__main__":
     parser.add_argument("imagedir",help="Directory of images for which to build a manifest")
     args = parser.parse_args()
     cmd_test_prune(args)
+
+
+def load_palettes():
+    """Loads MarkerPalettes.json and returns a dictionary of different palettes.
+    Different marker palettes may be used while doing photo capture in order to perform various calculations at the 
+    model building stage. The palette used is specified in config.json->photogrammetry-> palette, which is used as a key to locate
+    the specific data needed for each palette. This data is stored in MarkerPalettes.json
+    """
+
+    #going to hardcode this path for now. Maybe come back and configure it.
+    palette = {}
+    with open(Path(Path(__file__).parent,"MarkerPalettes.json"), encoding = "utf-8") as f:
+        palette = json.load(f)
+    return palette["palettes"]
+
+
+def get_export_filename(chunkname:str, type:str):
+    """Constructs a filename for the export encoding features of the model such as the scale unit and filetype.
+
+    Parameters:
+    ------------------
+    chunkname: Should be the acession nubmer of the object.
+    config: a dictionary of config values, probably under Photogrammetry in config.json"
+
+    returns:string with proposed filename for export file. """
+    palettename = Configurator.getConfig().getProperty("photogrammetry","palette")
+    scaleunit ="mm"
+    if palettename:
+        palette = load_palettes()[palettename]
+        scaleunit = palette["unit"]
+    type = type.replace('.','')
+    exporttype = type.upper()
+    exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
+    return exportname
