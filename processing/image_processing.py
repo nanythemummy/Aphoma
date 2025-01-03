@@ -46,7 +46,7 @@ def build_masks_with_cv2(imagepath,outputdir,mode):
     logger = getLogger(__name__)
     desttype = Configurator.getConfig().getProperty("processing","Destination_Type")
     cv2exporttype = Configurator.getConfig().getProperty("processing","CV2_Export_Type")
-    lgt = Configurator.getConfig().getProperty("processing","thresholding_lower_gray_threshold")
+    lgt = int(Configurator.getConfig().getProperty("processing","thresholding_lower_gray_threshold"))
     if not str(imagepath).upper().endswith(desttype.upper()):
         logger.warning("Image %s not of expected type %s to build mask with cv2.", imagepath,desttype)
         return
@@ -57,11 +57,7 @@ def build_masks_with_cv2(imagepath,outputdir,mode):
     else:
         print(f"Otsu")
         maskingAlgorithms.otsuThresholding(imagepath,Path(outputdir,outputname))
-        #canny edge detection
-        #maskingAlgorithms.edgeDetectionMask(imagepath,
-                                            #Path(outputdir,outputname),
-                                            #config["canny_lower_intensity_threshold"], 
-                                            #config["canny_higher_intensity_threshold"])
+      
 
 def build_masks_with_droplet( imagefolder, outputpath, masktype):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.

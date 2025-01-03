@@ -73,7 +73,7 @@
             "texture_count":1,
             "export_as":"",
             "palette":"small_axes_palette",
-            "cuttingplane_height":0.02
+            "build_low_res":false
         }
 
     }

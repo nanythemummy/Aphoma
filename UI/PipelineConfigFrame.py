@@ -19,21 +19,22 @@ class ConfigFormItems(FormItemsInterface):
             for prop in config.getPropertiesForSection(section):
                 val = config.getProperty(section,prop)
                 sv = tk.StringVar()
-                t = "string"
                 if isinstance(val,float):
                     t="float"
-                elif isinstance(val,int):
+                elif isinstance(val,int) and type(val)==type(2):   #because bools are a type of int in python.
                     t ="int"
+                elif isinstance(val,bool):
+                    t= "bool"
                 elif isinstance(val,dict):
-                    val = json.dumps(val)
                     t="dict"
-                elif isinstance(val,list):
                     val = json.dumps(val)
+                elif isinstance(val,list):
                     t="list"
+                    val = json.dumps(val)
+                elif val and Path(val).exists():
+                    t ="path"
                 else:
-                    if val and Path(val).exists():
-                        t = "path"
-
+                    t="string"
                 sv.set(val)
                 getattr(self,section)[prop]=(sv,t) 
 
@@ -48,7 +49,9 @@ class ConfigFormItems(FormItemsInterface):
             for k,v in props.items():
                 try:
                     itemval = v[0].get()
-                    if itemval:
+                    if v[1]=="string":
+                        continue
+                    if  itemval:
                         msg = f"Expecting value {k}:{v[0].get()} to be of type {v[1]}"
                         if v[1] == "int":
                             if not re.match(intpat,itemval):
@@ -60,6 +63,9 @@ class ConfigFormItems(FormItemsInterface):
                             pathitem = Path(itemval)
                             if not pathitem.exists():
                                 valid = False
+                        elif v[1]=="bool":
+                            intitem = int(itemval)
+                            valid = intitem==0 or intitem==1
                         elif v[1] == "dict":
                             try:
                                 isinstance(json.loads(itemval),dict)
@@ -89,16 +95,33 @@ class ConfigWindow(tk.Toplevel):
     def resetConfig(self):
         Configurator.reloadConfigFromFile()
 
+    def castToType(self, prop,t):
+        ret = prop
+        if  t == "int":
+            ret = int(prop)  
+        elif t =="float":
+            ret = float(prop)
+        elif t =="path":
+            ret = Path(prop)
+        elif t=="bool":
+            ret = True if prop=="1" else False
+        elif t == "dict" or t=="list":
+            ret = json.loads(prop)
+        return ret
+    
     def setConfigVals(self):
-        #validate = self.svars.validate()
-        #if validate["valid"]:
-        config = Configurator.getConfig()
-        for section in config.getSections():
-            sectionconfig = getattr(self.svars,section)
-            for prop in config.getPropertiesForSection(section):
-                config.setProperty(section,prop,sectionconfig[prop][0].get())
-        #else:
-        #    messagebox.showerror("Validation Error", validate["message"])
+        validate = self.svars.validate()
+        if validate["valid"]:
+            config = Configurator.getConfig()
+            for section in config.getSections():
+                sectionconfig = getattr(self.svars,section)
+                for prop in config.getPropertiesForSection(section):
+                    p = sectionconfig[prop][0].get()
+                    t = sectionconfig[prop][1]
+                    loaded = self.castToType(p,t)
+                    config.setProperty(section,prop,loaded)
+        else:
+            messagebox.showerror("Validation Error", validate["message"])
 
 
     def __init__(self,container):

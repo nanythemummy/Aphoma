@@ -45,7 +45,7 @@ def load_masks(chunk,maskpath:str,projectdir:str):
         template = f"{maskpath}{os.sep}{{filename}}{ext}"
         chunk.generateMasks(template,Metashape.MaskingMode.MaskingModeFile)
 
-def build_basic_model(photodir:str, projectname:str, projectdir:str, decimate = True, maskoption = 0):
+def build_basic_model(photodir:str, projectname:str, projectdir:str,maskoption = 0):
     """Uses Agisoft Metashape to build and export a model using the photos in the directory specified.
     Parameters:
     ------------------
@@ -53,15 +53,14 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, decimate = 
     projectname: the name of the project. This will be used to name the metashape file and the chunks inside it.
     projectdir: the base directory where the metashape file will be stored.
     config: the section of config.json containing the photogrammetry configurations, the value for the key "photogrammetry"
-    decimate: If this is set to true, a new chunk will be made in which the model is decimated to the configured number of triangles.
     """
     get_logger().info('Building model %s in location %s from photos in %s', projectname, photodir,projectdir)
     config = Configurator.getConfig()
+
     sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_BUILD_MODEL)
     #Open a new document
     projectpath = os.path.join(projectdir,projectname+".psx")
     outputpath = os.path.join(projectdir,config.getProperty("photogrammetry","output_path"))
-    
     maskpath =config.getProperty("photogrammetry","mask_path") if maskoption !=0 else None
     palette =  load_palettes()[config.getProperty("photogrammetry","palette")]
     if not os.path.exists(outputpath):
@@ -109,7 +108,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, decimate = 
             if not current_chunk.markers:
                 ModelHelpers.detect_markers(current_chunk,palette["type"])
                 doc.save()
-        if current_chunk.point_cloud and not current_chunk.model:
+        if current_chunk.tie_points and not current_chunk.model:
             thresholds = config.getProperty("photogrammetry","error_thresholds")
             ModelHelpers.refine_sparse_cloud(doc, current_chunk,thresholds)
             doc.save()
@@ -144,13 +143,13 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str, decimate = 
         ModelHelpers.close_holes(current_chunk)
         doc.save()
         #decimate model
-        if decimate and len(doc.chunks)<2:
+        if config.getProperty("photogrammetry", "build_low_res") and len(doc.chunks)<2:
             get_logger().info("Building a lower poly version of the model from a duplicate chunk.")
             newchunk = current_chunk.copy(items=[Metashape.DataSource.DepthMapsData, Metashape.DataSource.ModelData], keypoints=True)
             lrpolycount = int(config.getProperty("photogrammetry","low_res_poly_count"))
             newchunk.label = f"{current_chunk.label} lowpoly {lrpolycount/1000}K"
             newchunk.decimateModel(replace_asset=True,face_count=lrpolycount)
-        #build texture for each chunk.
+            #build texture for each chunk.
         for c in doc.chunks:
             if not c.model.textures:
                 get_logger().info("Building UV Map and Texture for chunk %s",c.label)

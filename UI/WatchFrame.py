@@ -89,6 +89,6 @@ class WatchFrame(PipelineFrameBase):
         self.stopbutton = ttk.Button(self,text="Stop",state = "disabled",command=lambda:self.stop_watching())
         self.stopbutton.grid(column=1,row=5)
         self.clearbutton = ttk.Button(self,text="Purge Temp Directories",command=lambda:self.clear_directories())
-        self.clearbutton.grid(column=4,row=5)
+        self.clearbutton.grid(column=3,row=5)
         self.state  = "stopped"
     
