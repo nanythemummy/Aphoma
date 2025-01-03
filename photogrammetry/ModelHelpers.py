@@ -181,15 +181,24 @@ def close_holes(chunk):
       chunk.model.closeHoles(level = threshold)
 
 def cleanup_blobs(chunk):
-    """Cleans up freestanding floating geometry that has less <= 60% of the faces of the total faces in the model.
+    """Cleans up freestanding floating geometry leaving the largest object behind.
     
     Parameters:
     ---------------
     Chunk: the metashape chunk we want to act on.
     """
     if chunk.model:
-        threshold = int(len(chunk.model.faces) * 0.6)
-        chunk.model.removeComponents(threshold)
+        stats = chunk.model.statistics()
+        while stats.components>1:
+            #when there are a lot of blobs, assume that the largest one is the one we want to keep. We don't have a list of the blobs, but we do know how many there are.
+            #so, take the average and keep filtering until there is one left, and that will be the largest.
+            faceave = math.ceil(stats.faces/stats.components)
+            stats = removeComponentsUnderFaceThreshold(chunk,faceave)
+        removeComponentsUnderFaceThreshold(chunk,0)
+
+def removeComponentsUnderFaceThreshold(chunk,threshold):
+    chunk.model.removeComponents(threshold)
+    return chunk.model.statistics()
     
 def detect_markers(chunk, markertype:str):
     """Given a metashape chunk, detect the markers that occur in that chunk. These will be stored by metashape under chunk->markers

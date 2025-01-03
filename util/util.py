@@ -57,7 +57,7 @@ def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     * destpath: a string path to move them to.
     """
     if not os.path.exists(destpath):
-         os.mkdir(destpath)
+         os.makedirs(destpath)
     for f in sourcefiles:
         try:
             if deleteoriginal:

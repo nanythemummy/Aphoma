@@ -51,9 +51,11 @@ def build_masks_with_cv2(imagepath,outputdir,mode):
         logger.warning("Image %s not of expected type %s to build mask with cv2.", imagepath,desttype)
         return
     outputname = f"{Path(imagepath).stem}{cv2exporttype}"
-    if mode.value == util.MaskingOptions.MASK_THRESHOLDING:
+    if mode == util.MaskingOptions.MASK_THRESHOLDING:
         maskingAlgorithms.thresholdingMask(imagepath,Path(outputdir,outputname),lgt)
+        print(f"Binary {lgt}")
     else:
+        print(f"Otsu")
         maskingAlgorithms.otsuThresholding(imagepath,Path(outputdir,outputname))
         #canny edge detection
         #maskingAlgorithms.edgeDetectionMask(imagepath,
