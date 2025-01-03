@@ -45,7 +45,16 @@ class MaskingOptions(Enum):
         return 0
 
         
+def delete_manifests_images(directory):
+    dir = Path(directory)
+    imtypes = ["cr2","jpg","tif","nef"]
+    if dir.exists():
+        files = [f for f in os.listdir(dir) if Path(dir,f).is_file()]
+        for fl in files:
+            if Path(fl).suffix in imtypes or Path(fl).stem.endswith("_manifest"):
+                os.remove(Path(dir,fl))
 
+           
 
     
 def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):

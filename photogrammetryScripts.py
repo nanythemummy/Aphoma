@@ -217,6 +217,7 @@ class Watcher:
             global MANIFEST
             MANIFEST = Manifest(self.projectname, self.maskmode)
             handler = WatcherSenderHandler()
+
         self.observer.schedule(handler,self.watched_dir,recursive=True)
         self.observer.start()
         try:
