@@ -55,6 +55,15 @@
             "args":[""]
         },
         {
+            "name": "SplitIntoShapes",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryScripts.py",
+            "console": "integratedTerminal",
+
+            "args":["splitshapes","E:\\automation\\Sin Temple Bricks Case 14 TSB 5215","TSB5215","shape1,shape2"]
+        },
+        {
             "name": "Snapshot",
             "type": "debugpy",
             "request": "launch",

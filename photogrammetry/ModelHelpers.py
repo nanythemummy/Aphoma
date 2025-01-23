@@ -101,7 +101,6 @@ def are_points_colinear(point1,point2,point3):
     except AttributeError:
         return False #Turns out points can have no position. who would have thought it.
     
-
 def build_scalebars_from_sequential_targets(chunk, scalebardefinitions):
     """Takes scalebar definition info and builds scalebars from it based the label numbers being sequential..
     
@@ -133,9 +132,6 @@ def build_scalebars_from_sequential_targets(chunk, scalebardefinitions):
     scalebar.reference.accuracy = 1.0e-5
     scalebar.reference.enabled = True
     chunk.updateTransform()
-   
-
-
 
 def build_scalebars_from_list(chunk,scalebardefinitions):
     """Takes a list of marker pairs forming scalebars with the associated distances, finds those markers in the agisoft chunk,
@@ -178,7 +174,63 @@ def close_holes(chunk):
     """
   if chunk.model:
       threshold = 100
-      chunk.model.closeHoles(level = threshold)
+      chunk.model.closeHoles(level = threshold)\
+      
+def set_region_to_local_coordinates(chunk):
+    """Cribbed this from here because I am still pretty iffy on how metashape's coordinate systems work: https://github.com/agisoft-llc/metashape-scripts"""
+    trans = chunk.transform.matrix
+    transformvect = trans.mulp(Metashape.Vector([0,0,0]))
+    mat = Metashape.Matrix().Diag([1,1,1,1])
+    if chunk.crs:
+        mat = chunk.crs.localframe(transformvect)
+    mat = mat*trans
+    scale = math.sqrt(mat[0,0]**2 + mat[0,1]**2 + mat[0,2]**2) #OMG WHY IS IT GETTING THE DISTANCE OF THE TOP ROW OF THIS MATRIX?! Why these numbers?
+    rotation = Metashape.Matrix([[mat[0, 0], mat[0, 1], mat[0, 2]],
+                                [mat[1, 0], mat[1, 1], mat[1, 2]],
+                                [mat[2, 0], mat[2, 1], mat[2, 2]]])
+    rotation*=(1./scale)
+    reg = chunk.region
+    reg.rot = rotation.t()
+    chunk.region = reg
+
+def resize_bounding_box(chunk, percentx=100.0,percenty=100.0,percentz=25.0,negativedirection = True):
+    set_region_to_local_coordinates(chunk)
+    cloud_dim = get_model_dimensions(chunk)
+    dimx= abs(cloud_dim["max_x"]-cloud_dim["min_x"])
+    dimy= abs(cloud_dim["max_y"]-cloud_dim["min_y"])
+    dimz= abs(cloud_dim["max_z"]-cloud_dim["min_z"])
+    dimxm = dimx*(percentx/100.0)
+    dimym = dimy*(percenty/100.0)
+    dimzm = dimz*(percentz/100.0)
+    print(f"dimx {dimx}, dimy {dimy}, dimz {dimz}")
+    chunk.region.size = Metashape.Vector([dimxm,dimym,dimzm])
+    if not negativedirection:
+        chunk.region.center = Metashape.Vector([cloud_dim["min_x"]+dimxm/2.0,
+                                                cloud_dim["min_y"]+dimym/2.0,
+                                                cloud_dim["min_z"]+dimzm/2.0])
+    else:
+        chunk.region.center = Metashape.Vector([cloud_dim["max_x"]-dimxm/2.0,
+                                        cloud_dim["max_y"]-dimym/2.0,
+                                        cloud_dim["max_z"]-dimzm/2.0])
+
+def get_model_dimensions(chunk):
+    if chunk.model:
+        pts = chunk.model.vertices
+        verts = []
+        l = len(pts)
+        for p in range(0,l):
+            verts.append(pts[p].coord)
+        maxmin = {}
+        xs = sorted(verts,key=lambda pt: pt[0])
+        maxmin["max_x"] = xs[len(xs)-1][0]
+        maxmin["min_x"] = xs[0][0]
+        ys = sorted(verts, key=lambda pt:pt[1])
+        maxmin["max_y"] = ys[len(ys)-1][1]
+        maxmin["min_y"] = ys[0][1]
+        zs = sorted(verts, key=lambda pt:pt[2])
+        maxmin["max_z"] = zs[len(zs)-1][2]
+        maxmin["min_z"] = zs[0][2]
+        return maxmin
 
 def cleanup_blobs(chunk):
     """Cleans up freestanding floating geometry leaving the largest object behind.
@@ -225,8 +277,6 @@ def detect_markers(chunk, markertype:str):
     # update markers
     chunk.refineMarkers()
 
-#runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
-#which ought to occur on the final iteration of a process.
 def optimize_cameras(chunk, final_optimization=False):
     """Runs the optimize cameras function in metashape.
     
@@ -236,7 +286,9 @@ def optimize_cameras(chunk, final_optimization=False):
     final_optimization: A different set of camera parameters are used the final time this is called in the error reduction cycle. 
     Pass in true if you would like that.
     """
-
+    
+    #runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
+    #which ought to occur on the final iteration of a process.
     chunk.optimizeCameras(fit_f=True,
                           fit_cx=True,
                           fit_cy=True,
@@ -251,7 +303,6 @@ def optimize_cameras(chunk, final_optimization=False):
                           fit_p3=final_optimization,
                           adaptive_fitting=False,
                           tiepoint_covariance=False)
-    
 
 def refine_sparse_cloud(doc,chunk,error_thresholds:dict):
     """Performs the error reduction/optimization algorithm as described by Neffra Matthews and Noble,Tommy. "In the Round Tutorial", 2018. 

@@ -3,6 +3,7 @@ Code requiring number crunching probably ought to go in the associated utility c
 """
 
 import argparse
+from pathlib import  Path
 import traceback
 import os
 import Metashape
@@ -111,7 +112,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str,maskoption =
         if current_chunk.tie_points and not current_chunk.model:
             thresholds = config.getProperty("photogrammetry","error_thresholds")
             ModelHelpers.refine_sparse_cloud(doc, current_chunk,thresholds)
-            doc.save()
+
         
         #build model.
         if not current_chunk.model:
@@ -125,6 +126,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str,maskoption =
                                     face_count = facecountconst,
                                     face_count_custom = targetfacecount)
             doc.save()
+       
         #detect build scalebars
         if palette:
             if "scalebars" in palette.keys() and not current_chunk.scalebars:
@@ -137,6 +139,21 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str,maskoption =
         #remove blobs.
         get_logger().info("Cleaning up detached geometry.")
         ModelHelpers.cleanup_blobs(current_chunk)    
+
+        if config.getProperty("photogrammetry","use_cutting_plane"):
+            percent_remaining_x=config.getProperty("photogrammetry","cut_x")
+            percent_remaining_y=config.getProperty("photogrammetry","cut_y")
+            percent_remaining_z=config.getProperty("photogrammetry","cut_z")
+            shiftup = config.getProperty("photogrammetry","cut_from_top")
+            ModelHelpers.resize_bounding_box(current_chunk,percent_remaining_x,percent_remaining_y,percent_remaining_z,shiftup)
+            facecount = None or config.getProperty("photogrammetry","custom_face_count")
+            targetfacecount = facecount or 200000
+            facecountconst = Metashape.FaceCount.CustomFaceCount if facecount else Metashape.FaceCount.HighFaceCount
+            current_chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData, 
+                                    face_count = facecountconst,
+                                    face_count_custom = targetfacecount)
+            ModelHelpers.cleanup_blobs(current_chunk)
+            
         doc.save()    
         #close holes
         get_logger().info("Closing holes.")
@@ -163,19 +180,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str,maskoption =
                 reorient_model(c,palette)
             get_logger().info("Finished building.") 
             labelname = c.label.replace(" ","")
-            ext = config.getProperty("photogrammetry","export_as")
-            outputtypes = []
-            if not ext == "none":
-                if ext == "all":
-                    outputtypes += ['.ply','.obj']
-                else:
-                    outputtypes.append(ext)
-                for extn in outputtypes:
-                    name = get_export_filename(labelname,extn)
-                    get_logger().info("Now, exporting chunk %s as %s",c.label,name )
-                    c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
-                                texture_format = Metashape.ImageFormat.ImageFormatPNG,
-                                embed_texture=(extn=="ply") )
+            export_model(c,labelname,outputpath)
 
         InstrumentationStatistics.getStatistics().timeEventEnd(sid)
     except Exception as e:
@@ -187,6 +192,22 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str,maskoption =
         doc = Metashape.Document() #basically forcing metashape to close the old document by starting a new one. Sigh. Metashape document has no
         #context manager and no close method and tends to leave a lock file or leave its .file folder readonly.
 
+def export_model(c:Metashape.Chunk,name:str,outputpath:Path,conform_to_boundary_shape:bool=False):
+    config = Configurator.getConfig()
+    ext = config.getProperty("photogrammetry","export_as")
+    outputtypes = []
+    if not ext == "none":
+        if ext == "all":
+            outputtypes += ['.ply','.obj']
+        else:
+            outputtypes.append(ext)
+        for extn in outputtypes:
+            name = get_export_filename(name,extn)
+            get_logger().info("Now, exporting chunk %s as %s",c.label,name )
+            c.exportModel(path=f"{os.path.join(outputpath,name)}{extn}",
+                        texture_format = Metashape.ImageFormat.ImageFormatPNG,
+                        embed_texture=(extn=="ply"),
+                        clip_to_boundary=conform_to_boundary_shape )
 
 def reorient_model(chunk,palette):
     """Rotates the object so that the axes on the marker pallette are in line with the world xyz axes and so that the object
@@ -205,6 +226,25 @@ def reorient_model(chunk,palette):
         get_logger().info("Reorienting chunk %s according to markers on palette.",chunk.label)
         ModelHelpers.align_markers_to_axes(chunk,axes)
         ModelHelpers.move_model_to_world_origin(chunk)
+
+def splitModelIntoShapes(psxfile:Path):
+    if os.path.exists(psxfile):
+        config = Configurator.getConfig()
+        doc = Metashape.Document()
+        outputpath = Path(psxfile.parent,config.getProperty("photogrammetry","output_path"))
+        get_logger().info("Loading project %s",psxfile)
+        doc.open(path=str(psxfile))
+        current_chunk=doc.chunks[0]
+        if current_chunk.model:
+            for shape in current_chunk.shapes:
+                print(shape)
+                oldbt = shape.boundary_type
+                shape.boundary_type = Metashape.Shape.BoundaryType.OuterBoundary
+                l = shape.label
+                export_model(current_chunk,l,outputpath,True)
+                shape.boundary_type=oldbt
+
+            
 
 if __name__=="__main__":
 

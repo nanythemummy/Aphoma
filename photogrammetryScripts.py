@@ -421,6 +421,23 @@ def transfer_to_network_folder(args):
     with open(manifest,"w") as f:
         f.write(",".join(filestocopy))
 
+def split_shapes_cmd(args):
+
+    """Wrapper script for taking a psx file and splitting the model inside into multiple cubic components which are exported as named obj files."""
+    inputdir = Path(args.inputdir)
+    project = args.projectname
+    projdir = Path(inputdir,f"{project}.psx")
+    shapes = args.shapenames.split(",")
+    if projdir.exists():
+        try:
+            from photogrammetry import MetashapeTools
+            MetashapeTools.splitModelIntoShapes(projdir)
+        except ImportError as e:
+            print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
+            raise e
+
+
+
 
 def build_masks_cmd(args):
     """Wrapper script for building masks from contents of a folder using a photoshop droplet.
@@ -521,7 +538,7 @@ if __name__=="__main__":
     listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
     listensendparser.set_defaults(func=listen_and_send)    
 
-    maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using a photoshop droplet.")
+    maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using various methods.")
     maskparser.add_argument("inputdir", help="Photos to mask")
     maskparser.add_argument("outputdir",help="location to store masks")   
     maskparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
@@ -534,6 +551,11 @@ if __name__=="__main__":
 
     maskparser.set_defaults(func=build_masks_cmd)
 
+    modelbyshapeparser = subparsers.add_parser("splitshapes", help="Splits a finished model into cube-shaped sub-components based on shapes pre-drawn by the user in metashape.")
+    modelbyshapeparser.add_argument("inputdir",help="Directory of project")
+    modelbyshapeparser.add_argument("projectname", type=str, help="Name of the psx file.")
+    modelbyshapeparser.add_argument("shapenames", type=str, help="Comma-separated list of names for the individual shapes.")
+    modelbyshapeparser.set_defaults(func = split_shapes_cmd)
 
     args = parser.parse_args()
     if hasattr(args,"func"):

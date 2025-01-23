@@ -52,7 +52,7 @@ def build_position_scale(scalesizecm,  objectname):
     bpy.ops.object.duplicate()
     dupe = bpy.context.view_layer.objects.active
     dupe.name = "Scale_Small"
-    bpy.ops.transform.resize(value=(0.95,0.95,0.95))
+    bpy.ops.transform.resize(value=(0.90,0.95,0.95))
     whitemat = bpy.data.materials.new(name="whitemat")
     dupe.data.materials[0] =(whitemat)
     dupe.active_material.diffuse_color = (1,1,1,1)
