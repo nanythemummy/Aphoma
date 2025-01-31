@@ -42,7 +42,8 @@ Using the UI is much more straightforward than using the command line. You can s
 ```
   python pipeline.py
 ```
-![image](https://github.com/user-attachments/assets/64a28ac4-cadd-4664-afd9-6c8b6d47c6ba)
+![image](https://github.com/user-attachments/assets/fa5b19b8-eb44-4845-8ece-617b35bf438b)
+
 1. To do a simple build, click the "Build" tab.
 2. Name your project.
 3. Use the browse button to navigate to the directory where you have stored your TIFs or JPGs that you want to build a model from.
