@@ -424,11 +424,14 @@ def transfer_to_network_folder(args):
 def split_shapes_cmd(args):
 
     """Wrapper script for taking a psx file and splitting the model inside into multiple cubic components which are exported as named obj files."""
+    print("Got there.")
     inputdir = Path(args.inputdir)
     project = args.projectname
     projdir = Path(inputdir,f"{project}.psx")
     shapes = args.shapenames.split(",")
+    print(f"{projdir}")
     if projdir.exists():
+
         try:
             from photogrammetry import MetashapeTools
             MetashapeTools.splitModelIntoShapes(projdir)
