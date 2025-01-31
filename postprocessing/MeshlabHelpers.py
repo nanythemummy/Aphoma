@@ -1,11 +1,16 @@
 import argparse
+import sys
+from pathlib import Path
+if __name__=="__main__":
+    parentpath = Path(__file__).parent.parent.absolute()
+    sys.path.append(str(parentpath))
 from util.InstrumentationStatistics import InstrumentationStatistics as statistics
 from util.InstrumentationStatistics import Statistic_Event_Types
 from util.Configurator import Configurator
-from pathlib import Path
+
 import os
 import subprocess
-import json
+
 
 def execute_blender_script(scriptname:str, args:dict):
     """Executes the named blender script and using the blender executable
@@ -69,7 +74,8 @@ def command_bto(args):
         print("Path: {args.inputdir} is not a valid file or {args.outputdir} is not a real directory.")
 
 if __name__=="__main__":
-    
+
+
     parser = argparse.ArgumentParser(prog="meshlabScripts")
     subparsers = parser.add_subparsers(help="Sub-command help")
     translateprocessor = subparsers.add_parser("bottomToOrigin", help="Translate the object so that the bottom of it is on 0,0, assuming it's centered on the origin.")
@@ -85,7 +91,7 @@ if __name__=="__main__":
     snapshotparser.set_defaults(func=command_snapshot)
     args = parser.parse_args()
     if hasattr(args,"func"):
-        parentpath = Path(__file__).parent.parent.absolute()
+
         args.func(args)
     else:
         parser.print_help()

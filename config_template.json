@@ -73,7 +73,12 @@
             "texture_count":1,
             "export_as":"",
             "palette":"small_axes_palette",
-            "build_low_res":false
+            "build_low_res":false,
+            "use_cutting_plane":true,
+            "cut_x":100.0,
+            "cut_y":100.0,
+            "cut_z":25.0,
+            "cut_from_top":false
         }
 
     }
