@@ -37,6 +37,20 @@ Now, install the wheel for metashape and then install the requirements in the no
   pip install -r requirements.txt
   pip install %USERPROFILE%\Downloads\Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64.whl
 ```
+## Using the UI
+Using the UI is much more straightforward than using the command line. You can start it at the moment by typing:
+```
+  python pipeline.py
+```
+![image](https://github.com/user-attachments/assets/64a28ac4-cadd-4664-afd9-6c8b6d47c6ba)
+1. To do a simple build, click the "Build" tab.
+2. Name your project.
+3. Use the browse button to navigate to the directory where you have stored your TIFs or JPGs that you want to build a model from.
+4. Use the browse button where you want to store the projects.
+5. In the dropdown, choose your masking method.
+6. Choose the pallette that you would like to use for measurement.
+7. Click Build.
+8. To change configurations, click the configure button at the bottom to access the configuration screen. Change the required value and click "OK" at the bottom. Configuration will be reloaded automatically.
 
 ### Configure config.json
 1. Make a copy of config_template.json and name it config.json
@@ -135,7 +149,8 @@ To add a Palette to the MarkerPalettes.json file, paste the following and modify
 Finally, if you want to orient the object in space, you should specify which labels should be considered part of which axis. This is defined with an "axes" json object, which contains arrays corresponding to the positive and negative sides of the x and z axes. The arrays should contain integers corresponding to the numbers encoded by the targets on your palette, which also become the marker labels when the palettes get scanned by Metashape.
 
 
-## Cookbook
+
+## Command Line Cookbook
 Below are several "recipes" for using these scripts. Pick the tutorial for the task you want to complete.
 
 ### I already have RAW files, TIF files, or JPG files and I want to build a 3D Model from them.
