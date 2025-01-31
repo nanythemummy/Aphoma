@@ -1,4 +1,4 @@
-# Photogrammetry Asset Pipeline (Command-line tools)
+# Photogrammetry Asset Pipeline (UI and Command-line tools)
 
 Automated asset pipeline for building 3D Models with Photogrammetry, either using an ortery or pictures taken manually. It does the following:
 * Listens to a directory where pictures are being uploaded from a camera and transfers them to a different computer via a network drive for processing.
