@@ -27,10 +27,11 @@ class MaskingOptions(Enum):
     MASK_MAGIC_WAND_DROPLET =2
     MASK_CANNY = 3
     MASK_THRESHOLDING = 4
+    MASK_AI = 5
      
     @classmethod 
     def getFriendlyStrings(cls):
-        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","EdgeDetection","Thresholding"]
+        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","EdgeDetection","Thresholding", "AI"]
     @classmethod
     def numToFriendlyString(cls, num): 
         if isinstance(num, MaskingOptions):

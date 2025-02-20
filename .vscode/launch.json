@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
     
 
         {
@@ -15,12 +16,12 @@
             "args":["C:/Users/kjohnston/Desktop/temp/"]
         },
         {
-            "name": "Python Debugger: photogrammetryScripts",
+            "name": "newevent",
             "type": "debugpy",
             "request": "launch",
-            "program": "photogrammetryScripts.py",
+            "program": "photogrammetryPipeline.py",
             "console": "integratedTerminal",
-            "args":["photogrammetry", "TSB_5209", "E:\\automation\\TSB_5209_Crate21\\JPG","E:\\automation\\TSB_5209_Crate21\\","--maskoption","0"]
+            "args":["mask", "E:/automation/E22434/JPG", "E:/automation/E22434/Masks","E:/automation/E22434/JPG","--maskoption","1"]
 
         },
         {
