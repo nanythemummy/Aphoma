@@ -12,10 +12,10 @@ class TaskStatus(Enum):
 class BaseTask():
     """Generic  base class for states"""
 
-    def __init__(self, name):
+    def __init__(self):
         self._shouldFinish = False
         self._status = TaskStatus.NONE
-        self._statename = name
+        self._statename = self.__repr__()
         
     def setup(self)->bool:
         self._status = TaskStatus.SETUP

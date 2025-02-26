@@ -16,12 +16,21 @@
             "args":["C:/Users/kjohnston/Desktop/temp/"]
         },
         {
-            "name": "newevent",
+            "name": "new_event_mask",
             "type": "debugpy",
             "request": "launch",
             "program": "photogrammetryPipeline.py",
             "console": "integratedTerminal",
-            "args":["mask", "E:/automation/E22434/JPG", "E:/automation/E22434/Masks","E:/automation/E22434/JPG","--maskoption","1"]
+            "args":["mask", "E:/automation/E22617/JPG", "E:/automation/E22617/Masks","E:/automation/E22617/JPG","--maskoption","5"]
+
+        },
+        {
+            "name": "new_event_build",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryPipeline.py",
+            "console": "integratedTerminal",
+            "args":["build", "E:/automation/E22617/JPG", "E:/automation/E22617/","E22617","--maskoption","5","--palette","3"]
 
         },
         {

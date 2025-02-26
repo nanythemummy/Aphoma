@@ -1,6 +1,8 @@
 from enum import Enum
 from datetime import datetime,timedelta
+import functools
 from util import PipelineLogging
+
 from uuid import uuid4
 
 class Statistic_Event_Types(Enum):
@@ -106,6 +108,8 @@ class InstrumentationStatistics():
             self.completed[evt.type.name] = []
         self.completed[evt.type.name].append(evt)
 
+
+
     
     @staticmethod
     def getStatistics():
@@ -116,3 +120,16 @@ class InstrumentationStatistics():
     @staticmethod
     def destroyStatistics():
         InstrumentationStatistics._STATISTICS = None
+
+        #decorator for wrapping functions in timed event start and end.
+def timed(event_type:Statistic_Event_Types):
+    def decorator_timed(func_to_time):
+        @functools.wraps(func_to_time)
+        def wraped_timed(*args,**kwargs):
+            eid = InstrumentationStatistics.getStatistics().timeEventStart(event_type)
+            ret = func_to_time(*args,**kwargs)
+            InstrumentationStatistics.getStatistics().timeEventEnd(eid)
+            return ret
+        return wraped_timed
+    return decorator_timed
+    

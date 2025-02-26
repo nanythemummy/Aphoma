@@ -5,17 +5,20 @@ from tasks.BaseTask import BaseTask
 from PIL import Image as PILImage
 import rawpy
 
-from util.InstrumentationStatistics import InstrumentationStatistics, Statistic_Event_Types
+from util.InstrumentationStatistics import *
 from util.PipelineLogging import getLogger
 
 
 class ConvertToJPG(BaseTask):
-    
+
     def __init__(self, argdict:dict):
-        super().__init__("ConvertToJPG")
+        super().__init__()
         self.input = Path(argdict["input"])
         self.output = Path(argdict["output"])
 
+    def __repr__(self):
+        return "Conversions: ConvertToJPG"
+    
     def setup(self):
         ret = False
         super().setup()
@@ -25,18 +28,21 @@ class ConvertToJPG(BaseTask):
             ret = True
         return ret
     
+    @timed(Statistic_Event_Types.EVENT_CONVERT_PHOTO)
     def execute(self)->bool:
-        sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_CONVERT_PHOTO)
         super().execute()
-        success = False
+        success = True
         extns = [".TIF",".CR2",".NEF"]
         print(self.input)
+    
         for fn in [Path(f) for f in listdir(self.input) if Path(f).suffix.upper() in extns]:
             if not self._shouldFinish:
                 fp = fn.stem
                 ipname = Path(self.input,fn)
                 outputname = Path(self.output,f"{fp}.jpg")
                 ext = fn.suffix.upper()
+                if outputname.existS():
+                    continue
                 try:
                     if ext ==".CR2" or ext == ".NEF":
                         print("Converting from RAW")
@@ -52,8 +58,5 @@ class ConvertToJPG(BaseTask):
                     getLogger(__name__).error(e)
                     self._shouldFinish = True
                     success = False
-        InstrumentationStatistics.getStatistics().timeEventEnd(sid)
         return success
     
-    def exit(self)->bool:
-        super().exit()
