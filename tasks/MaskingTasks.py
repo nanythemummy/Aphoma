@@ -207,6 +207,8 @@ class MaskAI(MaskImages):
         client.load_model(self.model,set_as_default=True)
         getLogger(__name__).info("Building masks for files in %s and leaving the results in %s", self.input, self.output)
         extns = [".JPG",".TIF"]
+        t = self.input.is_file()
+        ex = self.input.suffix.upper() in extns
         if self.input.is_file() and self.input.suffix.upper() in extns:
             maskname =  Path(self.output,f"{self.input.stem}.png")
             if not maskname.exists():

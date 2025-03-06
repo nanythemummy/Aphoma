@@ -24,13 +24,13 @@
                 "type":"explicit",
                 "bars":[
                 {
-                "points":[60,61],
-                "distance":47,
+                "points":[53,73],
+                "distance":305.06,
                 "units":"mm"
                 },
                 {
-                "points":[51,52],
-                "distance":47,
+                "points":[43,63],
+                "distance":304.70,
                 "units":"mm"
                 }
             ]

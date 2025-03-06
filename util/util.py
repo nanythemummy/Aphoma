@@ -20,6 +20,11 @@ def getPaletteOptions():
         pals = json.load(f)
     return list(pals["palettes"].keys())
 
+class TexturePageScalingCutoffs(Enum):
+    LARGE_OBJ = 37.0
+    MEDIUM_OBJ = 2.0
+    SMALL_OBJ = 1.0
+
 class MaskingOptions(Enum):
     """Class containing constants for masking options."""
     NOMASKS = 0
