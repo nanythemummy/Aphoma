@@ -30,7 +30,7 @@
             "request": "launch",
             "program": "photogrammetryPipeline.py",
             "console": "integratedTerminal",
-            "args":["build", "E:/automation/E22617/JPG", "E:/automation/E22617/","E22617","--maskoption","5","--palette","3"]
+            "args":["build", "E:/automation/E22434/RAW", "E:/automation/E22434/","E22434","--maskoption","5","--palette","3"]
 
         },
         {

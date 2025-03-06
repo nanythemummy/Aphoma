@@ -39,21 +39,20 @@ class MaskImages(BaseTask):
         if not success:
             return False
         extns = [".JPG",".TIF"]
-        for fn in [Path(f) for f in listdir(self.input) if Path(f).suffix.upper() in extns]:
-            if not Path(self.output,f"{fn.stem}.png").exists():
-                self.build_mask(fn)
+        if self.input.is_file and self.input.suffix.upper in extns:
+            if not Path(self.output,f"{self.input.stem}.png").exists():
+                self.build_mask(self.input)
         return True
         
     def exit(self):
         success = True
         extns = [".JPG",".TIF"] 
         getLogger(__name__).info("Verifying masks were created")
-        for fn in [Path(f) for f in listdir(self.input) if Path(f).suffix.upper() in extns]:
-            maskname = Path(self.output,f"{fn.stem}.png")
+        if self.input.is_file and self.input.suffix.upper in extns:
+            maskname = Path(self.output,f"{self.input.stem}.png")
             if not maskname.exists():
                 success = False
-                getLogger(__name__).info("Could not find mask for %s as %s", fn,maskname)
-                break
+                getLogger(__name__).info("Could not find mask for %s as %s", self.input,maskname)
         return success
     
 class MaskThreshold(MaskImages):
@@ -90,7 +89,7 @@ class MaskThreshold(MaskImages):
 
         
 class MaskDroplet(MaskImages):
-    """Builds a mask of a whole folder of images using either a user specified photoshop droplet or the one in utils. You can configure
+    """Builds a mask of an image using either a user specified photoshop droplet or the one in utils. You can configure
     which droplet to use in config.json under processing->SmartSelectDroplet. You need to make that droplet save to a specific directorym, which will be configured in the droplet, and 
     also in config.json under processing->Droplet_Output. This is generally the slowest way to do masking and requires that the object is positioned over the center pixel
     when the photograph is taken. It generally does the most accurate maksing job for the widest variety of objects, but takes about 5 times as much time as the
@@ -208,9 +207,9 @@ class MaskAI(MaskImages):
         client.load_model(self.model,set_as_default=True)
         getLogger(__name__).info("Building masks for files in %s and leaving the results in %s", self.input, self.output)
         extns = [".JPG",".TIF"]
-        for fn in [Path(f) for f in listdir(self.input) if Path(f).suffix.upper() in extns]:
-            maskname =  Path(self.output,f"{fn.stem}.png")
+        if self.input.is_file() and self.input.suffix.upper() in extns:
+            maskname =  Path(self.output,f"{self.input.stem}.png")
             if not maskname.exists():
-                self.build_mask(fn,client)
+                self.build_mask(self.input,client)
         return success
 

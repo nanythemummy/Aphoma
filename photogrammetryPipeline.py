@@ -1,4 +1,5 @@
 from pathlib import Path
+from os import listdir
 import argparse
 from tasks.ConversionTasks import ConvertToJPG
 from tasks.MaskingTasks import MaskAI,MaskDroplet,MaskThreshold
@@ -12,9 +13,9 @@ from util.PipelineLogging import getLogger as getGlobalLogger
 from util.Configurator import Configurator
 from util.util import MaskingOptions
 from queue import Queue
+
 _HALT = False
-_CONFIG = None
-_LOGGER = None
+_STOP_ON_COMPLETED = True
 
 def buildMetashapeTasks()->Queue:
     metashapetasks = Queue()
@@ -46,7 +47,6 @@ def buildTaskQueue(tasklist:list)->Queue:
             temptask = MetashapeTask_DetectMarkers(sargs)
         elif sname=="Metashape_Align":
             temptask = MetashapeTask_AlignPhotos(sargs)
-
         elif sname == "Metashape_ErrorReduction":
             temptask = MetashapeTask_ErrorReduction(sargs)
         elif sname == "Metashape_BuildModel":
@@ -73,16 +73,20 @@ def executeTaskQueue(taskqueue:Queue):
     -----------
     args: taskqueue -- a queue full of objects that should be subclassed off of tasks::basetask.
     """
+    global _STOP_ON_COMPLETED
     succeeded = True
-    while not taskqueue.empty() and succeeded and not _HALT:
+    while succeeded and not _HALT:
         task = taskqueue.get()
         succeeded &= task.setup()
         if succeeded:
             succeeded &= task.execute()
             succeeded &= task.exit()
+        if taskqueue.empty() and _STOP_ON_COMPLETED:
+            break
     InstrumentationStatistics.getStatistics().logReport()
     InstrumentationStatistics.destroyStatistics()
     MetashapeFileSingleton.destroyDoc()
+    _STOP_ON_COMPLETED = True
 
 def build_model_cmd(args):
     """Wrapper script for building masks from contents of a folder using a photoshop droplet.
@@ -104,12 +108,22 @@ def build_model_cmd(args):
     maskoption = args.maskoption
     outputfolder = Configurator.getConfig().getProperty("photogrammetry","output_path")
     outputfilename =  Path(projectdir,outputfolder,f"{util.get_export_filename(projectname.replace(" ",""),exporttype)}{exporttype}")
+    conversions = []
+    futurejpgs = []
+    maskpath = Path(projectdir,Configurator.getConfig().getProperty("photogrammetry","mask_path"))
+    extns = [".NEF",".TIF",".JPG",".CR2"]
+    for fn in [Path(f) for f in listdir(inputdir)]:
+        sfx = fn.suffix.upper()
+        if sfx in extns: 
+            conversions.append({"name":"ConvertJPG","kwargs":{"input":Path(inputdir,fn),"output":inputdir}})
+            futurejpg = Path(inputdir,f"{fn.stem}.jpg")
+            futurejpgs.append({"name":"Masking","kwargs":{"input":futurejpg,
+                                    "output":maskpath,
+                                    "maskoption":int(maskoption)}},)
+    tasks = conversions+futurejpgs
 
-    tasks=[
-        {"name":"ConvertJPG","kwargs":{"input":inputdir,"output":inputdir}},
-        {"name":"Masking","kwargs":{"input":inputdir,
-                                    "output":Path(projectdir,Configurator.getConfig().getProperty("photogrammetry","mask_path")),
-                                    "maskoption":int(maskoption)}},
+
+    metashapetasks=[
         {"name":"Metashape_Align","kwargs":{"input":inputdir,
                                             "output":projectdir,
                                             "maskoption":int(maskoption),
@@ -149,9 +163,8 @@ def build_model_cmd(args):
                                             "output":projectdir,
                                             "scale":True,
                                             }}
-
-
     ]
+    tasks+=metashapetasks
     sm = buildTaskQueue(tasks)
     executeTaskQueue(sm)
 def build_masks_cmd(args):
