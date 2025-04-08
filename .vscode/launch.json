@@ -4,6 +4,8 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        
+
     
 
         {
@@ -13,6 +15,22 @@
             "program": "util/util.py",
             "console": "integratedTerminal",
             "args":["C:/Users/kjohnston/Desktop/temp/"]
+        },
+        {
+            "name": "sketchfab_api",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "postprocessing/SketchfabScripts.py",
+            "console": "integratedTerminal",
+            "args":["modelinfo","modelinfo.csv"]
+        },
+        {
+            "name": "sketchfab_upload",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "postprocessing/SketchfabScripts.py",
+            "console": "integratedTerminal",
+            "args":["upload","c:\\Users\\keajohnston\\Documents\\Projects\\Rollouts\\E22901\\Output\\E22901_PhotogrammetryScaledInmmOBJ3.zip","Meroitic  Finewrae E22901","* Material: Baked Clay, Paint \n * Culture: Meroitic \n *Provenance: Egypt, Ballana"]
         },
         {
             "name": "Python Debugger: photogrammetryScripts",
