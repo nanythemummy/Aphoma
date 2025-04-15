@@ -58,14 +58,15 @@ def getNumberedTarget(targetnumber:int, chunk):
     return desiredmarker
 
 def getNumTexturePagesByVolume(chunk):
-    set_region_to_local_coordinates(chunk)
-    cloud_dim = get_model_dimensions(chunk)
-    dimx= abs(cloud_dim["max_x"]-cloud_dim["min_x"])
-    dimy= abs(cloud_dim["max_y"]-cloud_dim["min_y"])
-    dimz= abs(cloud_dim["max_z"]-cloud_dim["min_z"])
-    volume = dimy*dimz*dimx
-    print(f"Volume={volume}")
-    return volume
+    
+    vol = chunk.model.volume()
+    if vol >= TexturePageScalingCutoffs.MED_OBJ.value:
+        return 4
+    elif vol >= TexturePageScalingCutoffs.SMALL_OBJ.value:
+        return 2
+    else: 
+        return 1
+
 
 def getLongestRunOfSequentialTargets(chunk):
     chunk.sortMarkers()
