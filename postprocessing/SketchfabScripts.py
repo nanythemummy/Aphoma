@@ -42,7 +42,7 @@ def uploadModel(zipfile, infodict):
         files = {'modelFile':file_}
         payload = buildRequestPayload(data = data,files=files)
         try:
-            response = requests.post(modelendpoint,**payload)
+            response = requests.post(modelendpoint,timeout=10,**payload)
         except RequestException as e:
             print(f"Error:{e}")
             return
@@ -70,7 +70,7 @@ def pollStatus(modelurl):
             continue
         result = response.json()
         if response.status_code != requests.codes.ok:
-            error = result["error"]
+            error = result.get("error","unknown")
             print(f"Upload failed with error:{error}")
             errors +=1
             retry+=1
@@ -87,7 +87,7 @@ def pollStatus(modelurl):
             sleep(RETRY_TIMEOUT)
             continue
         elif processing_status=="FAILED":
-            print(f"Processing failed. {result['error']}")
+            print(f"Processing failed. {result.get('error','')}")
             return False
         elif processing_status=="SUCCEEDED":
             print(f"Great success. Check the model here. {modelurl}")
@@ -100,10 +100,15 @@ def pollStatus(modelurl):
 def getModels(url,payload):
     response = requests.get(url,**payload)
     data = response.json()
-    while data["next"]:
+    finished = False
+    while not finished:
         yield data["results"]
-        response = requests.get(data["next"],**payload)
-        data = response.json()
+        if data.get("next", None) is not None:
+            response = requests.get(data["next"],**payload)
+            data = response.json()
+        else:
+            finished = True
+
 def listModels():
     apiurl = Configurator.getConfig().getProperty("postprocessing","sketchfab_api_url")
     model_endpoint = f"{apiurl}/me/models"
@@ -119,46 +124,53 @@ def descriptionToDict(desc:str):
     repat = r"\**\s(?P<tkey>[\w\s]+):\s*(?P<tval>[\W\w]+)$"
     pat = re.compile(repat)
     for info in descarr:
-
         keyval = pat.match(info)
         if keyval and keyval.group('tkey') and keyval.group('tval'):
-            print(f"{keyval.group('tkey')} : {keyval.group('tval')}")
             descdict[keyval.group('tkey').upper().replace(" ","")] = keyval.group('tval')
     return descdict
 
 
-def getModelInfo(csvpath:Path):
+def getModelInfo():
     mdata = listModels()
-    csvdata = []
-    headernames = ["name","uid","embed url","creation date","category names","material","culture","provenance","registration","stable_url","photographer","modeler","tags"]
+    models = {}
     for model in mdata:
         dsc = descriptionToDict(model["description"])
-        categories =  ""
-        categorynames = [c["name"] for c in model["categories"]]
-        tags = [t["name"] for t in model["tags"]]
-
+        categorynames = [c["slug"] for c in model["categories"]]
+        tags = [t["slug"] for t in model["tags"]]
+        
         modeldata = {
-            "name": model["name"],
             "uid": model["uid"],
             "embed url":model["embedUrl"],
             "creation date": model["createdAt"],
             "tags" : ",".join(tags),
             "category names": ",".join(categorynames),
-            "material":dsc["MATERIAL"] if "MATERIAL" in dsc.keys() else "",
-            "culture":dsc["CULTURE"] if "CULTURE" in dsc.keys() else "",
-            "provenance":dsc["PROVENANCE"] if "PROVENANCE" in dsc.keys() else "",
-            "registration":dsc["ISACREGISTRATIONNUMBER"] if "ISACREGISTRATIONNUMBER" in dsc.keys() else "",
-            "stable_url":dsc["MOREINFORMATION"] if "MOREINFORMATION" in dsc.keys() else "",
-            "photographer":dsc["PHOTOGRAPHER"] if "PHOTOGRAPHER" in dsc.keys() else "",
-            "modeler":dsc["IMAGEPROCESSINGANDMODELING"] if "IMAGEPROCESSINGANDMODELING" in dsc.keys() else ""
+            "material":dsc.get("MATERIAL",""),
+            "culture":dsc.get("CULTURE",""),
+            "provenance":dsc.get("PROVENANCE",""),
+            "registration":dsc.get("ISACREGISTRATIONNUMBER",""),
+            "stable_url":dsc.get("MOREINFORMATION",""),
+            "photographer":dsc.get("PHOTOGRAPHER",""),
+            "modeler":dsc.get("IMAGEPROCESSINGANDMODELING",""),
+            "originalfile":dsc.get("ORIGINALFILE","")
         }
+        models[model["name"]]=modeldata
+    return models
 
-        csvdata.append(modeldata)
-    with open(csvpath,'w',encoding="utf-8") as f:
-        headers = headernames #csvdata[0].keys()
+def writeCSVFromModelDict(csvpath:Path,models:dict):
+
+    csvdata = []
+    for k,v in models.items():
+        v["name"]=k
+        csvdata.append(v)
+
+
+    with open(csvpath,'w',encoding="utf-8",newline="") as f:
+        headers = csvdata[0].keys()
         writer = csv.DictWriter(f,fieldnames = headers)
         writer.writeheader()
         writer.writerows(csvdata)
+
+
 def command_upload(args):
     modelpath = Path(args.modelpath)
     infodict = {"name":args.name,"description":args.desc}
@@ -169,9 +181,45 @@ def command_upload(args):
 
 def command_GetModelInfo(args):
     csvpath = Path(args.csvpath)
-    if csvpath.parent.exists():
+    if csvpath.parent.exists(): #is the directory I want to stick this in real?
         print("Got here. WTF is this error?")
-        getModelInfo(csvpath)
+        models = getModelInfo()
+        writeCSVFromModelDict(csvpath,models)
+
+
+def csvToDict(csvfile:Path):
+    keyedtoname={}
+    with open(csvfile,mode='r',encoding='utf-8',newline='') as f:
+            reader = csv.DictReader(f)
+            try:
+                for row in reader:
+                    name=row["name"]
+                    del row["name"]
+                    keyedtoname[name]=row
+            except csv.Error as e:
+                print(e)
+                raise e
+    return keyedtoname
+
+def format_description(desc:dict):
+    newdescription =f"* Material:{desc.get('material','')} \n* Culture: {desc.get('culture','')} \n* Provenance: {desc.get('provenance','')} \n* ISAC Registration Number: {desc.get('registration','')} \n* More Information: {desc.get('stable_url','')} \n* Photographer: {desc.get('photographer','')} \n* Image Processing and Modeling: {desc.get('modeler','')}"   
+    return newdescription
+
+def command_CSVUpload(args):
+    csvpath = Path(args.csvpath)
+    if csvpath.exists():
+        data = csvToDict(csvpath)
+        for k,v in data.items():
+            uid = v.get("uid","")
+            originalfile = v.get("originalfile","")
+            if not uid and Path(originalfile).exists():
+                #upload the model.
+                modeldata = {"name":k,
+                             "description":format_description(v),
+                             "tags":str(v.get("tags","")).split(","),
+                             "categories":str(v.get("category names","")).split(",")}
+                modelurl = uploadModel(originalfile,modeldata)
+                pollStatus(modelurl)
 
 if __name__ == "__main__":
 
@@ -179,12 +227,15 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(help="Sub-command help")
     modelinfo = subparsers.add_parser("modelinfo", help="Gets tombstone data for all models and puts it in a csv file.")
     modelupload = subparsers.add_parser("upload",help="uploads a zipfile of a model to sketchfab")
+    csvupload = subparsers.add_parser("csvupload", help="Upload models by comparing a csv file with what is online and uploading the difference.")
     modelinfo.add_argument("csvpath", help="Filename and path for the csv file.", type=str)
     modelinfo.set_defaults(func=command_GetModelInfo)
     modelupload.add_argument("modelpath",help="The Path to a zipfile of a model.")
     modelupload.add_argument("name",help="The name that the model will have on sketchfab.")
     modelupload.add_argument("desc",help="A brief description of the model.")
     modelupload.set_defaults(func=command_upload)
+    csvupload.add_argument("csvpath", help="path to the csv file you want to upload.")
+    csvupload.set_defaults(func=command_CSVUpload)
     args = parser.parse_args()
     if hasattr(args,"func"):
         args.func(args)

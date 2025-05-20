@@ -33,6 +33,14 @@
             "args":["upload","c:\\Users\\keajohnston\\Documents\\Projects\\Rollouts\\E22901\\Output\\E22901_PhotogrammetryScaledInmmOBJ3.zip","Meroitic  Finewrae E22901","* Material: Baked Clay, Paint \n * Culture: Meroitic \n *Provenance: Egypt, Ballana"]
         },
         {
+            "name": "sketchfab_uploadcsv",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "postprocessing/SketchfabScripts.py",
+            "console": "integratedTerminal",
+            "args":["csvupload","newcsv.csv"]
+        },
+        {
             "name": "Python Debugger: photogrammetryScripts",
             "type": "debugpy",
             "request": "launch",
