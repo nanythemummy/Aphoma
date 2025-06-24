@@ -11,6 +11,7 @@ class Statistic_Event_Types(Enum):
     EVENT_BUILD_MASK = 2
     EVENT_BUILD_MODEL = 3
     EVENT_SNAPSHOT = 4
+    EVENT_ALIGN_CHUNKS =5
 
 
     @classmethod
@@ -19,12 +20,13 @@ class Statistic_Event_Types(Enum):
                                 "Conversion of photos",
                                 "Building Masks",
                                 "Building Models",
-                                "Model Snapshot"]
+                                "Model Snapshot",
+                                "Align Chunks"]
         return pretty_event_strings[value]
     
     @classmethod
     def getIteratable(cls):
-        return[cls.EVENT_TAKE_PHOTO,cls.EVENT_CONVERT_PHOTO,cls.EVENT_BUILD_MASK,cls.EVENT_BUILD_MODEL,cls.EVENT_SNAPSHOT]
+        return[cls.EVENT_TAKE_PHOTO,cls.EVENT_CONVERT_PHOTO,cls.EVENT_BUILD_MASK,cls.EVENT_BUILD_MODEL,cls.EVENT_SNAPSHOT,cls.EVENT_ALIGN_CHUNKS]
 
 
 

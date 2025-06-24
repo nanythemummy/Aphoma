@@ -53,6 +53,8 @@ def buildTaskQueue(tasklist:list)->Queue:
             temptask = MetashapeTask_BuildModel(sargs)
         elif sname=="Metashape_FindScales":
             temptask = MetashapeTask_AddScales(sargs)
+        elif sname=="Metashape_AlignChunks":
+            temptask = MetashapeTask_AlignChunks(sargs)
         elif sname == "Metashape_BuildTextures":
             temptask = MetashapeTask_BuildTextures(sargs)
         elif sname == "Metashape_Reorient":
@@ -87,7 +89,20 @@ def executeTaskQueue(taskqueue:Queue):
     InstrumentationStatistics.destroyStatistics()
     MetashapeFileSingleton.destroyDoc()
     _STOP_ON_COMPLETED = True
-
+def build_conversion_masking_taskqueue(inputdir:Path, maskoption, maskpath):
+    conversions=[]
+    futurejpgs=[]
+    extns = [".NEF",".TIF",".JPG",".CR2"]
+    for fn in [Path(f) for f in listdir(inputdir)]:
+        sfx = fn.suffix.upper()
+        if sfx in extns: 
+            conversions.append({"name":"ConvertJPG","kwargs":{"input":Path(inputdir,fn),"output":inputdir}})
+            futurejpg = Path(inputdir,f"{fn.stem}.jpg")
+            if not int(maskoption)==0:
+                futurejpgs.append({"name":"Masking","kwargs":{"input":futurejpg,
+                                        "output":maskpath,
+                                        "maskoption":int(maskoption)}},)
+    return conversions+futurejpgs
 def build_model_cmd(args):
     """Wrapper script for building masks from contents of a folder using a photoshop droplet.
     Parameters:
@@ -107,64 +122,77 @@ def build_model_cmd(args):
     Configurator.getConfig().setProperty("photogrammetry","palette", possiblepalettes[int(args.palette)])
     maskoption = args.maskoption
     outputfolder = Configurator.getConfig().getProperty("photogrammetry","output_path")
-    outputfilename =  Path(projectdir,outputfolder,f"{util.get_export_filename(projectname.replace(" ",""),exporttype)}{exporttype}")
-    conversions = []
-    futurejpgs = []
-    maskpath = Path(projectdir,Configurator.getConfig().getProperty("photogrammetry","mask_path"))
-    extns = [".NEF",".TIF",".JPG",".CR2"]
-    for fn in [Path(f) for f in listdir(inputdir)]:
-        sfx = fn.suffix.upper()
-        if sfx in extns: 
-            conversions.append({"name":"ConvertJPG","kwargs":{"input":Path(inputdir,fn),"output":inputdir}})
-            futurejpg = Path(inputdir,f"{fn.stem}.jpg")
-            futurejpgs.append({"name":"Masking","kwargs":{"input":futurejpg,
-                                    "output":maskpath,
-                                    "maskoption":int(maskoption)}},)
-    tasks = conversions+futurejpgs
+    tasks = []
+    projects = [{"name":"main",
+                 "desc":"visible light",
+                 "path":inputdir}]
+    tasks+= build_conversion_masking_taskqueue(inputdir,maskoption,Path(projectdir,Configurator.getConfig().getProperty('photogrammetry','mask_path')))
+    for band in Configurator.getConfig().getProperty("photogrammetry","multibanded"):
+        print(band)
+        if Path(projectdir,band["path"]).is_dir():
+            projects.append(band)
+            tasks+= build_conversion_masking_taskqueue(Path(projectdir,band["path"]),
+                                                       maskoption,Path(projectdir,f"{band['name']}_{Configurator.getConfig().getProperty('photogrammetry','mask_path')}"))
+    
+    for project in projects:
+        
+        outputfilename =  Path(projectdir,outputfolder,f"{util.get_export_filename(f"{projectname}_{project['name']}".replace(" ",""),exporttype)}{exporttype}")
+        maskpath =Path(projectdir,Configurator.getConfig().getProperty('photogrammetry','mask_path'))
+        projectinput = inputdir
+        if project['name'] != "main":
+            maskpath = Path(projectdir,f"{project['name']}_{Configurator.getConfig().getProperty('photogrammetry','mask_path')}")
+            projectinput = Path(projectdir,project["path"])
 
-
-    metashapetasks=[
-        {"name":"Metashape_Align","kwargs":{"input":inputdir,
-                                            "output":projectdir,
-                                            "maskoption":int(maskoption),
-                                            "projectname":projectname,
-                                            "chunkname":projectname}},
-        {"name": "Metashape_DetectMarkers","kwargs":{"input":inputdir,
-                                            "output":projectdir,
-                                            "projectname":projectname,
-                                            "chunkname":projectname}},
-        {"name": "Metashape_ErrorReduction","kwargs":{"input":inputdir,
-                                            "output":projectdir,
-                                            "projectname":projectname,
-                                            "chunkname":projectname}},
-        {"name": "Metashape_BuildModel","kwargs":{"input":inputdir,
-                                            "output":projectdir,
-                                            "projectname":projectname,
-                                            "chunkname":projectname}},
-        {"name": "Metashape_FindScales","kwargs":{"input":inputdir,
-                                            "output":projectdir,
-                                            "projectname":projectname,
-                                            "chunkname":projectname}},
-        {"name": "Metashape_BuildTextures","kwargs":{"input":inputdir,
-                                            "output":projectdir,
-                                            "projectname":projectname,
-                                            "chunkname":projectname}},
-        {"name": "Metashape_Reorient","kwargs":{"input":inputdir,
-                                            "output":projectdir,
-                                            "projectname":projectname,
-                                            "chunkname":projectname}},
-        {"name": "Metashape_ExportModel","kwargs":{"input":inputdir,
-                                            "output":projectdir,
-                                            "projectname":projectname,
-                                            "chunkname":projectname,
-                                            "extension":exporttype,
-                                            "conform_to_shape":False}},
-        {"name": "Blender_Snapshot","kwargs":{"inputobj":outputfilename,
-                                            "output":projectdir,
-                                            "scale":True,
-                                            }}
-    ]
-    tasks+=metashapetasks
+        metashapetasks=[
+            {"name":"Metashape_Align","kwargs":{"input":projectinput,
+                                                "output":projectdir,
+                                                "maskoption":int(maskoption),
+                                                "maskpath":maskpath,
+                                                "projectname":projectname,
+                                                "chunkname":f"{projectname}_{project['name']}"}},
+            {"name": "Metashape_DetectMarkers","kwargs":{"input":projectinput,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                 "chunkname":f"{projectname}_{project['name']}"}},
+            {"name": "Metashape_ErrorReduction","kwargs":{"input":projectinput,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                 "chunkname":f"{projectname}_{project['name']}"}},
+            {"name": "Metashape_BuildModel","kwargs":{"input":projectinput,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                 "chunkname":f"{projectname}_{project['name']}"}},
+            {"name": "Metashape_FindScales","kwargs":{"input":projectinput,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                 "chunkname":f"{projectname}_{project['name']}"}},
+            {"name": "Metashape_BuildTextures","kwargs":{"input":projectinput,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                 "chunkname":f"{projectname}_{project['name']}"}},
+           
+        ]
+        tasks+=metashapetasks
+    if len(projects)>0:
+        tasks.append({"name": "Metashape_AlignChunks","kwargs":{"input":inputdir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_main",
+                            "alignType":AlignmentTypes.ALIGN_BY_MARKERS}})
+    tasks+=[{"name": "Metashape_Reorient","kwargs":{"input":projectinput,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                 "chunkname":f"{projectname}_{project['name']}"}},
+            {"name": "Metashape_ExportModel","kwargs":{"input":projectinput,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                "chunkname":f"{projectname}_{project['name']}",
+                                                "extension":exporttype,
+                                                "conform_to_shape":False}},
+            {"name": "Blender_Snapshot","kwargs":{"inputobj":outputfilename,
+                                                "output":projectdir,
+                                                "scale":True,
+                                                }}]
     sm = buildTaskQueue(tasks)
     executeTaskQueue(sm)
 def build_masks_cmd(args):
@@ -222,12 +250,13 @@ if __name__=="__main__":
                                     4 = Grayscale Thresholding, \n \
                                     5 = AI \n",
                             default=0)
-    buildparser.add_argument("--palette", type=str, choices=["0","1","2","3"],
+    buildparser.add_argument("--palette", type=str, choices=["0","1","2","3","4"],
                              help = "What kind of palette are you using for measurement and orientation? \
                              0= No Palette \n \
                              1= Small Axes Palette \n \
                              2= Large Axes Palette \n \
-                             3= Labelled Protractor \n", 
+                             3= Labelled Protractor \n \
+                            4= Acute Protractor \n",
                              default=0)
 
     buildparser.set_defaults(func = build_model_cmd)

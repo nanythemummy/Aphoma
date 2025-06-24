@@ -3,6 +3,7 @@ from os import mkdir,listdir,sep
 import Metashape
 from util.InstrumentationStatistics import *
 from util.util import MaskingOptions
+from util.util import AlignmentTypes
 from util.PipelineLogging import getLogger
 from util.Configurator import Configurator
 from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
@@ -46,14 +47,14 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
         self.chunkname = argdict["chunkname"]
         self.maskoption = argdict["maskoption"] if "maskoption" in argdict.keys() and argdict["maskoption"]!=MaskingOptions.NOMASKS else None
         self.chunk = None
-        self.maskpath = Path(Configurator.getConfig().getProperty("photogrammetry","mask_path"))
+        self.maskpath = argdict["maskpath"]
 
     def __repr__(self):
         return "Metashape Task: Align Photos"
     def setup(self):
         #in order for this task to succeed, there must be a chunk, and there must be photos.
         success = super().setup()
-        
+        print(self.maskpath)
         if success is False:
             #the only way this fails is if there is no chunk.
             self.chunk = self.doc.addChunk()
@@ -63,6 +64,7 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
             success = True
         if self.maskoption is not None and not self.maskpath.exists():
             mkdir(self.maskpath)
+
         success &= self.input.exists()
         return success
     
@@ -85,6 +87,7 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
     
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
+        print("Executing")
         success = super().execute()
         if success:
             try:
@@ -178,6 +181,58 @@ class MetashapeTask_AddScales(MetashapeTask):
             success &= len(self.chunk.scalebars)>0
         success &= super().exit()
         return success          
+    
+class MetashapeTask_AlignChunks(MetashapeTask):
+    """
+    Task object for aligning chunks. Right now, it only supports aligning by marker at the moment. It requires a dict with the following keys in it on init.
+    projectname:str name of the project
+    input:str a directory of pictures to operate on.
+    output:str a place to put the results--this is the parent folder of the picture folder, usually.
+    chunkname:str label of the chunk to operate on.
+    aligntype:
+    """
+    def __init__(self,argdict:dict):
+        super().__init__(argdict)
+        pal = Configurator.getConfig().getProperty("photogrammetry","palette")
+        self.alignType = argdict["alignType"]
+        self.palette_name = pal if pal!="none" else None
+        if  self.palette_name and self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
+            palettedict= util.load_palettes()
+            self.palette_info = palettedict[self.palette_name]
+    def __repr__(self):
+        return "Metashape Task: Align Chunks by Marker"
+    def setup(self):
+        #for this to succeed, if in marker based alignment, there must be a palette.
+        success = super().setup()
+        if success:
+            if  self.palette_name and self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
+                palettedict= util.load_palettes()
+                self.palette_info = palettedict[self.palette_name]
+            else:
+                getLogger(__name__).info("Setup for align chunks failed. Check that the right alignment type was passed and that the palette type was specified.")
+                success &=False
+        
+        return success
+    @timed(Statistic_Event_Types.EVENT_ALIGN_CHUNKS)
+    def execute(self):
+        if self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
+            markerlist = []
+            chunklist = []
+            mainchunk = None
+            for chunk in self.doc.chunks:
+                chunklist.append(chunk.key)
+                if chunk.label == f"{self.projectname}_main":
+                    mainchunk = chunk
+                    for marker in chunk.markers:
+                        markerlist.append(marker.key)
+            self.doc.alignChunks(chunklist,mainchunk,method=1,markers=markerlist)
+            self.doc.save()
+        return True
+    def exit(self):
+        success = True and super().exit()
+        return success
+
+    
 class MetashapeTask_DetectMarkers(MetashapeTask):
     """
     Task object for detecting computer readable targets in a metashape document. It requires a dict with the following keys on init.           

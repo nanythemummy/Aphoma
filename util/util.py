@@ -24,6 +24,26 @@ class TexturePageScalingCutoffs(Enum):
     MED_OBJ = 0.001
     SMALL_OBJ = 0.0001
 
+class AlignmentTypes(Enum):
+    """Class containing constants for the align chunks option"""
+    NO_ALIGN=0
+    ALIGN_BY_MARKERS = 1
+    @classmethod
+    def getFriendlyStrings(cls):
+        return ["None", "Align by Markers"]
+    @classmethod
+    def numToFriendlyString(cls, num): 
+        if isinstance(num, AlignmentTypes):
+            num = num.value
+        return AlignmentTypes.getFriendlyStrings()[num]
+    @classmethod 
+    def friendlyToEnum(cls, searchstring:str):
+        friendly = AlignmentTypes.getFriendlyStrings()
+        for i,fr in enumerate(friendly):
+            if fr is searchstring:
+                return AlignmentTypes(i)
+        return 0
+    
 class MaskingOptions(Enum):
     """Class containing constants for masking options."""
     NOMASKS = 0
