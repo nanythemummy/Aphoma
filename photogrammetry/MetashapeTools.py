@@ -170,7 +170,8 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str,maskoption =
         for c in doc.chunks:
             if not c.model.textures:
                 get_logger().info("Building UV Map and Texture for chunk %s",c.label)
-                c.buildUV(page_count=config.getProperty("photogrammetry","texture_count"), texture_size=config.getProperty("photogrammetry","texture_size"))
+                numtex = config.getProperty("photogrammetry","texture_count") or ModelHelpers.getNumTexturePagesByVolume(c) 
+                c.buildUV(page_count=numtex, texture_size=config.getProperty("photogrammetry","texture_size"))
                 c.buildTexture(texture_size=config.getProperty("photogrammetry","texture_size"), ghosting_filter=True)
                 doc.save()
         #reorient model and export.

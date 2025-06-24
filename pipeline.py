@@ -1,8 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
 from util import util
-from util.Configurator import Configurator
-import photogrammetryScripts
 from UI.BuildFrame import BuildFrame
 from UI.WatchFrame import WatchFrame
 from UI.SendFrame import SendFrame

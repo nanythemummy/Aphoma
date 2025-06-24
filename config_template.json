@@ -16,7 +16,8 @@
             "Source_Type":".cr2",
             "Destination_Type":".jpg",
             "ListenerDefaultMasking":"SmartSelectDroplet",
-            "CV2_Export_Type":".png"
+            "CV2_Export_Type":".png",
+            "Roboflow_API_Key":""
 
         },
 
@@ -67,6 +68,20 @@
                 "projection_accuracy_max_selection":0.5,
                 "reconstruction_uncertainty_max_selection":0.5
             },
+            "multibanded":[
+                {"name":"ir",
+                "desc":"ReflectedI Infared",
+                "directory":"irir"},
+                {"name":"uv",
+                "desc":"Reflected Ultraviolet",
+                "directory":"uvuv"},
+                {"name":"uvvis",
+                "desc":"Visible Flourescence",
+                "directory":"uvvis"},
+                {"name":"visir",
+                "desc":"Visible Induced IR",
+                "directory":"visir"}
+            ],
             "custom_face_count":0,
             "low_res_poly_count":100000,
             "texture_size":4096,

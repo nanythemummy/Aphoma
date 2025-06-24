@@ -1,6 +1,8 @@
 from enum import Enum
 from datetime import datetime,timedelta
+import functools
 from util import PipelineLogging
+
 from uuid import uuid4
 
 class Statistic_Event_Types(Enum):
@@ -9,6 +11,7 @@ class Statistic_Event_Types(Enum):
     EVENT_BUILD_MASK = 2
     EVENT_BUILD_MODEL = 3
     EVENT_SNAPSHOT = 4
+    EVENT_ALIGN_CHUNKS =5
 
 
     @classmethod
@@ -17,12 +20,13 @@ class Statistic_Event_Types(Enum):
                                 "Conversion of photos",
                                 "Building Masks",
                                 "Building Models",
-                                "Model Snapshot"]
+                                "Model Snapshot",
+                                "Align Chunks"]
         return pretty_event_strings[value]
     
     @classmethod
     def getIteratable(cls):
-        return[cls.EVENT_TAKE_PHOTO,cls.EVENT_CONVERT_PHOTO,cls.EVENT_BUILD_MASK,cls.EVENT_BUILD_MODEL,cls.EVENT_SNAPSHOT]
+        return[cls.EVENT_TAKE_PHOTO,cls.EVENT_CONVERT_PHOTO,cls.EVENT_BUILD_MASK,cls.EVENT_BUILD_MODEL,cls.EVENT_SNAPSHOT,cls.EVENT_ALIGN_CHUNKS]
 
 
 
@@ -106,6 +110,8 @@ class InstrumentationStatistics():
             self.completed[evt.type.name] = []
         self.completed[evt.type.name].append(evt)
 
+
+
     
     @staticmethod
     def getStatistics():
@@ -116,3 +122,16 @@ class InstrumentationStatistics():
     @staticmethod
     def destroyStatistics():
         InstrumentationStatistics._STATISTICS = None
+
+        #decorator for wrapping functions in timed event start and end.
+def timed(event_type:Statistic_Event_Types):
+    def decorator_timed(func_to_time):
+        @functools.wraps(func_to_time)
+        def wraped_timed(*args,**kwargs):
+            eid = InstrumentationStatistics.getStatistics().timeEventStart(event_type)
+            ret = func_to_time(*args,**kwargs)
+            InstrumentationStatistics.getStatistics().timeEventEnd(eid)
+            return ret
+        return wraped_timed
+    return decorator_timed
+    

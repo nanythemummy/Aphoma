@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
-
 import cv2
 import numpy as np
+from inference_sdk import InferenceHTTPClient
 
 def otsuThresholding(picpath: Path, maskout: Path):
     #following the example here: https://stackoverflow.com/questions/58613825/get-boundary-from-canny-edges-and-remove-the-background-of-an-image
@@ -39,6 +39,27 @@ def thresholdingMask(picpath: Path, maskout: Path, lowerthreshold:int):
     mask = 255-mask #invert the colors
     cv2.imwrite(str(maskout),mask)
 
+# def inferencePotMask(picpath:Path,maskout:Path,inferenceclient:InferenceHTTPClient):
+#         potprediction = {}             
+
+#         potprediction = inferenceclient.infer(str(picpath))
+#         pots = []
+#         holes=[]
+#         for prediction in potprediction["predictions"]:
+#             shape = [(point['x'],point['y']) for point in prediction["points"]]
+#             if prediction["class"]=="pot":              
+#                 pots.append(shape)
+#             elif prediction["class"]=="hole":
+#                 holes.append(shape)
+#         with Image.open(picpath).convert('RGB') as pmask:
+#             draw = ImageDraw.Draw(pmask)
+#             draw.rectangle([(0,0),pmask.size],fill=(0,0,0))
+#             for pot in pots:
+#                 draw.polygon(pot,fill=(255,255,255))
+#             for hole in holes:
+#                 draw.polygon(hole,fill=(0,0,0))
+#             outpicpath = Path(self.output,f"{fn.stem}.png")
+#             pmask.save(outpicpath)
 def edgeDetectionMask(picpath: Path, maskout: Path, threshold1: int, threshold2: int):
     #uses the canny edge detection algorithm to detect edges, then finds the biggest contiguous edge and fills it.
     #if you have issues with this, play with the two threshold values below. They controll the smallest and largest line intensities to be

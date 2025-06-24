@@ -3,7 +3,7 @@ The code in MetashapeTools.py should focus on orchestration, and most number-cru
 
 import math
 import Metashape
-from util.util import load_palettes
+from util.util import load_palettes, TexturePageScalingCutoffs
 from util.PipelineLogging import getLogger as getGlobalLogger
 
 LOGGER = getGlobalLogger(__name__)
@@ -56,6 +56,17 @@ def getNumberedTarget(targetnumber:int, chunk):
             desiredmarker = marker
             break
     return desiredmarker
+
+def getNumTexturePagesByVolume(chunk):
+    
+    vol = chunk.model.volume()
+    if vol >= TexturePageScalingCutoffs.MED_OBJ.value:
+        return 4
+    elif vol >= TexturePageScalingCutoffs.SMALL_OBJ.value:
+        return 2
+    else: 
+        return 1
+
 
 def getLongestRunOfSequentialTargets(chunk):
     chunk.sortMarkers()

@@ -19,13 +19,14 @@ from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
 from util.Configurator import Configurator
-from processing import maskingAlgorithms
-from util.InstrumentationStatistics import InstrumentationStatistics, Statistic_Event_Types
+from util.InstrumentationStatistics import InstrumentationStatistics, Statistic_Event_Types,timed
 from util.PipelineLogging import getLogger
+from processing import maskingAlgorithms
+from tasks import MaskingTasks
 
 
 def build_masks(imagepath,outputdir,mode):
-    sid = InstrumentationStatistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_BUILD_MASK)
+    
     logger = getLogger(__name__)
     logger.info("Building masks.")
     if not os.path.exists(outputdir):
@@ -35,13 +36,29 @@ def build_masks(imagepath,outputdir,mode):
     if mode == util.MaskingOptions.MASK_CONTEXT_AWARE_DROPLET or \
         mode == util.MaskingOptions.MASK_MAGIC_WAND_DROPLET:
         build_masks_with_droplet(imagepath,outputdir,friendlystring)
-    else:
+    elif mode == util.MaskingOptions.MASK_THRESHOLDING or \
+            mode == util.MaskingOptions.MASK_CANNY:
         if Path(imagepath).is_dir():
             for f in os.listdir(imagepath):
                 build_masks_with_cv2(Path(imagepath,f),outputdir,mode)
         else:
             build_masks_with_cv2(Path(imagepath),outputdir,mode)
-    sid = InstrumentationStatistics.getStatistics().timeEventEnd(sid)
+    else:
+        if Path(imagepath).is_dir():
+            for f in os.listdir(imagepath):
+                buildMasksWithInference(Path(imagepath,f),Path(outputdir))
+        else:
+            buildMasksWithInference(Path(imagepath),Path(outputdir))
+
+
+def buildMasksWithInference(imagepath:Path,outputdir:Path):
+    task = MaskingTasks.MaskAI({"maskoption":util.MaskingOptions.MASK_AI,
+                                "input":imagepath,
+                                "output":outputdir})
+    if task.setup():
+        task.execute()
+        task.exit()
+@timed(Statistic_Event_Types.EVENT_BUILD_MASK)
 def build_masks_with_cv2(imagepath,outputdir,mode):
     logger = getLogger(__name__)
     desttype = Configurator.getConfig().getProperty("processing","Destination_Type")
@@ -58,7 +75,7 @@ def build_masks_with_cv2(imagepath,outputdir,mode):
         print(f"Otsu")
         maskingAlgorithms.otsuThresholding(imagepath,Path(outputdir,outputname))
       
-
+@timed(Statistic_Event_Types.EVENT_BUILD_MASK)
 def build_masks_with_droplet( imagefolder, outputpath, masktype):
     """Builds masks for a folder of images using a photoshop droplet specified in config.json.
     The droplet runs a context aware select on the central pixel of an image and then dumps the mask in a temp directory. 
