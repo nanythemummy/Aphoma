@@ -54,6 +54,15 @@ class MaskImages(BaseTask):
                 success = False
                 getLogger(__name__).info("Could not find mask for %s as %s", self.input,maskname)
         return success
+class MaskIntersection(MaskImages):
+    """Builds a mask that is the intersection of two other masks."""
+    def __init(self,argdict:dict):
+        super().__init__(argdict)
+        self.mask1 = argdict["mask1"]
+        self.mask2 = argdict["mask2"]
+    def __repr(self):
+        return "Masking: Two Mask Intersection"
+
     
 class MaskThreshold(MaskImages):
     """Uses grayscale thresholding to build a mask of the object. Basically, converts each picture to grayscale and then takes all values
