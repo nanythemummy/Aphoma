@@ -96,6 +96,51 @@
                 "zpos":[4,6],
                 "zneg":[]
             }
+        },
+        "CHI":{
+            "type":"12bit",
+            "unit":"mm",
+            "scalebars":{
+                "type":"explicit",
+                "bars":[
+                {
+                "points":[5,6],
+                "distance":250.07,
+                "units":"mm"
+                },
+                {
+                "points":[4,5],
+                "distance":250.06,
+                "units":"mm"
+                },
+                {
+                "points":[13,14],
+                "distance":250.04,
+                "units":"mm"
+                },
+                {
+                "points":[12,13],
+                "distance":249.96,
+                "units":"mm"
+                },
+                {
+                "points":[7,8],
+                "distance":250.04,
+                "units":"mm"
+                },
+                {
+                "points":[15,16],
+                "distance":249.89,
+                "units":"mm"
+                }
+            ]
+            },
+            "axes":{
+                "xpos":[],
+                "xneg":[],
+                "zpos":[],
+                "zneg":[]
+            }
         }
     }
 }

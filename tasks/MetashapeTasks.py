@@ -180,7 +180,9 @@ class MetashapeTask_AddScales(MetashapeTask):
         if "scalebars" in self.palette_info.keys():
             success &= len(self.chunk.scalebars)>0
         success &= super().exit()
-        return success          
+        if not success:
+            getLogger(__name__).warning("The expected targets for this palette were not found on the model.")
+        return True          
     
 class MetashapeTask_AlignChunks(MetashapeTask):
     """
@@ -283,8 +285,11 @@ class MetashapeTask_DetectMarkers(MetashapeTask):
         success = True
         if self.palette_info:
             success &= len(self.chunk.markers)>0
+        
         success &= super().exit()
-        return success          
+        if not success:
+            getLogger(__name__).warning("No markers found for chunk %s",(self.chunkname))
+        return True          
 
 class MetashapeTask_ErrorReduction(MetashapeTask):
 

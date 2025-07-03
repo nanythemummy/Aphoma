@@ -117,7 +117,7 @@ def build_model_cmd(args):
     inputdir = args.sourcedir
     projectdir = args.projectdir
     projectname = args.projectname
-    possiblepalettes = ["none","small_axes_palette","large_axes_palette","protractor"]
+    possiblepalettes = ["none","small_axes_palette","large_axes_palette","protractor","protractor2","CHI"]
     exporttype = Configurator.getConfig().getProperty("photogrammetry","export_as")
     Configurator.getConfig().setProperty("photogrammetry","palette", possiblepalettes[int(args.palette)])
     maskoption = args.maskoption
@@ -250,13 +250,15 @@ if __name__=="__main__":
                                     4 = Grayscale Thresholding, \n \
                                     5 = AI \n",
                             default=0)
-    buildparser.add_argument("--palette", type=str, choices=["0","1","2","3","4"],
+    buildparser.add_argument("--palette", type=str, choices=["0","1","2","3","4","5"],
                              help = "What kind of palette are you using for measurement and orientation? \
                              0= No Palette \n \
                              1= Small Axes Palette \n \
                              2= Large Axes Palette \n \
                              3= Labelled Protractor \n \
-                            4= Acute Protractor \n",
+                            4= Acute Protractor \n \
+                            5=CHI Markers",
+                            
                              default=0)
 
     buildparser.set_defaults(func = build_model_cmd)

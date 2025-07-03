@@ -137,37 +137,42 @@ class ConfigWindow(tk.Toplevel):
         frame = ttk.Frame(self)
         frame.grid(row=0,column=0,sticky="nsew")
 
+        # Create canvas and scrollbar as children of 'frame'
         canvas = tk.Canvas(frame)
-        scrollbar = ttk.Scrollbar(self,orient="vertical",command=canvas.yview)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=scrollbar.set)
 
+        # Create the interior frame inside the canvas
         interiorframe = ttk.Frame(canvas)
-        interiorframe.bind("<Configure>",lambda e:canvas.configure(scrollregion=canvas.bbox("all")))
-        
-        self.columnconfigure(0,weight=1)
-        self.rowconfigure(0,weight=1)
-        frame.columnconfigure(0,weight=1)
-        frame.columnconfigure(0,weight=1)
+        canvas.create_window((0, 0), window=interiorframe, anchor="nw")
+        interiorframe.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-        interiorframe.grid(column=0,row=0,sticky="nsew")
-        scrollbar.grid(row=0,column=1,sticky="ns")
-        canvas.grid(column=0,row=0,sticky="nsew")
-        canvas.bind_all("<MouseWheel>",_on_mousewheel)
+        # Configure grid weights for resizing
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
 
+        # Place widgets
+        canvas.grid(column=0, row=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        # Bind mousewheel to canvas only
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         rowcounter = 0
         config = Configurator.getConfig()
         self.svars = ConfigFormItems()
         for k in config.getSections():
-            ttk.Label(interiorframe,text=k).grid(column=0,row=rowcounter)
-            ttk.Separator(interiorframe,orient="horizontal")
-            rowcounter+=1
+            ttk.Label(interiorframe, text=k).grid(column=0, row=rowcounter)
+            ttk.Separator(interiorframe, orient="horizontal")
+            rowcounter += 1
             for a in config.getPropertiesForSection(k):
-                ttk.Label(interiorframe,text=a).grid(column=0,row = rowcounter)
-                ttk.Entry(interiorframe,textvariable=getattr(self.svars,k)[a][0]).grid(column=1,row=rowcounter)
-                if getattr(self.svars,k)[a][1]=="path":
-                    ttk.Button(interiorframe,text="Browse",
-                                command=functools.partial(set_path,configname=k,variablename=a)).grid(column=2,row=rowcounter)
-                rowcounter+=1
-        ttk.Button(interiorframe, text="OK",command = lambda:self.setConfigVals()).grid(column=1,row=rowcounter)
-    
+                ttk.Label(interiorframe, text=a).grid(column=0, row=rowcounter)
+                ttk.Entry(interiorframe, textvariable=getattr(self.svars, k)[a][0]).grid(column=1, row=rowcounter)
+                if getattr(self.svars, k)[a][1] == "path":
+                    ttk.Button(interiorframe, text="Browse",
+                                command=functools.partial(set_path, configname=k, variablename=a)).grid(column=2, row=rowcounter)
+                rowcounter += 1
+        ttk.Button(interiorframe, text="OK", command=lambda: self.setConfigVals()).grid(column=1, row=rowcounter)

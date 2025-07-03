@@ -5,27 +5,12 @@ import numpy as np
 from inference_sdk import InferenceHTTPClient
 
 def otsuThresholding(picpath: Path, maskout: Path):
-    #following the example here: https://stackoverflow.com/questions/58613825/get-boundary-from-canny-edges-and-remove-the-background-of-an-image
     img = cv2.imread(str(picpath))
-    cp = img.copy()
-    mask = np.zeros(img.shape, dtype=np.uint8)
-    img = cv2.GaussianBlur(img,(51,51),0)
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)[1]
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(3,3))
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
-
-
-    conts = cv2.findContours(opening,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-    conts = conts[0] if len(conts)==2 else conts[1]
-    conts = sorted(conts,key=cv2.contourArea,reverse=True)
-
-    cv2.drawContours(mask,conts[0],-1,(255,255,255),-1)
-    close = cv2.morphologyEx(mask, cv2.MORPH_CLOSE,kernel, iterations=10)
-    close = cv2.cvtColor(close,cv2.COLOR_BGR2GRAY)
-    close = cv2.fillConvexPoly(mask,conts[0],(255,255,255))
-
-    cv2.imwrite(str(maskout),close)
+    _,mask = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    if np.mean(mask)>127: #ie, its greater than half of 255:
+        mask = cv2.bitwise_not(mask)
+    cv2.imwrite(str(maskout),mask)
 
 
 
