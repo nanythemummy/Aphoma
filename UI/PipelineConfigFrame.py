@@ -130,12 +130,12 @@ class ConfigWindow(tk.Toplevel):
             fn = filedialog.askopenfilename()
             varname[variablename][0].set(fn)
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta/120)), "units")
+            canvas.yview_scroll(int(-1 * event.delta/120),"units")
         super().__init__(container)
 
         self.geometry("500x500")
         frame = ttk.Frame(self)
-        frame.grid(row=0, column=0, sticky="nsew")
+        frame.grid(row=0,column=0,sticky="nsew")
 
         # Create canvas and scrollbar as children of 'frame'
         canvas = tk.Canvas(frame)
@@ -144,20 +144,14 @@ class ConfigWindow(tk.Toplevel):
 
         # Create the interior frame inside the canvas
         interiorframe = ttk.Frame(canvas)
-        canvas_window = canvas.create_window((0, 0), window=interiorframe, anchor="nw")
-
-        # Update scrollregion when the size of the interior frame changes
-        def on_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            # Resize the canvas window's width to match the canvas
-            canvas.itemconfig(canvas_window, width=canvas.winfo_width())
-        interiorframe.bind("<Configure>", on_configure)
-        interiorframe.bind("<Configure>",lambda e:canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=interiorframe, anchor="nw")
-        self.columnconfigure(0,weight=1)
-        self.rowconfigure(0,weight=1)
-        frame.columnconfigure(0,weight=1)
-        frame.columnconfigure(0,weight=1)
+        interiorframe.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        # Configure grid weights for resizing
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
 
         # Place widgets
         canvas.grid(column=0, row=0, sticky="nsew")
