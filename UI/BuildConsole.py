@@ -10,8 +10,22 @@ import logging
 
 class BuildConsole(ScrolledText):
     
-    def __init__(self,parent):
+    def __init__(self, parent):
         super().__init__(parent)
+        # Bind mouse wheel locally to this widget
+        self.bind("<Enter>", self._bind_mousewheel)
+        self.bind("<Leave>", self._unbind_mousewheel)
+
+    def _on_mousewheel(self, event):
+        # For Windows, use event.delta
+        self.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        return "break"
+
+    def _bind_mousewheel(self, event=None):
+        self.bind_all("<MouseWheel>", self._on_mousewheel)
+
+    def _unbind_mousewheel(self, event=None):
+        self.unbind_all("<MouseWheel>")
 
 class TextHanlder(logging.Handler):
     def __init__(self,text):
