@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+    
 
         
 
@@ -13,12 +14,12 @@
     
 
         {
-            "name": "test_prune",
+            "name": "test_multibanded",
             "type": "debugpy",
             "request": "launch",
-            "program": "util/util.py",
+            "program": "multibanded_build.py",
             "console": "integratedTerminal",
-            "args":["C:/Users/kjohnston/Desktop/temp/"]
+            "args":["e:/automation/DP4.7-12/_input","e:/automation/DP4.7-12/","deck_plank_test"]
         },
         {
             "name": "sketchfab_api",

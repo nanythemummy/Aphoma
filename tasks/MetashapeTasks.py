@@ -41,13 +41,15 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
     output:str a place to put the results--this is the parent folder of the picture folder, usually.
     maskoption:MaskingOptions - a member of the enum util.MaskingOptions
     chunkname:str label of the chunk to operate on.
+    photos: an optional array of photo paths--all photos in the input directory will be used if this is not present.
     """
     def __init__(self,argdict:dict):
         super().__init__(argdict)
         self.chunkname = argdict["chunkname"]
-        self.maskoption = argdict["maskoption"] if "maskoption" in argdict.keys() and argdict["maskoption"]!=MaskingOptions.NOMASKS else None
+        self.maskoption = argdict["maskoption"] if "maskoption" in argdict.keys() else MaskingOptions.NOMASKS
         self.chunk = None
         self.maskpath = argdict["maskpath"]
+        self.photos = argdict["photos"] if "photos" in argdict.keys() else [f for f in listdir(self.input) if Path(f).suffix.upper=="JPG"]
 
     def __repr__(self):
         return "Metashape Task: Align Photos"
@@ -62,16 +64,14 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
             self.doc.save()      
             getLogger(__name__).info('Added chunk %s.',self.chunkname)
             success = True
-        if self.maskoption is not None and not self.maskpath.exists():
+        if self.maskoption is not MaskingOptions.NOMASKS and not self.maskpath.exists():
             mkdir(self.maskpath)
 
         success &= self.input.exists()
         return success
     
     def loadPhotos(self):
-        images = listdir(self.input)
-        getLogger(__name__).info("Loading images from %s", self.input)
-        for i in images:
+        for i in self.photos:
             if Path(i).suffix.upper() ==".JPG":
                 self.chunk.addPhotos(str(Path(self.input,i)))
 
@@ -94,7 +94,8 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
                 downscale_factor = Configurator.getConfig().getProperty("photogrammetry","sparse_cloud_quality")
                 if len(self.chunk.cameras)==0:
                     self.loadPhotos()
-                    self.loadMasks()      
+                    if not self.maskoption is MaskingOptions.NOMASKS:
+                        self.loadMasks()      
                 if not self.chunk.point_cloud:   
                     self.chunk.matchPhotos(downscale=downscale_factor,
                         generic_preselection=True,

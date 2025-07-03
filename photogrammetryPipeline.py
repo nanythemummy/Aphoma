@@ -195,6 +195,8 @@ def build_model_cmd(args):
                                                 }}]
     sm = buildTaskQueue(tasks)
     executeTaskQueue(sm)
+def build_multibanded_cmd(args):
+    
 def build_masks_cmd(args):
     """Wrapper script for building masks from contents of a folder.
     Parameters:
@@ -226,6 +228,7 @@ if __name__=="__main__":
     subparsers = parser.add_subparsers(help="Sub-command help")
     maskparser = subparsers.add_parser("mask", help="Build Masks for files in a folder using various methods.")
     buildparser = subparsers.add_parser("build", help="Build a model using the RAW, TIF, or JPG files in a given directory.")
+    multibandparser = subparsers.add_parser("multibanded", help="Build a model with multibanded images in each chunk.")
     maskparser.add_argument("rawdir", help="Location of raw files")
     maskparser.add_argument("outputdir",help="location to store masks")   
     maskparser.add_argument("sourcedir",help="Location of files to build model from")   
@@ -260,7 +263,19 @@ if __name__=="__main__":
                             5=CHI Markers",
                             
                              default=0)
-
+    multibandparser.add_argument("sourcedir", help="Location of raw files")
+    multibandparser.add_argument("projectdir",help="location to store masks")   
+    multibandparser.add_argument("projectname", help="The name of the project to build.")
+    multibandparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4","5"], 
+                            help = "How do you want to build masks: \
+                                    0 = no masks, \n\
+                                    1 = Photoshop droplet(context aware select), \n \
+                                    2 = Photoshop droplet (magic wand), \n \
+                                    3 = Canny Edge detection algorithm, \n\
+                                    4 = Grayscale Thresholding, \n \
+                                    5 = AI \n",
+                            default=0)
+    multibandparser.set_defaults(func=build_multibanded_cmd)
     buildparser.set_defaults(func = build_model_cmd)
     maskparser.set_defaults(func=build_masks_cmd)
     args = parser.parse_args()
