@@ -159,7 +159,7 @@ class ConfigWindow(tk.Toplevel):
 
         # Bind mousewheel to canvas only
         canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        canvas.bind("<Leave>", lambda e: canvas.bind_all("<MouseWheel>"))
 
         rowcounter = 0
         config = Configurator.getConfig()
