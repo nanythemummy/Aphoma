@@ -33,8 +33,8 @@ def uploadModel(zipfile, infodict):
     data = {
         "name":infodict["name"],
         "description":infodict["description"],
-        "tags" : [],
-        "categories":[],
+        "tags" : infodict["tags"],
+        "categories":infodict["categories"],
         "isInspectable":True,
         "isPublished":False
     }
@@ -46,7 +46,7 @@ def uploadModel(zipfile, infodict):
         except RequestException as e:
             print(f"Error:{e}")
             return
-        if response.status_code==requests.codes.created:
+        if response.status_code == 201: #201  is created.
             model_url = response.headers['Location']
             print(f"Model processing.\n When it's done, you'll be able to find it at {model_url}")
             return model_url
@@ -62,14 +62,14 @@ def pollStatus(modelurl):
         print("poling for model status.")
         payload = buildRequestPayload()
         try:
-            response = requests.get(modelurl,**payload)
+            response = requests.get(modelurl, timeout=10, **payload)
         except RequestException as e:
             print(f"Try failed with error {e}")
             errors+=1
             retry+=1
             continue
         result = response.json()
-        if response.status_code != requests.codes.ok:
+        if response.status_code != 200: #ok
             error = result.get("error","unknown")
             print(f"Upload failed with error:{error}")
             errors +=1
@@ -171,16 +171,16 @@ def writeCSVFromModelDict(csvpath:Path,models:dict):
         writer.writerows(csvdata)
 
 
-def command_upload(args):
-    modelpath = Path(args.modelpath)
-    infodict = {"name":args.name,"description":args.desc}
+def command_upload(commandargs):
+    modelpath = Path(commandargs.modelpath)
+    infodict = {"name":commandargs.name,"description":commandargs.desc}
     if modelpath.exists():
         modelurl = uploadModel(modelpath,infodict)
         if modelurl:
             pollStatus(modelurl)
 
-def command_GetModelInfo(args):
-    csvpath = Path(args.csvpath)
+def command_GetModelInfo(commandargs):
+    csvpath = Path(commandargs.csvpath)
     if csvpath.parent.exists(): #is the directory I want to stick this in real?
         print("Got here. WTF is this error?")
         models = getModelInfo()
@@ -188,25 +188,26 @@ def command_GetModelInfo(args):
 
 
 def csvToDict(csvfile:Path):
+    """converts a csv into a dictionary given the path of the csv file and using the headers as keys"""
     keyedtoname={}
     with open(csvfile,mode='r',encoding='utf-8',newline='') as f:
-            reader = csv.DictReader(f)
-            try:
-                for row in reader:
-                    name=row["name"]
-                    del row["name"]
-                    keyedtoname[name]=row
-            except csv.Error as e:
-                print(e)
-                raise e
+        reader = csv.DictReader(f)
+        try:
+            for row in reader:
+                name=row["name"]
+                del row["name"]
+                keyedtoname[name]=row
+        except csv.Error as e:
+            print(e)
+            raise e
     return keyedtoname
 
 def format_description(desc:dict):
     newdescription =f"* Material:{desc.get('material','')} \n* Culture: {desc.get('culture','')} \n* Provenance: {desc.get('provenance','')} \n* ISAC Registration Number: {desc.get('registration','')} \n* More Information: {desc.get('stable_url','')} \n* Photographer: {desc.get('photographer','')} \n* Image Processing and Modeling: {desc.get('modeler','')}"   
     return newdescription
 
-def command_CSVUpload(args):
-    csvpath = Path(args.csvpath)
+def command_CSVUpload(commandargs):
+    csvpath = Path(commandargs.csvpath)
     if csvpath.exists():
         data = csvToDict(csvpath)
         for k,v in data.items():
@@ -216,8 +217,8 @@ def command_CSVUpload(args):
                 #upload the model.
                 modeldata = {"name":k,
                              "description":format_description(v),
-                             "tags":str(v.get("tags","")).split(","),
-                             "categories":str(v.get("category names","")).split(",")}
+                             "tags":str(v["tags"]).split(",")if "tags" in v.keys() and v["tags"]!="" else [],
+                             "categories":str(v["category names"]).split(",") if "category names" in v.keys() and v["category names"]!="" else []}
                 modelurl = uploadModel(originalfile,modeldata)
                 pollStatus(modelurl)
 
