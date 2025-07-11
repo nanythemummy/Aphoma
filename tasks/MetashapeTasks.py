@@ -53,7 +53,8 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
         self.maskoption = argdict["maskoption"] if "maskoption" in argdict.keys() else MaskingOptions.NOMASKS
         self.chunk = None
         self.maskpath = argdict["maskpath"]
-        self.photos = argdict["photos"] if "photos" in argdict.keys() else [f for f in listdir(self.input) if Path(f).suffix.upper=="JPG"]
+        self.photos = argdict["photos"] if "photos" in argdict.keys() else []
+
 
     def __repr__(self):
         return "Metashape Task: Align Photos"
@@ -75,9 +76,30 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
         return success
     
     def loadPhotos(self):
-        for i in self.photos:
-            if Path(i).suffix.upper() ==".JPG":
-                self.chunk.addPhotos(str(Path(self.input,i)))
+        if len(self.photos)>0:
+            for i in self.photos:
+                if Path(i).suffix.upper() ==".JPG":
+                    self.chunk.addPhotos(str(Path(self.input,i)))
+        else:
+            subdirs = [p for p in self.input.iterdir() if p.is_dir()]
+            if len(subdirs)==0:
+                photos = [str(f) for f in self.input.iterdir() if f.is_file() and f.suffix.upper()==".JPG"]
+                self.chunk.addPhotos(photos)
+            else:
+                #assume this is a multibanded setup.
+                getLogger(__name__).warning("Setting up a multibanded system because there are subdirectories in the photo input folder.")
+                subdirfolders = []
+                for subdir in subdirs:
+                    p = [str(f) for f in subdir.iterdir() if f.is_file() and f.suffix.upper()==".JPG"]
+                    p.sort()
+                    subdirfolders.append(p)
+                images =[]
+                filegroups = []
+                for  z in zip(*subdirfolders):
+                    filegroups.append(len(z))
+                    images+=z
+                
+                self.chunk.addPhotos(images,filegroups, Metashape.ImageLayout.MultiplaneLayout)          
 
     def loadMasks(self):
         maskpath = Path(self.output,self.maskpath)
@@ -220,6 +242,7 @@ class MetashapeTask_AlignChunks(MetashapeTask):
                 success &=False
         
         return success
+    
     @timed(Statistic_Event_Types.EVENT_ALIGN_CHUNKS)
     def execute(self):
         if self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
@@ -235,6 +258,7 @@ class MetashapeTask_AlignChunks(MetashapeTask):
             self.doc.alignChunks(chunklist,mainchunk,method=1,markers=markerlist)
             self.doc.save()
         return True
+    
     def exit(self):
         success = True and super().exit()
         return success
@@ -564,4 +588,48 @@ class MetashapeTask_ExportModel(MetashapeTask):
         success = True
         if not Path(self.outputfile,self.outputfolder).exists():
             success = False
-        return (success & super().exit())          
+        return (success & super().exit())
+
+class MetashapeTask_BuildOrthomosaic(MetashapeTask):
+    """
+    Task object for building an orthomosaic. It will build the orthomosaic for the chunk.
+    It requires:
+        input: str - a directory of pictures to operate on.
+        output: str - a place to put the results (parent folder of the picture folder, usually).
+        chunkname: str - label of the chunk to operate on.
+    For it to run successfully, the chunk must have a model and no orthomosaic.
+    """
+    def __init__(self, argdict: dict):
+        super().__init__(argdict)
+
+    def __repr__(self):
+        return "Metashape Task: Build Orthomosaic"
+
+    @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)
+    def execute(self):
+        success = super().execute()
+        if success:
+            try:
+                # Only build orthomosaic if there is a model and no orthomosaic yet
+                if self.chunk.model and not self.chunk.orthomosaic:
+                    getLogger(__name__).info("Building Orthomosaic.")
+                    self.chunk.buildOrthomosaic(
+                        surface_data=Metashape.DataSource.ModelData,
+                        blending_mode=Metashape.BlendingMode.MosaicBlending,
+                        resolution_x=0.0002,
+                        resolution_y=0.0002
+
+                    )
+                    self.doc.save()
+            except Exception as e:
+                getLogger(__name__).error(e)
+                success = False
+                raise e
+        return success
+
+    def exit(self):
+        # Verify that the orthomosaic was built successfully
+        success = True
+        if not hasattr(self.chunk, 'orthomosaic'):
+            success = False
+        return (success & super().exit())
