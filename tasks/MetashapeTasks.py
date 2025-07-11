@@ -1,6 +1,7 @@
 from pathlib import Path
 from os import mkdir,listdir,sep
 import Metashape
+import shutil
 from util.InstrumentationStatistics import *
 from util.util import MaskingOptions
 from util.util import AlignmentTypes
@@ -18,11 +19,12 @@ class MetashapeTask(BaseTask):
         self.projectname = argdict["projectname"]
         self.input = Path(argdict["input"])
         self.output = Path(argdict["output"])
-        self.doc =MetashapeFileSingleton.getMetashapeDoc(self.projectname,self.output)
+        self.doc = None
         self.chunkname = argdict["chunkname"]
         self.chunk = None
     def setup(self):
         success = super().setup()
+        self.doc =MetashapeFileSingleton.getMetashapeDoc(self.projectname,self.output)
         for chunk in self.doc.chunks:
             if chunk.label == self.chunkname:
                 self.chunk = chunk
@@ -33,7 +35,9 @@ class MetashapeTask(BaseTask):
     def exit(self):
         success = super().exit()
         return success
-    
+
+
+
 class MetashapeTask_AlignPhotos(MetashapeTask):
     """Task for aligning photos using metashape/building a sparse cloud. The dictionary passed in on init must include keys:
     projectname:str name of the project
@@ -224,7 +228,7 @@ class MetashapeTask_AlignChunks(MetashapeTask):
             mainchunk = None
             for chunk in self.doc.chunks:
                 chunklist.append(chunk.key)
-                if chunk.label == f"{self.projectname}_main":
+                if chunk.label == f"{self.chunkname}":
                     mainchunk = chunk
                     for marker in chunk.markers:
                         markerlist.append(marker.key)
@@ -418,6 +422,56 @@ class MetashapeTask_BuildTextures(MetashapeTask):
             success = False
         return (success & super().exit())   
     
+class MetashapeTask_ReorientSpecial(MetashapeTask):
+
+    """
+    Task object for reorienting a model in space based on a pre-defined x and y axis where points on an x-y plane are arbitrarily specified at runtime. It requires:
+        input:str a directory of pictures to operate on.
+        output:str a place to put the results--this is the parent folder of the picture folder, usually.
+        chunkname:str label of the chunk to operate on.
+        xyplane:list a list of strings with the names of the targets that form a triangular xy plane. The first and second items on the list are assumed to be a 
+        line segment on the x axis.
+        xaxis:tuple a tuple of points on the x axis.
+        It assumes that if you are working from a palette of computer readable markers, the name of this palette is already defined in config.json or via
+        the UI. NOTE: THIS OPERATION DOES NOT SAVE.
+
+    """
+    def __init__(self,argdict:dict):
+        super().__init__(argdict)
+        self.palette_info = None 
+        pal = Configurator.getConfig().getProperty("photogrammetry","palette") 
+        self.palette_name = pal if pal != "none" else None
+        self.axes = None
+
+    def __repr__(self):
+        return "Metashape Task: Reorient Model--SPECIAL"
+    
+    def setup(self):
+        success = super().setup()
+        if self.chunk and self.palette_name:
+            palettedict = util.load_palettes()
+            self.palette_info = palettedict[self.palette_name]
+            self.axes = ModelHelpers.find_axes_from_markers(self.chunk,self.palette_info)
+        return success
+        
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
+    def execute(self):
+        success = super().execute()
+        if success:
+            try:     
+                if self.chunk.model:
+                    if len(self.axes)==0:
+                        getLogger(__name__).warning("No axes on which to orient chunk %s",self.chunkname)
+                    else:
+                        getLogger(__name__).info("Reorienting chunk %s according to markers on palette.",self.chunkname)
+                        ModelHelpers.align_markers_to_axes(self.chunk,self.axes)
+                        ModelHelpers.move_model_to_world_origin(self.chunk)
+            except Exception as e:
+                getLogger(__name__).error(e)
+                success = False
+                raise e
+        return success
+
 class MetashapeTask_Reorient(MetashapeTask):
 
     """
