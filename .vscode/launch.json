@@ -38,7 +38,7 @@
             "request": "launch",
             "program": "postprocessing/SketchfabScripts.py",
             "console": "integratedTerminal",
-            "args":["csvupload","newcsv.csv"]
+            "args":["csvupload","modelinfo.csv"]
         },
         {
             "name": "Python Debugger: photogrammetryScripts",

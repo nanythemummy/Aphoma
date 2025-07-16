@@ -7,3 +7,5 @@ config.json
 *_manifest.txt
 modelbuilder.log
 postprocessing/SketchfabScripts.py
+Test.csv
+modelinfo.csv

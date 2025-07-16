@@ -1,31 +1,19 @@
 import argparse
+from util.PipelineLogging import getLogger as getGlobalLogger
 from pathlib import Path
 
 import cv2
 import numpy as np
 
 def otsuThresholding(picpath: Path, maskout: Path):
-    #following the example here: https://stackoverflow.com/questions/58613825/get-boundary-from-canny-edges-and-remove-the-background-of-an-image
-    img = cv2.imread(str(picpath))
-    cp = img.copy()
-    mask = np.zeros(img.shape, dtype=np.uint8)
-    img = cv2.GaussianBlur(img,(51,51),0)
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)[1]
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(3,3))
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
 
+    #works best when there are two peaks in the image's histogram, roughly corresponding to the foreground and background.
 
-    conts = cv2.findContours(opening,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-    conts = conts[0] if len(conts)==2 else conts[1]
-    conts = sorted(conts,key=cv2.contourArea,reverse=True)
-
-    cv2.drawContours(mask,conts[0],-1,(255,255,255),-1)
-    close = cv2.morphologyEx(mask, cv2.MORPH_CLOSE,kernel, iterations=10)
-    close = cv2.cvtColor(close,cv2.COLOR_BGR2GRAY)
-    close = cv2.fillConvexPoly(mask,conts[0],(255,255,255))
-
-    cv2.imwrite(str(maskout),close)
+    image = cv2.imread(picpath)
+    gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+    threshold ,otsu = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    getGlobalLogger(__name__).info("FYI: Threshold calculated from histogram was %s", threshold)
+    cv2.imwrite(str(maskout),cv2.btiwise_not(otsu))
 
 
 
@@ -35,8 +23,8 @@ def thresholdingMask(picpath: Path, maskout: Path, lowerthreshold:int):
 
     grayscale = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     #mask = cv2.adaptiveThreshold(grayscale,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY_INV,11,2)
-    mask = cv2.threshold(grayscale,lowerthreshold,255,cv2.THRESH_BINARY)[1]
-    mask = 255-mask #invert the colors
+    _, mask = cv2.threshold(grayscale,lowerthreshold,255,cv2.THRESH_BINARY_INV)
+
     cv2.imwrite(str(maskout),mask)
 
 def edgeDetectionMask(picpath: Path, maskout: Path, threshold1: int, threshold2: int):
