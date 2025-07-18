@@ -1,11 +1,11 @@
 import argparse
 import re
-import pathlib
+import pathlib import Path
 import glob
 from queue import Queue
 from util.Configurator import Configurator
 from util.PipelineLogging import getLogger as getGlobalLogger
-from util.util import *
+from util.util import * 
 from tasks import BaseTask, ConversionTasks, MaskingTasks, MetashapeTasks, BlenderTasks
 from util.InstrumentationStatistics import InstrumentationStatistics
 from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
@@ -113,6 +113,10 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir):
                                 "output":projectdir,
                                 "projectname":projectname,
                                 "chunkname":f"{projectname}_{i}vis"}))
+        tasks.put(MetashapeTasks.MetashapeTask_BuildOrthomosaic({"input":sourcedir,
+                        "output":projectdir,
+                        "projectname":projectname,
+                        "chunkname":f"{projectname}_{i}vis"}))
     return tasks
 
 def build_multibanded_cmd(args):
