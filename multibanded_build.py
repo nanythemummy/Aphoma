@@ -1,6 +1,6 @@
 import argparse
 import re
-import pathlib import Path
+from pathlib import Path
 import glob
 from queue import Queue
 from util.Configurator import Configurator

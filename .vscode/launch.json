@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "multibanded_build.py",
             "console": "integratedTerminal",
-            "args":["e:/automation/DP4.7-12/_input","e:/automation/DP4.7-12/","deck_plank_test","-r"]
+            "args":["e:/automation/Board/_input","e:/automation/Board/","deck_plank_test",]
         },
         {
             "name": "sketchfab_api",

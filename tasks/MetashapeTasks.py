@@ -10,7 +10,6 @@ from util.Configurator import Configurator
 from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
 from util import util
 from photogrammetry import ModelHelpers
-
 from tasks.BaseTask import BaseTask
 
 class MetashapeTask(BaseTask):
@@ -35,7 +34,6 @@ class MetashapeTask(BaseTask):
     def exit(self):
         success = super().exit()
         return success
-
 
 
 class MetashapeTask_AlignPhotos(MetashapeTask):
@@ -519,7 +517,7 @@ class MetashapeTask_Reorient(MetashapeTask):
         if self.chunk and self.palette_name:
             palettedict = util.load_palettes()
             self.palette_info = palettedict[self.palette_name]
-            self.axes = ModelHelpers.find_axes_from_markers(self.chunk,self.palette_info)
+            self.axes = ModelHelpers.find_axes_from_markers_in_plane(self.chunk,self.palette_info)
         return success
         
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)

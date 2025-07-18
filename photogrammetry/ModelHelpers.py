@@ -391,6 +391,46 @@ def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
             break
     return removed_above_threshold
 
+def find_axes_from_markers_in_plane(chunk,palette:str):
+    if not chunk.markers:
+        LOGGER.info("No markers to align on chunk %s.",chunk.name)
+        return []
+    if not palette.get("plane",0) or not palette.get("xaxis",0):
+        LOGGER.warning("Can't find the markers in a plane if there is no plane specified in the marker palette.")
+        return []
+    plane,xaxis = [[] for _ in range(2)]
+    markers = chunk.markers
+
+    for m in markers:
+        if not m.position is None:
+            lookfor = (int)(m.label.split()[1])
+            if lookfor in palette["plane"]:
+                plane.append({"name":m.label,"pos":lookfor.position})
+                if lookfor in palette["xaxis"]:
+                    xaxis.append({"name":m.label,"id":m.id,"pos":m.position})
+    if len(xaxis)>=1 and len(plane)>2:
+        #Wooooo we can calculate this.
+        LOGGER.info("Calculating plane from %s, %s, %s",plane[0]["name"],plane[1]["name"],plane[2]["name"])
+        veca = plane[0]["position"]-plane[1]["position"]
+        vecb = plane[0]["position"]-plane[2]["position"]
+        y_axis = Metashape.Vector.cross(veca,vecb)
+        y_axis.normalize()
+        LOGGER.info("Y-axis is %s."%y_axis)
+        x_axis = Metashape.Vector(xaxis[0]["position"]).normalize()
+        LOGGER.info("X-axis is %s."%x_axis)
+        z_axis  = Metashape.vector.cross(x_axis,y_axis)
+        z_axis.normalize()
+        LOGGER.info("Z-axis is %s."%z_axis)
+        return[x_axis,y_axis,z_axis]
+
+    else:
+        LOGGER.error("Not enough markers to orient model." )
+        return []
+            
+
+
+
+    
 def find_axes_from_markers(chunk,palette:str):
     """Given a chunk with a model on it, and detected markers, use the palette definiton to try to figure out the x, y and z axes.
     
@@ -401,9 +441,8 @@ def find_axes_from_markers(chunk,palette:str):
 
     returns: a list of unit vectors corresponding to x,y, and z axes.
     """
-
     if not chunk.markers:
-        print("No marker palette defined or markers detected. Cannot detect orientation from palette.")
+        LOGGER.info("No markers to align on chunk %s."%chunk.name)
         return []
     xaxis = []
     zaxis = []
