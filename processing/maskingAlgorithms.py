@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 import cv2
 import numpy as np
+
 from inference_sdk import InferenceHTTPClient
 
 def otsuThresholding(picpath: Path, maskout: Path):
