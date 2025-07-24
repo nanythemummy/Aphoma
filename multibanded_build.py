@@ -62,22 +62,22 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
     getGlobalLogger(__name__).info("Building Tasklist.")
    
     for k,item in chunks.items():
-        for fb in ["front","back"]:
-            tasks.put(MetashapeTasks.MetashapeTask_AlignPhotos({"input":sourcedir,
-                                                        "output":projectdir,
-                                                        "maskoption":MaskingOptions.NOMASKS,
-                                                        "maskpath":"masks",
-                                                        "projectname":projectname,
-                                                        "chunkname":f"{projectname}_{fb}{k}",
-                                                        "photos":item[fb]["files"]
-                                                        }))
-            tasks.put(MetashapeTasks.MetashapeTask_ErrorReduction({"input":sourcedir,
-                                                        "output":projectdir,
-                                                        "projectname":projectname,
-                                                        "chunkname":f"{projectname}_{fb}{k}"
+        if k in ["ir","uvvis","vis"]:
+            for fb in ["front","back"]:
+                tasks.put(MetashapeTasks.MetashapeTask_AlignPhotos({"input":sourcedir,
+                                                            "output":projectdir,
+                                                            "maskoption":MaskingOptions.NOMASKS,
+                                                            "maskpath":"masks",
+                                                            "projectname":projectname,
+                                                            "chunkname":f"{projectname}_{fb}{k}",
+                                                            "photos":item[fb]["files"]
+                                                            }))
+                tasks.put(MetashapeTasks.MetashapeTask_ErrorReduction({"input":sourcedir,
+                                                            "output":projectdir,
+                                                            "projectname":projectname,
+                                                            "chunkname":f"{projectname}_{fb}{k}"
 
-            }))
-            if k in ("ir","vis"):
+                }))
                 tasks.put(MetashapeTasks.MetashapeTask_DetectMarkers({"input":sourcedir,
                                                                     "output":projectdir,
                                                                     "projectname":projectname,

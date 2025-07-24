@@ -83,7 +83,9 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
                 photos = [str(f) for f in self.input.iterdir() if f.is_file() and f.suffix.upper()==".JPG"]
                 self.chunk.addPhotos(photos)
             else:
-                #assume this is a multibanded setup.
+                #if the folder passed in as an image folder has subdirectories, 
+                # it is assumed that this is now a multibanded system, and each subdirectory will be loaded as a different band.
+
                 getLogger(__name__).warning("Setting up a multibanded system because there are subdirectories in the photo input folder.")
                 subdirfolders = []
                 for subdir in subdirs:
@@ -124,7 +126,7 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
                         generic_preselection=True,
                         reference_preselection=True,
                         reference_preselection_mode=Metashape.ReferencePreselectionMode.ReferencePreselectionSource,
-                        filter_mask=(self.maskpath!=None),
+                        filter_mask=(self.maskpath!=None and self.maskoption !=MaskingOptions.NOMASKS),
                         mask_tiepoints=False,
                         filter_stationary_points=True,
                         tiepoint_limit=0,

@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "multibanded_build.py",
             "console": "integratedTerminal",
-            "args":["e:/automation/Board/_input","e:/automation/Board/","deck_plank_test",]
+            "args":["E:\\automation\\Board\\_input\\","e:/automation/Board/","deck_plank_test",]
         },
         {
             "name": "sketchfab_api",

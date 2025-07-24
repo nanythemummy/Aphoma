@@ -2,13 +2,16 @@ import argparse
 from pathlib import Path
 import cv2
 import numpy as np
+from util.PipelineLogging import getLogger as getGlobalLogger
 from inference_sdk import InferenceHTTPClient
 
 def otsuThresholding(picpath: Path, maskout: Path):
     img = cv2.imread(str(picpath))
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    _,mask = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)    if np.mean(mask)>127: #ie, its greater than half of 255:
-    mask = cv2.bitwise_not(mask)
+    thresh ,mask = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)    
+    if np.mean(mask)>127: #ie, its greater than half of 255:
+        mask = cv2.bitwise_not(mask)
+    getGlobalLogger(__name__).info("Otsu threshold is: %s",thresh)
     cv2.imwrite(str(maskout),mask)
 
 
