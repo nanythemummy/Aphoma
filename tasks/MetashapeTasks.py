@@ -450,29 +450,34 @@ class MetashapeTask_ReorientSpecial(MetashapeTask):
         input:str a directory of pictures to operate on.
         output:str a place to put the results--this is the parent folder of the picture folder, usually.
         chunkname:str label of the chunk to operate on.
-        xyplane:list a list of strings with the names of the targets that form a triangular xy plane. The first and second items on the list are assumed to be a 
-        line segment on the x axis.
-        xaxis:tuple a tuple of points on the x axis.
+
         It assumes that if you are working from a palette of computer readable markers, the name of this palette is already defined in config.json or via
         the UI. NOTE: THIS OPERATION DOES NOT SAVE.
 
     """
     def __init__(self,argdict:dict):
+        print(f"initializing {__name__}")
         super().__init__(argdict)
         self.palette_info = None 
         pal = Configurator.getConfig().getProperty("photogrammetry","palette") 
         self.palette_name = pal if pal != "none" else None
-        self.axes = None
+        self.axes=None
 
     def __repr__(self):
         return "Metashape Task: Reorient Model--SPECIAL"
     
     def setup(self):
+        print(f"Chunkname is {self.chunkname}")
         success = super().setup()
+        print(f"parent was setup")
+        print(self.chunk)
         if self.chunk and self.palette_name:
             palettedict = util.load_palettes()
+            
             self.palette_info = palettedict[self.palette_name]
-            self.axes = ModelHelpers.find_axes_from_markers(self.chunk,self.palette_info)
+            print(self.palette_info)
+            self.axes = ModelHelpers.find_axes_from_markers_in_plane(self.chunk,self.palette_info)
+            print(self.axes)
         return success
         
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)

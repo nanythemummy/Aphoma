@@ -405,20 +405,21 @@ def find_axes_from_markers_in_plane(chunk,palette:str):
         if not m.position is None:
             lookfor = (int)(m.label.split()[1])
             if lookfor in palette["plane"]:
-                plane.append({"name":m.label,"pos":lookfor.position})
-                if lookfor in palette["xaxis"]:
-                    xaxis.append({"name":m.label,"id":m.id,"pos":m.position})
+                plane.append({"name":m.label,"pos":m.position})
+            if lookfor in palette["xaxis"]:
+                xaxis.append({"name":m.label,"id":m.key,"pos":m.position})
     if len(xaxis)>=1 and len(plane)>2:
         #Wooooo we can calculate this.
         LOGGER.info("Calculating plane from %s, %s, %s",plane[0]["name"],plane[1]["name"],plane[2]["name"])
-        veca = plane[0]["position"]-plane[1]["position"]
-        vecb = plane[0]["position"]-plane[2]["position"]
+        veca = plane[0]["pos"]-plane[1]["pos"]
+        vecb = plane[0]["pos"]-plane[2]["pos"]
         y_axis = Metashape.Vector.cross(veca,vecb)
         y_axis.normalize()
         LOGGER.info("Y-axis is %s."%y_axis)
-        x_axis = Metashape.Vector(xaxis[0]["position"]).normalize()
+        x_axis = xaxis[0]["pos"]
+        x_axis.normalize()
         LOGGER.info("X-axis is %s."%x_axis)
-        z_axis  = Metashape.vector.cross(x_axis,y_axis)
+        z_axis  = Metashape.Vector.cross(x_axis,y_axis)
         z_axis.normalize()
         LOGGER.info("Z-axis is %s."%z_axis)
         return[x_axis,y_axis,z_axis]

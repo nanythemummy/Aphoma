@@ -1,12 +1,11 @@
 import argparse
 import re
 from pathlib import Path
-import glob
+
 from queue import Queue
 from util.Configurator import Configurator
 from util.PipelineLogging import getLogger as getGlobalLogger
 from util.util import * 
-from tasks import BaseTask, ConversionTasks, MaskingTasks, MetashapeTasks, BlenderTasks
 from util.InstrumentationStatistics import InstrumentationStatistics
 from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
 
@@ -59,8 +58,7 @@ def executeTasklist(taskqueue:Queue):
 
 def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
     tasks = Queue()
-    getGlobalLogger(__name__).info("Building Tasklist.")
-   
+    getGlobalLogger(__name__).info("Building Tasklist.")  
     for k,item in chunks.items():
         if k in ["ir","uvvis","vis"]:
             for fb in ["front","back"]:
@@ -82,27 +80,23 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                                                                     "output":projectdir,
                                                                     "projectname":projectname,
                                                                     "chunkname":f"{projectname}_{fb}{k}"}))
-    getGlobalLogger(__name__).warning("Note that the resume flag has not been passed. This runs the steps through marker detection and stops to allow the user to place markers manually.\n Run again with the resume flag to resume.")
-
-       
+    getGlobalLogger(__name__).warning("Note that the resume flag has not been passed. This runs the steps through marker detection and stops to allow the user to place markers manually.\n Run again with the resume flag to resume.")   
     return tasks
+
 def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir):
     tasks = Queue()
     getGlobalLogger(__name__).info("Building Tasklist.")
-   
-    for k,item in chunks.items():
-        for fb in ["front","back"]:
+    for fb in ["front","back"]:
             tasks.put(MetashapeTasks.MetashapeTask_AddScales({"input":sourcedir,
-                                                        "output":projectdir,
-                                                        "projectname":projectname,
-                                                        "chunkname":f"{projectname}_{fb}{k}"}))
-            if fb=="front" and k=="vis":
-                tasks.put(MetashapeTasks.MetashapeTask_ReorientSpecial({"input":sourcedir,
-                                                        "output":projectdir,
-                                                        "projectname":projectname,
-                                                        "chunkname":f"{projectname}_{fb}{k}",
-                                                        "xyplane":["target 7","target 8","target 16"],
-                                                        "xaxis":("target 4","target 6")}))
+                                                    "output":projectdir,
+                                                    "projectname":projectname,
+                                                    "chunkname":f"{projectname}_{fb}vis"}))
+            tasks.put(MetashapeTasks.MetashapeTask_ReorientSpecial({"input":sourcedir,
+                                                    "output":projectdir,
+                                                    "projectname":projectname,
+                                                    "chunkname":f"{projectname}_{fb}vis",
+                                                    }))
+            break
     tasks.put(MetashapeTasks.MetashapeTask_AlignChunks({"input":sourcedir,
                                 "output":projectdir,
                                 "projectname":projectname,
@@ -132,8 +126,6 @@ def build_multibanded_cmd(args):
         tasks = setupTasksPhaseTwo(chunks, sourcedir,projectname,projdir)
     executeTasklist(tasks)
         
-
-
 if __name__=="__main__":
     multibandparser = argparse.ArgumentParser()
 

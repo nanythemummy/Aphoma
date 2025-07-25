@@ -13,7 +13,7 @@ import cv2
 
 import Metashape
 def checkMarkerLabelExists(chunk, labelname):
-    markers = chunk.markers
+
     for m in chunk.markers:
         if m.label ==labelname:
             return m
@@ -78,11 +78,6 @@ def sledgeHammerDetector(threshold=25):
         shutil.rmtree(tempdir)
 
 
-                        
-
-
-    #if deletetemp:
-    #    rmdir(tempdir)
 label = "Detect Markers with Sledgehammer"
 
 Metashape.app.addMenuItem(label, sledgeHammerDetector)
