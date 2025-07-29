@@ -9,12 +9,12 @@
     
 
         {
-            "name": "test_prune",
+            "name": "ZipForEmu",
             "type": "debugpy",
             "request": "launch",
-            "program": "util/util.py",
+            "program": "postprocessing/EMuScripts.py",
             "console": "integratedTerminal",
-            "args":["C:/Users/kjohnston/Desktop/temp/"]
+            "args":["buildOne","E33064A","C:/Users/keajohnston/Documents/Projects/Rollouts/E33064A","Meroitic Potsherd","blah"]
         },
         {
             "name": "sketchfab_api",
