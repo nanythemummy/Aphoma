@@ -8,6 +8,8 @@ from util.PipelineLogging import getLogger as getGlobalLogger
 from util.util import * 
 from util.InstrumentationStatistics import InstrumentationStatistics
 from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
+from tasks.MetashapeTasks import *
+from tasks.MetashapeTasksSpecial import *
 
 def sortFilesIntoBandsByName(filepath)->dict:
     multibanded_types= Configurator.getConfig().getProperty("photogrammetry","multibanded")
@@ -58,11 +60,11 @@ def executeTasklist(taskqueue:Queue):
 
 def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
     tasks = Queue()
-    getGlobalLogger(__name__).info("Building Tasklist.")  
+    getGlobalLogger(__name__).info("Building Tasklist, including aligning, error reduction, and marker detection.")  
     for k,item in chunks.items():
         if k in ["ir","uvvis","vis"]:
             for fb in ["front","back"]:
-                tasks.put(MetashapeTasks.MetashapeTask_AlignPhotos({"input":sourcedir,
+                tasks.put(MetashapeTask_AlignPhotos({"input":sourcedir,
                                                             "output":projectdir,
                                                             "maskoption":MaskingOptions.NOMASKS,
                                                             "maskpath":"masks",
@@ -70,47 +72,56 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                                                             "chunkname":f"{projectname}_{fb}{k}",
                                                             "photos":item[fb]["files"]
                                                             }))
-                tasks.put(MetashapeTasks.MetashapeTask_ErrorReduction({"input":sourcedir,
+                tasks.put(MetashapeTask_ErrorReduction({"input":sourcedir,
                                                             "output":projectdir,
                                                             "projectname":projectname,
                                                             "chunkname":f"{projectname}_{fb}{k}"
 
                 }))
-                tasks.put(MetashapeTasks.MetashapeTask_DetectMarkers({"input":sourcedir,
-                                                                    "output":projectdir,
-                                                                    "projectname":projectname,
-                                                                    "chunkname":f"{projectname}_{fb}{k}"}))
-    getGlobalLogger(__name__).warning("Note that the resume flag has not been passed. This runs the steps through marker detection and stops to allow the user to place markers manually.\n Run again with the resume flag to resume.")   
+                if k != "uvvis":
+                    tasks.put(MetashapeTask_DetectMarkers({"input":sourcedir,
+                                                    "output":projectdir,
+                                                    "projectname":projectname,
+                                                    "chunkname":f"{projectname}_{fb}{k}"}))
+                else:
+                    tasks.put(MetashapeTask_DetectMarkersFromThresholdedImage({"input":sourcedir,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                "chunkname":f"{projectname}_{fb}{k}",
+                                                "threshold":25}))
+                tasks.put(MetashapeTask_AddScales({"input":sourcedir,
+                                                    "output":projectdir,
+                                                    "projectname":projectname,
+                                                    "chunkname":f"{projectname}_{fb}{k}"}))
+                tasks.put(MetashapeTask_BuildModel({"input":sourcedir,
+                                    "output":projectdir,
+                                    "projectname":projectname,
+                                    "chunkname":f"{projectname}_{fb}{k}"}))
+        
+    tasks = setupTasksPhaseTwo(chunks,sourcedir,projectname,projectdir, tasks)  
     return tasks
 
-def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir):
-    tasks = Queue()
-    getGlobalLogger(__name__).info("Building Tasklist.")
+def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = None):
+    tasks = Queue() if tasklist is None else tasklist
+    getGlobalLogger(__name__).info("Building Tasklist, including selective scales, orientation, alignment, model, and orthophoto")
     for fb in ["front","back"]:
-            tasks.put(MetashapeTasks.MetashapeTask_AddScales({"input":sourcedir,
-                                                    "output":projectdir,
-                                                    "projectname":projectname,
-                                                    "chunkname":f"{projectname}_{fb}vis"}))
-            tasks.put(MetashapeTasks.MetashapeTask_ReorientSpecial({"input":sourcedir,
-                                                    "output":projectdir,
-                                                    "projectname":projectname,
-                                                    "chunkname":f"{projectname}_{fb}vis",
-                                                    }))
-            break
-    tasks.put(MetashapeTasks.MetashapeTask_AlignChunks({"input":sourcedir,
+        tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                "chunkname":f"{projectname}_{fb}vis",
+                                                }))
+
+    tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
                                 "output":projectdir,
                                 "projectname":projectname,
                                 "chunkname":f"{projectname}_frontvis",
                                 "alignType":AlignmentTypes.ALIGN_BY_MARKERS}))
-    for i in ["front","back"]:
-        tasks.put(MetashapeTasks.MetashapeTask_BuildModel({"input":sourcedir,
-                                "output":projectdir,
-                                "projectname":projectname,
-                                "chunkname":f"{projectname}_{i}vis"}))
-        tasks.put(MetashapeTasks.MetashapeTask_BuildOrthomosaic({"input":sourcedir,
-                        "output":projectdir,
-                        "projectname":projectname,
-                        "chunkname":f"{projectname}_{i}vis"}))
+    for k, v in chunks.items():
+        for i in ["front","back"]:
+            tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{i}{k}"}))
     return tasks
 
 def build_multibanded_cmd(args):

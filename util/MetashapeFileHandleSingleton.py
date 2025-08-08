@@ -41,7 +41,6 @@ class MetashapeFileSingleton():
     def getMetashapeDoc(projectname, outputdir,doc=None,):
 
         if MetashapeFileSingleton._METASHAPE_FILE  is not None:
-            print(f"Metashapefile is not none: looking for file {outputdir}/{projectname}.psx")
             required_directory = Path(outputdir,f"{projectname}.psx")
             if MetashapeFileSingleton._METASHAPE_FILE.getProjectPath() != required_directory:
                 MetashapeFileSingleton._METASHAPE_FILE.closeProject()

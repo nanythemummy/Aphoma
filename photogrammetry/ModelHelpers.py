@@ -492,7 +492,7 @@ def move_model_to_world_origin(chunk):
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()
 
-def align_markers_to_axes(chunk,axes): 
+def align_markers_to_axes(chunk,axes,scale=1000.0): 
     """Takes the local coordinates y axis of the model as calculated from a marker pallette and aligns it with world Y axis in metashape.
     
     Parameters:
@@ -501,7 +501,7 @@ def align_markers_to_axes(chunk,axes):
     """
     transmat = chunk.transform.matrix
     scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
-    scale*=1000.0 #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
+    scale*=scale #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
     scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
     newaxes = Metashape.Matrix([[axes[0].x,axes[0].y, axes[0].z,0],
                    [axes[1].x,axes[1].y,axes[1].z,0],
