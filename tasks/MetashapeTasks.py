@@ -443,60 +443,7 @@ class MetashapeTask_BuildTextures(MetashapeTask):
             success = False
         return (success & super().exit())   
     
-class MetashapeTask_ReorientSpecial(MetashapeTask):
 
-    """
-    Task object for reorienting a model in space based on a pre-defined x and y axis where points on an x-y plane are arbitrarily specified at runtime. It requires:
-        input:str a directory of pictures to operate on.
-        output:str a place to put the results--this is the parent folder of the picture folder, usually.
-        chunkname:str label of the chunk to operate on.
-
-        It assumes that if you are working from a palette of computer readable markers, the name of this palette is already defined in config.json or via
-        the UI. NOTE: THIS OPERATION DOES NOT SAVE.
-
-    """
-    def __init__(self,argdict:dict):
-        print(f"initializing {__name__}")
-        super().__init__(argdict)
-        self.palette_info = None 
-        pal = Configurator.getConfig().getProperty("photogrammetry","palette") 
-        self.palette_name = pal if pal != "none" else None
-        self.axes=None
-
-    def __repr__(self):
-        return "Metashape Task: Reorient Model--SPECIAL"
-    
-    def setup(self):
-        print(f"Chunkname is {self.chunkname}")
-        success = super().setup()
-        print(f"parent was setup")
-        print(self.chunk)
-        if self.chunk and self.palette_name:
-            palettedict = util.load_palettes()
-            
-            self.palette_info = palettedict[self.palette_name]
-            print(self.palette_info)
-            self.axes = ModelHelpers.find_axes_from_markers_in_plane(self.chunk,self.palette_info)
-            print(self.axes)
-        return success
-        
-    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
-    def execute(self):
-        success = super().execute()
-        if success:
-            try:     
-                if self.chunk.model:
-                    if len(self.axes)==0:
-                        getLogger(__name__).warning("No axes on which to orient chunk %s",self.chunkname)
-                    else:
-                        getLogger(__name__).info("Reorienting chunk %s according to markers on palette.",self.chunkname)
-                        ModelHelpers.align_markers_to_axes(self.chunk,self.axes)
-                        ModelHelpers.move_model_to_world_origin(self.chunk)
-            except Exception as e:
-                getLogger(__name__).error(e)
-                success = False
-                raise e
-        return success
 
 class MetashapeTask_Reorient(MetashapeTask):
 
@@ -620,7 +567,6 @@ class MetashapeTask_BuildOrthomosaic(MetashapeTask):
                         blending_mode=Metashape.BlendingMode.MosaicBlending,
                         resolution_x=0.0002,
                         resolution_y=0.0002
-
                     )
                     self.doc.save()
             except Exception as e:

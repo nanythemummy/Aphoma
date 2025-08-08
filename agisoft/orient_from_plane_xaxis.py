@@ -3,7 +3,7 @@ import sys
 import Metashape
 parentpath = Path(__file__).parent.parent.absolute()
 sys.path.append(str(parentpath))
-from tasks import MetashapeTasks
+from tasks.MetashapeTasksSpecial import MetashapeTask_ReorientSpecial
 from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
 from util.Configurator import Configurator
 
@@ -20,7 +20,7 @@ def reorientOnPalette():
     print("Initialized singleton")
     Configurator.getConfig().setProperty("photogrammetry","palette","Multibanded")
     palette=Configurator.getConfig().getProperty("photogrammetry","palette")
-    reorienttask = MetashapeTasks.MetashapeTask_ReorientSpecial({"input":"","output":outputfolder,"projectname":projname,"chunkname":chunk.label})
+    reorienttask = MetashapeTask_ReorientSpecial({"input":"","output":outputfolder,"projectname":projname,"chunkname":chunk.label})
     if reorienttask.setup():
         print("Executing reorientation special")
         reorienttask.execute()
