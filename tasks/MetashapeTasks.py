@@ -30,6 +30,7 @@ class MetashapeTask(BaseTask):
                 break
         if self.chunk is None:
             success = False
+            getLogger(__name__).warning("Setup task failed to execute because there is no chunk %s",self.chunkname)
         return success
     def exit(self):
         success = super().exit()
@@ -224,6 +225,7 @@ class MetashapeTask_AlignChunks(MetashapeTask):
         pal = Configurator.getConfig().getProperty("photogrammetry","palette")
         self.alignType = argdict["alignType"]
         self.palette_name = pal if pal!="none" else None
+        self.chunkstoalign = argdict.get("chunklist",None)
         if  self.palette_name and self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
             palettedict= util.load_palettes()
             self.palette_info = palettedict[self.palette_name]
@@ -241,19 +243,20 @@ class MetashapeTask_AlignChunks(MetashapeTask):
                 success &=False
         
         return success
+    def buildChunklist(self):
+        chunklist = []  
+        names =  [] if self.chunkstoalign is None else self.chunkstoalign
+        for chunk in self.doc.chunks:
+            if len(names)==0 or chunk.label in names:
+                chunklist.append(chunk.key)
+        return chunklist
+
     @timed(Statistic_Event_Types.EVENT_ALIGN_CHUNKS)
     def execute(self):
         if self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
-            markerlist = []
-            chunklist = []
-            mainchunk = None
-            for chunk in self.doc.chunks:
-                chunklist.append(chunk.key)
-                if chunk.label == f"{self.chunkname}":
-                    mainchunk = chunk
-                    for marker in chunk.markers:
-                        markerlist.append(marker.key)
-            self.doc.alignChunks(chunklist,mainchunk,method=1,markers=markerlist)
+            chunkstoalign = self.buildChunklist()
+            markerlist = [marker.key for marker in self.chunk.markers]
+            self.doc.alignChunks(chunkstoalign,self.chunk,method=1,markers=markerlist)
             self.doc.save()
         return True
     def exit(self):
@@ -553,7 +556,9 @@ class MetashapeTask_BuildOrthomosaic(MetashapeTask):
 
     def __repr__(self):
         return "Metashape Task: Build Orthomosaic"
-
+    def setup(self):
+        success = super().setup()
+        return success
     @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)
     def execute(self):
         success = super().execute()

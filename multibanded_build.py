@@ -89,10 +89,7 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                                                 "projectname":projectname,
                                                 "chunkname":f"{projectname}_{fb}{k}",
                                                 "threshold":25}))
-                tasks.put(MetashapeTask_AddScales({"input":sourcedir,
-                                                    "output":projectdir,
-                                                    "projectname":projectname,
-                                                    "chunkname":f"{projectname}_{fb}{k}"}))
+
                 tasks.put(MetashapeTask_BuildModel({"input":sourcedir,
                                     "output":projectdir,
                                     "projectname":projectname,
@@ -104,19 +101,28 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
 def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = None):
     tasks = Queue() if tasklist is None else tasklist
     getGlobalLogger(__name__).info("Building Tasklist, including selective scales, orientation, alignment, model, and orthophoto")
-    for fb in ["front","back"]:
-        tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
-                                                "output":projectdir,
-                                                "projectname":projectname,
-                                                "chunkname":f"{projectname}_{fb}vis",
+    for k in ["ir","uvvis","vis"]:
+        for fb in ["front","back"]:
+            tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
+                                                    "output":projectdir,
+                                                    "projectname":projectname,
+                                                    "chunkname":f"{projectname}_{fb}{k}",
                                                 }))
+            #Note--the above reorient special task messes up the scale somehow. For now, adding the scale after doing it fixes the problem, but it will need to
+            #be fixed eventually the correct way, which is to figure out why the math isn't mathing.
+            tasks.put(MetashapeTask_AddScales({"input":sourcedir,
+                                                    "output":projectdir,
+                                                    "projectname":projectname,
+                                                    "chunkname":f"{projectname}_{fb}{k}"}))
+    # tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
+    #                                     "output":projectdir,
+    #                                     "chunklist":[f"{projectname}_{fb}{n}" for n in ["ir","uvvis","vis"] ],
+    #                                     "projectname":projectname,
+    #                                     "chunkname":f"{projectname}_frontvis",
+    #                                     "alignType":AlignmentTypes.ALIGN_BY_MARKERS}))
 
-    tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
-                                "output":projectdir,
-                                "projectname":projectname,
-                                "chunkname":f"{projectname}_frontvis",
-                                "alignType":AlignmentTypes.ALIGN_BY_MARKERS}))
-    for k, v in chunks.items():
+
+    for k in ["ir","uvvis","vis"]:
         for i in ["front","back"]:
             tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,
                             "output":projectdir,
