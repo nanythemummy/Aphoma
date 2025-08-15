@@ -128,6 +128,21 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                             "output":projectdir,
                             "projectname":projectname,
                             "chunkname":f"{projectname}_{i}{k}"}))
+            tasks.put(MetashapeTask_BuildTextures({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{i}{k}"}))
+            tasks.put(MetashapeTask_ExportModel({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{i}{k}",
+                            "extension":Configurator.getConfig().getProperty("photogrammetry","export_as"),
+                            "conform_to_shape": False}))
+            tasks.put(MetashapeTask_ExportOrthomosaic({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{i}{k}"}))
+            
     return tasks
 
 def build_multibanded_cmd(args):

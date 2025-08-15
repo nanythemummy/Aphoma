@@ -365,9 +365,6 @@ class MetashapeTask_BuildModel(MetashapeTask):
         For it to run successfully, it the chunk it is operating on must have tie points but no model.
 
     """
-    def __init__(self,argdict:dict):
-        super().__init__(argdict)
-        
     def __repr__(self):
         return "Metashape Task: Build Model from Depth Maps"
 
@@ -416,9 +413,7 @@ class MetashapeTask_BuildTextures(MetashapeTask):
         It requires the texture_size and Texture_count config values to be set.
 
     """
-    def __init__(self,argdict:dict):
-        super().__init__(argdict)
-        
+
     def __repr__(self):
         return "Metashape Task: Build UV Maps and Textures"
     
@@ -502,6 +497,8 @@ class MetashapeTask_ExportModel(MetashapeTask):
     input:str a directory of pictures to operate on.
     output:str a place to put the results--this is the parent folder of the picture folder, usually.
     chunkname:str label of the chunk to operate on.
+    extension: an extension or filetype to export to. Passed as a string with the dot, like ".obj"
+    conform_to_shape: a boolean determining whether the model should be clipped to a particular boundary.
 
     It assumes that if you are working from a palette of computer readable markers, the name of this palette is already defined in config.json or via
     the UI.
@@ -542,6 +539,35 @@ class MetashapeTask_ExportModel(MetashapeTask):
             success = False
         return (success & super().exit())    
     
+class MetashapeTask_ExportOrthomosaic(MetashapeTask):
+    def __init__(self,argdict:dict):
+        super().__init__(argdict)
+    def __repr__(self):
+        return "Metashape Task: Export Orthomosaic"
+    def setup(self):
+        success = super().setup()
+        if self.chunk.orthomosaic:
+            return success and True
+        else:
+            getLogger(__name__).warning("Failing the orthomosaic export because there's no orthomosaic for chunk %s",self.chunkname)
+            return False
+    def execute(self):
+        outputfolder = Configurator.getConfig().getProperty("photogrammetry", "output_path")
+        self.chunk.exportRaster(str(Path(self.output,outputfolder,f"{self.chunkname}_Orthomosaic.tif")),
+                                format = Metashape.RasterFormat.RasterFormatTiles,
+                                image_format=Metashape.ImageFormat.ImageFormatTIFF,
+                                raster_transform = Metashape.RasterTransformType.RasterTransformNone)
+        return True
+    def exit(self):
+        succeeded  = super().exit()
+        expectedoutput = Path(self.output,f"{self.chunkname}_Orthomosaic.tif")
+        if expectedoutput.exists:
+            return succeeded and True
+        else:
+            getLogger(__name__).warning("Export Orthomosaic did not succeed because File %s was not created.",expectedoutput)
+            return False
+    
+
 class MetashapeTask_BuildOrthomosaic(MetashapeTask):
     """
     Task object for building an orthomosaic. It will build the orthomosaic for the chunk.
@@ -567,11 +593,14 @@ class MetashapeTask_BuildOrthomosaic(MetashapeTask):
                 # Only build orthomosaic if there is a model and no orthomosaic yet
                 if self.chunk.model and not self.chunk.orthomosaic:
                     getLogger(__name__).info("Building Orthomosaic.")
+                    
+                    scalex = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x")
+                    scaley = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y")
                     self.chunk.buildOrthomosaic(
                         surface_data=Metashape.DataSource.ModelData,
                         blending_mode=Metashape.BlendingMode.MosaicBlending,
-                        resolution_x=0.0002,
-                        resolution_y=0.0002
+                        resolution_x=scalex,
+                        resolution_y=scaley
                     )
                     self.doc.save()
             except Exception as e:
