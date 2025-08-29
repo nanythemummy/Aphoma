@@ -2,15 +2,17 @@ import argparse
 from pathlib import Path
 import cv2
 import numpy as np
+from util.PipelineLogging import getLogger as getGlobalLogger
 
 from inference_sdk import InferenceHTTPClient
 
 def otsuThresholding(picpath: Path, maskout: Path):
     img = cv2.imread(str(picpath))
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    _,mask = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    thresh ,mask = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)    
     if np.mean(mask)>127: #ie, its greater than half of 255:
         mask = cv2.bitwise_not(mask)
+    getGlobalLogger(__name__).info("Otsu threshold is: %s",thresh)
     cv2.imwrite(str(maskout),mask)
 
 
@@ -20,32 +22,9 @@ def thresholdingMask(picpath: Path, maskout: Path, lowerthreshold:int):
     #threshold image
 
     grayscale = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    #mask = cv2.adaptiveThreshold(grayscale,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY_INV,11,2)
-    mask = cv2.threshold(grayscale,lowerthreshold,255,cv2.THRESH_BINARY)[1]
-    mask = 255-mask #invert the colors
-    cv2.imwrite(str(maskout),mask)
+    _,mask = cv2.threshold(grayscale,lowerthreshold,255,cv2.THRESH_BINARY)
+    cv2.imwrite(str(maskout),cv2.bitwise_not(mask))
 
-# def inferencePotMask(picpath:Path,maskout:Path,inferenceclient:InferenceHTTPClient):
-#         potprediction = {}             
-
-#         potprediction = inferenceclient.infer(str(picpath))
-#         pots = []
-#         holes=[]
-#         for prediction in potprediction["predictions"]:
-#             shape = [(point['x'],point['y']) for point in prediction["points"]]
-#             if prediction["class"]=="pot":              
-#                 pots.append(shape)
-#             elif prediction["class"]=="hole":
-#                 holes.append(shape)
-#         with Image.open(picpath).convert('RGB') as pmask:
-#             draw = ImageDraw.Draw(pmask)
-#             draw.rectangle([(0,0),pmask.size],fill=(0,0,0))
-#             for pot in pots:
-#                 draw.polygon(pot,fill=(255,255,255))
-#             for hole in holes:
-#                 draw.polygon(hole,fill=(0,0,0))
-#             outpicpath = Path(self.output,f"{fn.stem}.png")
-#             pmask.save(outpicpath)
 def edgeDetectionMask(picpath: Path, maskout: Path, threshold1: int, threshold2: int):
     #uses the canny edge detection algorithm to detect edges, then finds the biggest contiguous edge and fills it.
     #if you have issues with this, play with the two threshold values below. They controll the smallest and largest line intensities to be

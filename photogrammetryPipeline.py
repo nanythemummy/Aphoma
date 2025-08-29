@@ -195,8 +195,7 @@ def build_model_cmd(args):
                                                 }}]
     sm = buildTaskQueue(tasks)
     executeTaskQueue(sm)
-def build_multibanded_cmd(args):
-    
+
 def build_masks_cmd(args):
     """Wrapper script for building masks from contents of a folder.
     Parameters:

@@ -391,6 +391,46 @@ def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
             break
     return removed_above_threshold
 
+def find_axes_from_markers_in_plane(chunk,palette:str):
+    if not chunk.markers:
+        LOGGER.info("No markers to align on chunk %s.",chunk.label)
+        return [],{},{}
+    if not palette.get("plane",0) or not palette.get("xaxis",0):
+        LOGGER.warning("Can't find the markers in a plane if there is no plane specified in the marker palette.")
+        return [],{},{}
+    plane,xaxispts = [[] for _ in range(2)]
+    markers = chunk.markers
+
+    for m in markers:
+        print(f"markername = {m.label}")
+        if not m.position is None:
+            lookfor = (int)(m.label.split()[1])
+            if lookfor in palette["plane"]:
+                print(f"Plane: Appending marker {m.label} id: {m.key} with position: {m.position}")
+                plane.append({"name":m.label, "id":m.key,"pos":m.position})
+            if lookfor in palette["xaxis"]:
+                print(f"X-Axis: Appending marker {m.label} id: {m.key} with position: {m.position}")
+                xaxispts.append({"name":m.label,"id":m.key,"pos":m.position})
+    if len(xaxispts)>=1 and len(plane)>2:
+        #Wooooo we can calculate this.
+        LOGGER.info("Calculating plane from %s, %s, %s",plane[0]["name"],plane[1]["name"],plane[2]["name"])
+        veca = plane[1]["pos"]-plane[0]["pos"]
+        vecb = plane[2]["pos"]-plane[0]["pos"]
+        z_axis = Metashape.Vector.cross(vecb,veca)
+        z_axis.normalize()
+        LOGGER.info("Z-axis is %s."%z_axis)
+        x_axis = xaxispts[1]["pos"]-xaxispts[0]["pos"]
+        x_axis.normalize()
+        LOGGER.info("X-axis is %s."%x_axis)
+        y_axis  = Metashape.Vector.cross(z_axis,x_axis)
+        y_axis.normalize()
+        LOGGER.info("Y-axis is %s."%z_axis)
+        return[x_axis,y_axis,z_axis],plane,xaxispts
+
+    else:
+        LOGGER.error("Not enough markers to orient model." )
+        return [],{},{}
+    
 def find_axes_from_markers(chunk,palette:str):
     """Given a chunk with a model on it, and detected markers, use the palette definiton to try to figure out the x, y and z axes.
     
@@ -401,9 +441,8 @@ def find_axes_from_markers(chunk,palette:str):
 
     returns: a list of unit vectors corresponding to x,y, and z axes.
     """
-
     if not chunk.markers:
-        print("No marker palette defined or markers detected. Cannot detect orientation from palette.")
+        LOGGER.info("No markers to align on chunk %s."%chunk.label)
         return []
     xaxis = []
     zaxis = []
@@ -453,7 +492,7 @@ def move_model_to_world_origin(chunk):
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()
 
-def align_markers_to_axes(chunk,axes): 
+def align_markers_to_axes(chunk,axes,scalemod=1000.0): 
     """Takes the local coordinates y axis of the model as calculated from a marker pallette and aligns it with world Y axis in metashape.
     
     Parameters:
@@ -462,7 +501,7 @@ def align_markers_to_axes(chunk,axes):
     """
     transmat = chunk.transform.matrix
     scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
-    scale*=1000.0 #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
+    scale*=scalemod #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
     scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
     newaxes = Metashape.Matrix([[axes[0].x,axes[0].y, axes[0].z,0],
                    [axes[1].x,axes[1].y,axes[1].z,0],
