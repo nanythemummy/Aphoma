@@ -3,30 +3,32 @@ import sys
 import Metashape
 parentpath = Path(__file__).parent.parent.absolute()
 sys.path.append(str(parentpath))
-from tasks.MetashapeTasksSpecial import MetashapeTask_DetectMarkersFromThresholdedImage
+from tasks.MetashapeTasks import MetashapeTask_Reorient
 from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
 from util.Configurator import Configurator
 
 
-def GenerateMarkersFromThresholdedImages():
-    threshold = int(sys.argv[1])
-    print("Hi.")
+def MarkerCopy():
+    #copies markers from a designated chunk to the currently selected chunk.
+    palettename = str(sys.argv[1])
+    
     doc = Metashape.app.document
-   
     chunk = doc.chunk
     projname = Path(doc.path).stem
     outputfolder = Path(doc.path).parent
     print(f"projectname:{projname}, outputfolder:{outputfolder}")
     _= MetashapeFileSingleton.getMetashapeDoc(projname,outputfolder,doc)
     print("Initialized singleton")
-    reorienttask = MetashapeTask_DetectMarkersFromThresholdedImage({"input":"","output":outputfolder,"projectname":projname,"chunkname":chunk.label,"threshold":threshold})
-    if reorienttask.setup():
-        print("Executing detect markers from thresholded images")
-        reorienttask.execute()
+    task = MetashapeTask_Reorient({"palettename":palettename,"input":"","output":outputfolder,"projectname":projname,"chunkname":chunk.label})
+    if task.setup():
+        print("Executing Reorient")
+        task.execute()
     else:
         print("Failed because reorient task setup failed.")
-    reorienttask.exit()
+    task.exit()
 
-LABEL = "Sledgehammer."
-Metashape.app.addMenuItem(LABEL, GenerateMarkersFromThresholdedImages)
+
+
+LABEL = "Reorient on Palette"
+Metashape.app.addMenuItem(LABEL, MarkerCopy)
 print("To execute this script press {}".format(LABEL))

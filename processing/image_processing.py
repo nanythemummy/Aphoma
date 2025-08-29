@@ -14,7 +14,7 @@ import imageio
 import rawpy
 import lensfunpy
 import cv2
-
+import numpy as np
 from PIL import Image as PILImage
 from PIL import ExifTags
 from util import util
@@ -276,3 +276,28 @@ def convertToJPG(input: str, output: str) -> str:
         except Exception as e:
             raise e
     return outputname
+
+def convertToGrayscaleAdjustBrightness(inputpath:Path, outputpath:Path, togray=True,channeltouse=util.ColorChannelConstants.NUMPY_BLUE, eightbit=True,brightness=1.0):
+    with PILImage.open(inputpath) as im: 
+        #I'm going to do this with PIL because it supports copying exif data. I should probably do all of it with PIL. It's really just the multiply function that
+        #uses CV2, and I think that might be easy to just write by hand. To do later.
+
+        imarr = np.array(im)
+        imarr = cv2.cvtColor(imarr,cv2.COLOR_RGB2BGR)
+        output_image = imarr
+        if togray:
+          #  if not eightbit: #ie, if we want to keep the rgb channels, and just set them to the same thing,
+            output_image = np.zeros_like(imarr) 
+            sourcechannel = imarr[:,:,util.ColorChannelConstants(channeltouse).value]
+            output_image[:,:,0]=sourcechannel
+            output_image[:,:,1]=sourcechannel
+            output_image[:,:,2]=sourcechannel
+           # else:
+            #output_image = imarr[:,:,util.ColorChannelConstants(channeltouse).value]
+        output_image=cv2.multiply(output_image,brightness)
+        #copy exif data to img_out
+
+        out = PILImage.fromarray(cv2.cvtColor(output_image,cv2.COLOR_BGR2RGB))
+        #if eightbit:
+        #    out = out.convert("L")
+        out.save(outputpath,exif=im.getexif())

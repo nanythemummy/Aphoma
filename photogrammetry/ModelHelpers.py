@@ -393,11 +393,11 @@ def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
 
 def find_axes_from_markers_in_plane(chunk,palette:str):
     if not chunk.markers:
-        LOGGER.info("No markers to align on chunk %s.",chunk.name)
-        return []
+        LOGGER.info("No markers to align on chunk %s.",chunk.label)
+        return [],{},{}
     if not palette.get("plane",0) or not palette.get("xaxis",0):
         LOGGER.warning("Can't find the markers in a plane if there is no plane specified in the marker palette.")
-        return []
+        return [],{},{}
     plane,xaxispts = [[] for _ in range(2)]
     markers = chunk.markers
 
@@ -442,7 +442,7 @@ def find_axes_from_markers(chunk,palette:str):
     returns: a list of unit vectors corresponding to x,y, and z axes.
     """
     if not chunk.markers:
-        LOGGER.info("No markers to align on chunk %s."%chunk.name)
+        LOGGER.info("No markers to align on chunk %s."%chunk.label)
         return []
     xaxis = []
     zaxis = []
@@ -492,7 +492,7 @@ def move_model_to_world_origin(chunk):
     print(f"moving to zero, inshallah.: {chunk.transform.matrix}")
     chunk.resetRegion()
 
-def align_markers_to_axes(chunk,axes,scale=1000.0): 
+def align_markers_to_axes(chunk,axes,scalemod=1000.0): 
     """Takes the local coordinates y axis of the model as calculated from a marker pallette and aligns it with world Y axis in metashape.
     
     Parameters:
@@ -501,7 +501,7 @@ def align_markers_to_axes(chunk,axes,scale=1000.0):
     """
     transmat = chunk.transform.matrix
     scale = math.sqrt(transmat[0,0]**2+transmat[0,1]**2 + transmat[0,2]**2) #length of the top row in the matrix, but why?
-    scale*=scale #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
+    scale*=scalemod #by default agisoft assumes we are using meters while we are measuring in mm in meshlab and gigamesh.
     scalematrix = Metashape.Matrix().Diag([scale,scale,scale,1])
     newaxes = Metashape.Matrix([[axes[0].x,axes[0].y, axes[0].z,0],
                    [axes[1].x,axes[1].y,axes[1].z,0],

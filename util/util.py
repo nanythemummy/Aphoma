@@ -10,9 +10,10 @@ import argparse
 from enum import Enum
 from util.Configurator import Configurator
 
-
-
-
+class ColorChannelConstants(Enum):
+    NUMPY_BLUE=0
+    NUMPY_GREEN=1
+    NUMPY_RED = 2
 
 def getPaletteOptions():
     pals = {}

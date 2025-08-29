@@ -218,7 +218,8 @@ class MetashapeTask_AlignChunks(MetashapeTask):
     input:str a directory of pictures to operate on.
     output:str a place to put the results--this is the parent folder of the picture folder, usually.
     chunkname:str label of the chunk to operate on.
-    aligntype:
+    chunklist: a list of names of chunks to align
+    alignType: an alignment type as defined in util.alignmentTypes
     """
     def __init__(self,argdict:dict):
         super().__init__(argdict)
@@ -457,7 +458,9 @@ class MetashapeTask_Reorient(MetashapeTask):
     def __init__(self,argdict:dict):
         super().__init__(argdict)
         self.palette_info = None 
-        pal = Configurator.getConfig().getProperty("photogrammetry","palette") 
+        pal = argdict.get("palettename",None)
+        if pal is None:
+            pal = Configurator.getConfig().getProperty("photogrammetry","palette") 
         self.palette_name = pal if pal != "none" else None
         self.axes = None
 
@@ -469,7 +472,7 @@ class MetashapeTask_Reorient(MetashapeTask):
         if self.chunk and self.palette_name:
             palettedict = util.load_palettes()
             self.palette_info = palettedict[self.palette_name]
-            self.axes = ModelHelpers.find_axes_from_markers_in_plane(self.chunk,self.palette_info)
+            self.axes = ModelHelpers.find_axes_from_markers(self.chunk,self.palette_info)
         return success
         
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
@@ -553,10 +556,14 @@ class MetashapeTask_ExportOrthomosaic(MetashapeTask):
             return False
     def execute(self):
         outputfolder = Configurator.getConfig().getProperty("photogrammetry", "output_path")
+        resolutionx = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x"))
+        resolutiony = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y"))
         self.chunk.exportRaster(str(Path(self.output,outputfolder,f"{self.chunkname}_Orthomosaic.tif")),
                                 format = Metashape.RasterFormat.RasterFormatTiles,
                                 image_format=Metashape.ImageFormat.ImageFormatTIFF,
-                                raster_transform = Metashape.RasterTransformType.RasterTransformNone)
+                                raster_transform = Metashape.RasterTransformType.RasterTransformNone,
+                                resolution_x=resolutionx,
+                                resolution_y = resolutiony)
         return True
     def exit(self):
         succeeded  = super().exit()
