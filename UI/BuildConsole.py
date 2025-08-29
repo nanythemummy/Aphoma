@@ -1,4 +1,5 @@
 from tkinter import END
+import platform
 from tkinter.scrolledtext import ScrolledText
 import sys
 import os
@@ -18,16 +19,28 @@ class BuildConsole(ScrolledText):
 
     def _on_mousewheel(self, event):
         # For Windows, use event.delta
-        self.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        if platform.system() == 'Darwin':  # macOS
+            self.yview_scroll(-1 * event.delta, "units")
+        else:
+            self.yview_scroll(int(-1 * (event.delta / 120)), "units")
         return "break"
 
     def _bind_mousewheel(self, event=None):
-        self.bind_all("<MouseWheel>", self._on_mousewheel)
+        if platform.system() == 'Darwin':
+            self.bind_all("<MouseWheel>", self._on_mousewheel)
+            self.bind_all("<Button-4>", lambda e: self.yview_scroll(-1, "units"))
+            self.bind_all("<Button-5>", lambda e: self.yview_scroll(1, "units"))
+        else:
+            self.bind_all("<MouseWheel>", self._on_mousewheel)
 
     def _unbind_mousewheel(self, event=None):
         self.unbind_all("<MouseWheel>")
+        if platform.system() == 'Darwin':
+            self.unbind_all("<Button-4>")
+            self.unbind_all("<Button-5>")
 
-class TextHanlder(logging.Handler):
+
+class TextHandler(logging.Handler):
     def __init__(self,text):
         logging.Handler.__init__(self)
         self.text = text

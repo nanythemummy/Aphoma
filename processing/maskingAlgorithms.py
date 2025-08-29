@@ -3,6 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from util.PipelineLogging import getLogger as getGlobalLogger
+
 from inference_sdk import InferenceHTTPClient
 
 def otsuThresholding(picpath: Path, maskout: Path):
