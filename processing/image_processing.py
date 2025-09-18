@@ -286,18 +286,21 @@ def convertToGrayscaleAdjustBrightness(inputpath:Path, outputpath:Path, togray=T
         imarr = cv2.cvtColor(imarr,cv2.COLOR_RGB2BGR)
         output_image = imarr
         if togray:
-          #  if not eightbit: #ie, if we want to keep the rgb channels, and just set them to the same thing,
-            output_image = np.zeros_like(imarr) 
-            sourcechannel = imarr[:,:,util.ColorChannelConstants(channeltouse).value]
-            output_image[:,:,0]=sourcechannel
-            output_image[:,:,1]=sourcechannel
-            output_image[:,:,2]=sourcechannel
-           # else:
-            #output_image = imarr[:,:,util.ColorChannelConstants(channeltouse).value]
+            if not eightbit: #ie, if we want to keep the rgb channels, and just set them to the same thing,
+                output_image = np.zeros_like(imarr) 
+                sourcechannel = imarr[:,:,util.ColorChannelConstants(channeltouse).value]
+                output_image[:,:,0]=sourcechannel
+                output_image[:,:,1]=sourcechannel
+                output_image[:,:,2]=sourcechannel
+            else:
+                output_image = imarr[:,:,util.ColorChannelConstants(channeltouse).value]
         output_image=cv2.multiply(output_image,brightness)
+        if not togray or not eightbit:
+           output_image= cv2.cvtColor(output_image,cv2.COLOR_BGR2RGB)
         #copy exif data to img_out
 
-        out = PILImage.fromarray(cv2.cvtColor(output_image,cv2.COLOR_BGR2RGB))
+        out = PILImage.fromarray(output_image)
         #if eightbit:
         #    out = out.convert("L")
-        out.save(outputpath,exif=im.getexif())
+        exif = im.getexif()
+        out.save(outputpath)

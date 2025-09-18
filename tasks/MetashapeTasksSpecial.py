@@ -147,6 +147,72 @@ class MetashapeTask_CopyMarkersFromChunk(MetashapeTask):
         print("copying markers")
         copyMarkersFromChunkToOtherChunk(self.otherchunk,self.chunk)
         return len(self.otherchunk.markers)==len(self.chunk.markers)
+class MetashapeTask_ResizeBoundingBox(MetashapeTask):
+    """
+    Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
+    color data of the targets.
+    -This expects an argdict on init with: {"width_depth_height":list with float members detailing the dimensions of the box in meters.
+                                            "centerpoint": list with x,y,z of the box centerpoint
+                                            "chunkname": the name of the chunk you are operating on.
+                                            "projectname": the name of the psz file without the extension.
+                                            "input": The directory you put the source images in.
+                                            "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
+    """
+    def __init__(self, argdict:dict):
+       super().__init__(argdict)
+       self.width_depth_height = argdict["width_depth_height"]
+       self.centerpoint = argdict["centerpoint"]
+ 
+    def __repr__(self):
+        return "Metashape Task: SetBoundingBoxDimensions"
+    
+    def setup(self):
+        success = super().setup()
+        return success
+    
+    def execute(self):
+        
+        getGlobalLogger(__name__).info("At least I got here.")
+        #transform local coordinates to the coordinate reference system if there is one.
+        region = self.chunk.region
+        region.size =Metashape.Vector(self.width_depth_height)
+        region.center = Metashape.Vector(self.centerpoint)
+        self.chunk.region = region
+        #set the bounding box rotation to be the same as the object.
+
+class MetashapeTask_ImportModel(MetashapeTask):
+    """
+    This is a task for importing a saved out model as the model of an object, with the expectation that you want to project pictures onto it.
+    -This expects an argdict on init with: {"modelfilename": full path of the model to load.
+                                            "chunkname": the name of the chunk you are operating on.
+                                            "projectname": the name of the psz file without the extension.
+                                            "input": The directory you put the source images in.
+                                            "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
+    """
+    def __init__(self, argdict:dict):
+        super().__init__(argdict)
+        self.modelfilename = Path(argdict["modelfilename"])
+      
+    def __repr__(self):
+        return "Metashape Task: ImportModel"
+   
+    def setup(self):
+        success = super().setup()
+        success = success and self.modelfilename.is_file()
+        return success
+   
+    def execute(self):
+        getGlobalLogger(__name__).info("At least I got here.")
+        #transform local coordinates to the coordinate reference system if there is one.
+        self.chunk.importModel(str(self.modelfilename),
+                               Metashape.ModelFormat.ModelFormatPLY if self.modelfilename.suffix.upper()==".PLY" else Metashape.ModelFormat.ModelFormatOBJ,
+                                replace_asset = True)
+        if not self.chunk.model:
+            return False
+        else:
+            return  True
+
+        #set the bounding box rotation to be the same as the object.
 
 
 class MetashapeTask_ChangeImagePathsPerChunk(MetashapeTask):

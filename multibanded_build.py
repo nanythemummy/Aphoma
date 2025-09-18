@@ -177,16 +177,24 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                                 "projectname":projectname,
                                 "chunkname":f"{projectname}_{fb}{k}"}))
             tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
-                                                    "output":projectdir,
-                                                    "projectname":projectname,
-                                                    "chunkname":f"{projectname}_{fb}{k}",
-                                                }))
+                                        "output":projectdir,
+                                        "projectname":projectname,
+                                        "chunkname":f"{projectname}_{fb}{k}"}))
             tasks.put(MetashapeTask_ChangeImagePathsPerChunk({"input":sourcedir,
-                                "output":projectdir,
-                                "projectname":projectname,
-                                "chunkname":f"{projectname}_{fb}{k}",
-                                "replace_these":chunks[k][fb]["references"],
-                                "to_replace_with":chunks[k][fb]["files"]}))
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{fb}{k}",
+                            "replace_these":chunks[k][fb]["references"],
+                            "to_replace_with":chunks[k][fb]["files"]}))
+            # if k != "visvis":
+            #     outputfilename =  util.get_export_filename(f"{projectname}_{fb}visvis",".ply")
+            #     outputpath = Path(projectdir,"output",f"{outputfilename}.ply")
+            #     tasks.put(MetashapeTask_ImportModel({"input":sourcedir,
+            #                     "output":projectdir,
+            #                     "projectname":projectname,
+            #                     "chunkname":f"{projectname}_{fb}{k}",
+            #                     "modelfilename":outputpath}))
+
     for k, _ in chunks.items():
         for i in ["front","back"]:
             tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,

@@ -18,8 +18,9 @@ def print_locations():
     reg = chunk.region
     print(f"mulp={chunk.transform.matrix.mulp(reg.center)}")
     print(f"transform of chunk.{chunk.transform.matrix}")
+    print(f"rotation of region.{reg.rot}")
     print(f"center of region, {reg.center}")
-    print(reg.center)
+    print(f"dimensions of region. {reg.size}")
 
 label = "Where's the bounding box?"
 Metashape.app.addMenuItem(label, print_locations)
