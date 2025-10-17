@@ -391,13 +391,13 @@ def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
             break
     return removed_above_threshold
 
-def find_axes_from_markers_in_plane(chunk,palette:str):
+def find_axes_from_markers_in_plane(chunk,palette:dict):
     if not chunk.markers:
         LOGGER.info("No markers to align on chunk %s.",chunk.label)
-        return [],{},{}
+        return [],[],[]
     if not palette.get("plane",0) or not palette.get("xaxis",0):
         LOGGER.warning("Can't find the markers in a plane if there is no plane specified in the marker palette.")
-        return [],{},{}
+        return [],[],[]
     plane,xaxispts = [[] for _ in range(2)]
     markers = chunk.markers
 
@@ -429,8 +429,30 @@ def find_axes_from_markers_in_plane(chunk,palette:str):
 
     else:
         LOGGER.error("Not enough markers to orient model." )
-        return [],{},{}
+        return [],[],[]
     
+def rotate_boundingbox(chunk,xyz_degrees:list):
+      
+        thx =xyz_degrees[0]*math.pi/180
+        thy  = xyz_degrees[1]*math.pi/180
+        thz  = xyz_degrees[2]*math.pi/180
+        yrot = Metashape.Matrix([[math.cos(thy),0,math.sin(thy)],
+                                [ 0,1,0],
+                                 [-1*math.sin(thy),0,-1*math.cos(thy)]
+                                 ])
+        xrot = Metashape.Matrix([[1,0,0],
+                            [0,math.cos(thx),-1*math.sin(thx)],
+                            [0,math.sin(thx),math.cos(thx)]
+                            ])
+        zrot = Metashape.Matrix([[math.cos(thz),-1*math.sin(thz),0],
+                            [math.sin(thz),math.cos(thz),0],
+                            [0,0,1]
+                            ])
+        rotmat = zrot*yrot*xrot
+        region = chunk.region
+        region.rot = region.rot*rotmat
+        chunk.region = region
+
 def find_axes_from_markers(chunk,palette:str):
     """Given a chunk with a model on it, and detected markers, use the palette definiton to try to figure out the x, y and z axes.
     
@@ -467,7 +489,6 @@ def find_axes_from_markers(chunk,palette:str):
     uz.normalize()
     yaxis.normalize()
     return [ux,yaxis,uz]
-
 def move_model_to_world_origin(chunk):
     
     """Uses the center of the bounding box as a substitute for the center of the model, and translates the model to world zero based

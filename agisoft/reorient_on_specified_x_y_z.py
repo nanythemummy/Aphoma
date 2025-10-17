@@ -8,7 +8,7 @@ from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
 from util.Configurator import Configurator
 
 
-def MarkerCopy():
+def ReorientXYZ():
     #copies markers from a designated chunk to the currently selected chunk.
     palettename = str(sys.argv[1])
     
@@ -30,5 +30,5 @@ def MarkerCopy():
 
 
 LABEL = "Reorient on Palette"
-Metashape.app.addMenuItem(LABEL, MarkerCopy)
+Metashape.app.addMenuItem(LABEL, ReorientXYZ)
 print("To execute this script press {}".format(LABEL))

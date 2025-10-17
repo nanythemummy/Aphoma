@@ -564,11 +564,12 @@ class MetashapeTask_ExportOrthomosaic(MetashapeTask):
                                 raster_transform = Metashape.RasterTransformType.RasterTransformNone,
                                 resolution_x=resolutionx,
                                 resolution_y = resolutiony)
+        
         return True
     def exit(self):
         succeeded  = super().exit()
         expectedoutput = Path(self.output,f"{self.chunkname}_Orthomosaic.tif")
-        if expectedoutput.exists:
+        if expectedoutput.exists():
             return succeeded and True
         else:
             getLogger(__name__).warning("Export Orthomosaic did not succeed because File %s was not created.",expectedoutput)

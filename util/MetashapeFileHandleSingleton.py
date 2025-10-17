@@ -7,7 +7,7 @@ class MetashapeFileSingleton():
     _METASHAPE_FILE = None
     def __init__(self,projectdir:Path ,projectname:Path,doc=None):
 
-        self._projdir = projectdir
+        self._projdir = Path(projectdir)
         self._projname = projectname
         if doc is None:
             if not self._projdir.exists():
@@ -23,6 +23,7 @@ class MetashapeFileSingleton():
                 getLogger(__name__).info("Creating psx file %s",psxfile)
         else:
             self._metashapedoc = doc
+
 
     def getProjectPath(self):
         return Path(self._metashapedoc.path)

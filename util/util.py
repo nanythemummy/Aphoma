@@ -14,6 +14,7 @@ class ColorChannelConstants(Enum):
     NUMPY_BLUE=0
     NUMPY_GREEN=1
     NUMPY_RED = 2
+    #CHANNELS_ALL=3
 
 def getPaletteOptions():
     pals = {}

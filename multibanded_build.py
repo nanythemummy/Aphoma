@@ -70,11 +70,10 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
                 output = Path(referencepath,f"{k}_{fbk}_ref_{referenceimage.stem}{referenceimage.suffix}")
                 if not output.exists():
                     convertToGrayscaleAdjustBrightness(referenceimage,output,gray,channel,False,brightness)
-                    #convertProxyImage(str(referenceimage),output,channel,brightness,gray)
                 fbv["references"].append(output)
     return chunks
 
-    
+
 
 def sortFilesIntoBandsByName(filepath)->dict:
     multibanded_types= Configurator.getConfig().getProperty("photogrammetry","multibanded")
@@ -152,8 +151,8 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                                         "projectname":projectname,
                                         "chunkname":f"{projectname}_{fb}{k}"}))
 
-
-    for fb in ["front","back"]:        
+    
+    for fb in ["front","back"]:    
         tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
                         "output":projectdir,
                         "projectname":projectname,
@@ -162,6 +161,7 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                         "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS
         }
         ))
+       
         
     tasks = setupTasksPhaseTwo(chunks,sourcedir,projectname,projectdir, tasks)  
     return tasks
@@ -171,7 +171,12 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
     getGlobalLogger(__name__).info("Building Tasklist, including selective scales, orientation, alignment, model, and orthophoto")
     for k, _ in chunks.items():
         for fb in ["front","back"]:
-            
+            tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
+                        "output":projectdir,
+                        "projectname":projectname,
+                        "chunkname":f"{projectname}_{fb}visvis",
+                        "chunklist":[f"{projectname}_{fb}{band}" for band in chunks.keys()],
+                        "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS}))
             tasks.put(MetashapeTask_BuildModel({"input":sourcedir,
                                 "output":projectdir,
                                 "projectname":projectname,
@@ -186,17 +191,32 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                             "chunkname":f"{projectname}_{fb}{k}",
                             "replace_these":chunks[k][fb]["references"],
                             "to_replace_with":chunks[k][fb]["files"]}))
-            # if k != "visvis":
-            #     outputfilename =  util.get_export_filename(f"{projectname}_{fb}visvis",".ply")
-            #     outputpath = Path(projectdir,"output",f"{outputfilename}.ply")
-            #     tasks.put(MetashapeTask_ImportModel({"input":sourcedir,
-            #                     "output":projectdir,
-            #                     "projectname":projectname,
-            #                     "chunkname":f"{projectname}_{fb}{k}",
-            #                     "modelfilename":outputpath}))
-
+           
+    for i in ["front","back"]:
+        doc = MetashapeFileSingleton.getMetashapeDoc(projectname,Path(projectdir))
+        chunklist = []
+        for otherchunk in doc.chunks:
+            if otherchunk.label.startswith(f"{projectname}_{i}"):
+                chunklist.append(otherchunk)
+        
+        tasks.put(MetashapeTask_ResizeBoundingBoxFromMarkers({"input":sourcedir,
+                                                        "output":projectdir,
+                                                        "projectname":projectname,
+                                                        "chunkname":f"{projectname}_{i}visvis",
+                                                        "dimensionmarkers":[7,15,7,8]}
+                                                        ))         
+        tasks.put(MetashapeTask_CopyBoundingBoxToChunks({ "input":sourcedir,
+                                                            "output":projectdir,
+                                                            "projectname":projectname,
+                                                            "chunkname":f"{projectname}_{i}visvis",
+                                                            "chunklist":chunklist}))
     for k, _ in chunks.items():
         for i in ["front","back"]:
+            # tasks.put(MetashapeTask_ResizeBoundingBoxFromMarkers({"input":sourcedir,
+            #                                             "output":projectdir,
+            #                                             "projectname":projectname,
+            #                                             "chunkname":f"{projectname}_{i}{k}",
+            #                                             "dimensionmarkers":[7,15,7,8]}))
             tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,

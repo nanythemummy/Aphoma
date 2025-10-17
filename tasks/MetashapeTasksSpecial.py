@@ -1,5 +1,6 @@
 
 from pathlib import Path, PurePosixPath
+import math
 from os import mkdir
 import shutil
 import re
@@ -151,8 +152,8 @@ class MetashapeTask_ResizeBoundingBox(MetashapeTask):
     """
     Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
     color data of the targets.
-    -This expects an argdict on init with: {"width_depth_height":list with float members detailing the dimensions of the box in meters.
-                                            "centerpoint": list with x,y,z of the box centerpoint
+    -This expects an argdict on init with: {"width_depth_height":MEtashape vector with float members detailing the dimensions of the box in meters.
+                                            "centerpoint": Metashape vector with x,y,z of the box centerpoint
                                             "chunkname": the name of the chunk you are operating on.
                                             "projectname": the name of the psz file without the extension.
                                             "input": The directory you put the source images in.
@@ -175,10 +176,84 @@ class MetashapeTask_ResizeBoundingBox(MetashapeTask):
         getGlobalLogger(__name__).info("At least I got here.")
         #transform local coordinates to the coordinate reference system if there is one.
         region = self.chunk.region
-        region.size =Metashape.Vector(self.width_depth_height)
-        region.center = Metashape.Vector(self.centerpoint)
+        region.size = self.width_depth_height
+        region.center = self.centerpoint 
+        
         self.chunk.region = region
         #set the bounding box rotation to be the same as the object.
+        self.doc.save()
+class MetashapeTask_CopyBoundingBoxToChunks(MetashapeTask):
+    """
+    Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
+    color data of the targets.
+    -This expects an argdict on init with: {chunklist : list of chunks to copy boundingbox of the current chunk to
+                                            "chunkname": the name of the chunk you are operating on.
+                                            "projectname": the name of the psz file without the extension.
+                                            "input": The directory you put the source images in.
+                                            "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
+    """
+    def __init__(self, argdict:dict):
+       super().__init__(argdict)
+       self.chunklist = argdict["chunklist"]
+ 
+    def __repr__(self):
+        return "Metashape Task: Copy Bounding Box to Chunks."
+    
+    def setup(self):
+        success = super().setup()
+        return success
+    
+    def execute(self):
+        region = self.chunk.region
+        rrot = region.rot
+        rcent = region.center
+        rsize = region.size
+        mctransform = self.chunk.transform.matrix
+        for c in self.chunklist:
+            cregion = c.region
+            print(c.label)
+            if c == self.chunk:
+                print("continuing")
+                continue
+            T = c.transform.matrix.inv()*mctransform #map the current chunk's space to the main chunk's space and put that transform in t.
+            R  = Metashape.Matrix([[T[0,0],T[0,1],T[0,2]],
+                                [T[1,0],T[1,1],T[1,2]],
+                                [T[2,0],T[2,1],T[2,2]],
+                                ]) #remove the rotation matrix from the transform matrix manually.
+            scale = R.row(0).norm() #the rows are the original x,y,z axes M*Rot*Scale Calculating the length of one of them gets the scale factof IF they are uniformly scaled.
+            R = R * (1/scale) #remove the scale from the rotation matrix to get a pure rotation.
+            cregion.rot = R*rrot # #region becomes therotation of the current chunk*the rotation of the region.
+            newc = T.mulp(rcent) #multiply the old object center by the new chunk's transform.
+            cregion.size = rsize*scale  #transfer the old bounding box center into the current chunk's local coordinates.
+            cregion.center = newc
+            c.region = cregion
+        self.doc.save()
+        return True
+class MetashapeTask_RotateBoundingBox(MetashapeTask):
+    """
+    Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
+    color data of the targets.
+    -This expects an argdict on init with: {xyz: list with floats representing x,y,z in DEGREES
+                                            "chunkname": the name of the chunk you are operating on.
+                                            "projectname": the name of the psz file without the extension.
+                                            "input": The directory you put the source images in.
+                                            "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
+    """
+    def __init__(self, argdict:dict):
+       super().__init__(argdict)
+       self.rot_x_y_z = argdict["xyz"]
+ 
+    def __repr__(self):
+        return "Metashape Task: Set Boundingbox Rotation"
+    
+    def setup(self):
+        success = super().setup()
+        return success
+    
+    def execute(self):
+
+        getGlobalLogger(__name__).info("At least I got here.")
+        ModelHelpers.rotate_boundingbox(self.chunk,self.rot_x_y_z)
 
 class MetashapeTask_ImportModel(MetashapeTask):
     """
@@ -252,10 +327,69 @@ class MetashapeTask_ChangeImagePathsPerChunk(MetashapeTask):
         self.doc.save()
         self.chunk.remove(marker)
 
-        self.doc.save()
         return True
 
+class MetashapeTask_ResizeBoundingBoxFromMarkers(MetashapeTask):
+      
+    def findTargetFromNumber(self, num:int):
+        getGlobalLogger(__name__).info("finding target for marker %s.", num)
+        for m in self.chunk.markers:
+            if m.label == f"target {num}":
+                return m
+        getGlobalLogger(__name__).error("failed to find marker \"target %s\"", num)
+        return None
+    
+    def __init__(self,argdict:dict):
+        getGlobalLogger(__name__).info("initializing %s",__name__)
+        super().__init__(argdict)
+        self.dimensions = argdict["dimensionmarkers"]
+        self.widthmarkers=[]
+        self.depthmarkers=[]
 
+    def __repr__(self):
+        return "Metashape Task: Set the dimensions of the bounding box based on specified markers"
+    
+    def setup(self):
+        success =  super().setup()
+        self.widthmarkers = [self.findTargetFromNumber(self.dimensions[f]) for f in range(0,2)]
+        self.depthmarkers = [self.findTargetFromNumber(self.dimensions[f]) for f in range(2,4)]
+        success = success and len(self.widthmarkers)==2 and len(self.depthmarkers)==2
+        if None in self.widthmarkers or None in self.depthmarkers:
+            success = False
+        return success 
+    
+    def execute(self):
+        wv = self.widthmarkers[1].position-self.widthmarkers[0].position
+        #calculate width and depth from markers. This assumes that markers are placed on at least three sides of the object
+        width = math.sqrt(wv.x**2 +wv.y**2 +wv.z**2) #get the magnitude of the vector between point 1 and 2.
+        dv = self.depthmarkers[1].position-self.depthmarkers[0].position
+        depth =math.sqrt(dv.x**2 +dv.y**2 +dv.z**2)*2 
+        centerxy = (self.widthmarkers[1].position-self.depthmarkers[1].position)/2 + self.depthmarkers[1].position 
+        #calculate centerpoint. This assumes that the second depth and width markers are diagonal from each other and on opposite sides of the object.
+        #it's very specific to FMNH setup which only puts markers on three sides of the object.
+        print(f"{self.widthmarkers[1].label}={self.widthmarkers[1].position}, {self.depthmarkers[1].label} = {self.depthmarkers[1].position}")
+        height = 1 #hardcoding it for now because there are no height markers.
+        wdh = Metashape.Vector((width,depth,height))
+        # reg=self.chunk.region
+        # palettedict = util.load_palettes()
+        # palette_info = palettedict[Configurator.getConfig().getProperty("photogrammetry","palette")]
+        # xyz,_,_ = ModelHelpers.find_axes_from_markers_in_plane(self.chunk,palette_info)
+        # R  = Metashape.Matrix([[xyz[0].x,xyz[0].y, xyz[0].z],
+        #            [xyz[1].x,xyz[1].y,xyz[1].z],
+        #            [xyz[2].x, xyz[2].y,xyz[2].z],])
+        # scale = R.row(0).norm() #the rows are the original x,y,z axes M*Rot*Scale Calculating the length of one of them gets the scale factof IF they are uniformly scaled.
+        # R = R * (1/scale) #remove the scale from the rotation matrix to get a pure rotation.
+        # reg.rot = R # #region becomes therotation of the current chunk*the rotation of the region.
+        tasklist = []
+        tasklist.append( MetashapeTask_ResizeBoundingBox({"input":"","output":self.output ,"projectname":self.projectname,"chunkname":self.chunk.label,"width_depth_height":wdh,"centerpoint":centerxy}))
+        
+        tasklist.append( MetashapeTask_RotateBoundingBox({"input":"","output":self.output,"projectname":self.projectname,"chunkname":self.chunk.label,"xyz":[0,0,0]}))    #just hardcoding it for now.
+        for task in tasklist:
+            if task.setup():
+                task.execute()
+            task.exit()
+        return super().execute()
+        
 
 class MetashapeTask_DetectMarkersFromThresholdedImage(MetashapeTask_DetectMarkers):
     """
@@ -270,8 +404,6 @@ class MetashapeTask_DetectMarkersFromThresholdedImage(MetashapeTask_DetectMarker
                                             "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
 
     """
-
-
     def __init__(self,argdict:dict):
         print(f"initializing {__name__}")
         super().__init__(argdict)
@@ -281,8 +413,6 @@ class MetashapeTask_DetectMarkersFromThresholdedImage(MetashapeTask_DetectMarker
 
     def __repr__(self):
         return "Metashape Task: Detect Markers from Thresholded Images"
-    
-
     
     def setup(self):
         success = super().setup()
@@ -331,7 +461,3 @@ class MetashapeTask_DetectMarkersFromThresholdedImage(MetashapeTask_DetectMarker
             doc.save()
         if self.deletetemp:
             shutil.rmtree(Path(Path(doc.path).parent,'temp'))
-        
-
-
-    
