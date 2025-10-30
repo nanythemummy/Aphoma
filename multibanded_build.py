@@ -128,6 +128,11 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
     getGlobalLogger(__name__).info("Building Tasklist, including aligning, error reduction, and marker detection.")  
     for k,item in chunks.items():
             for fb in ["front","back"]:
+                if  item.get(fb,None) is None:
+                    continue
+                if len(item[fb]["references"]) == 0:
+                    chunks[k].pop(fb)
+                    continue
                 tasks.put(MetashapeTask_AlignPhotos({"input":sourcedir,
                                                             "output":projectdir,
                                                             "maskoption":MaskingOptions.NOMASKS,
@@ -153,11 +158,12 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
 
     
     for fb in ["front","back"]:    
+        chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys() if fb in chunks[band].keys()]
         tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
                         "output":projectdir,
                         "projectname":projectname,
                         "chunkname":f"{projectname}_{fb}visvis",
-                        "chunklist":[f"{projectname}_{fb}{band}" for band in chunks.keys()],
+                        "chunklist":chunklist,
                         "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS
         }
         ))
@@ -169,8 +175,10 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
 def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = None):
     tasks = Queue() if tasklist is None else tasklist
     getGlobalLogger(__name__).info("Building Tasklist, including selective scales, orientation, alignment, model, and orthophoto")
-    for k, _ in chunks.items():
+    for k, item in chunks.items():
         for fb in ["front","back"]:
+            if  item.get(fb,None) is None:
+                continue
             tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
                         "output":projectdir,
                         "projectname":projectname,
@@ -210,13 +218,15 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                                                             "projectname":projectname,
                                                             "chunkname":f"{projectname}_{i}visvis",
                                                             "chunklist":chunklist}))
-    for k, _ in chunks.items():
+    for k, item in chunks.items():
         for i in ["front","back"]:
             # tasks.put(MetashapeTask_ResizeBoundingBoxFromMarkers({"input":sourcedir,
             #                                             "output":projectdir,
             #                                             "projectname":projectname,
             #                                             "chunkname":f"{projectname}_{i}{k}",
             #                                             "dimensionmarkers":[7,15,7,8]}))
+            if  item.get(fb,None) is None:
+                continue
             tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,

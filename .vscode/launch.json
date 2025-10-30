@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "multibanded_build.py",
             "console": "integratedTerminal",
-            "args":["E:\\automation\\Board\\_input\\","e:/automation/Board/","deck_plank_test",]
+            "args":["E:/automation/SG3-Kea/SG-3 (new)/_input","E:/automation/SG3-Kea/SG-3 (new)/","SG3",]
         },
                 {
             "name": "test_multibanded_part_2",
