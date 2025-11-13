@@ -225,11 +225,10 @@ class Watcher:
             print("Type F to Finish.")           
             while listening :
                 time.sleep(1)
-                if msvcrt.kbhit() or self.stoprequest:
-                    if self.stoprequest or (msvcrt.getch()=='F'):
-                        listening=False
-                        self.observer.stop()
-                        self.stoprequest=False
+                if self.stoprequest:
+                    listening=False
+                    self.observer.stop()
+                    self.stoprequest=False
         except Exception as e:
             get_logger().error("Halting threads due to exception %s",e)
             self.observer.stop()
