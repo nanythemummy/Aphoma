@@ -1,0 +1,129 @@
+{
+    "config":
+    {
+        "processing":
+        {
+            "DNG_Converter":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
+            "SmartSelectDroplet":"util/MaskBySmartSelect.exe",
+            "FuzzySelectDroplet":"util/MaskByFuzzySelect.exe",
+            "thresholding_lower_gray_threshold":220,
+            "canny_lower_intensity_threshold": 25,
+            "canny_higher_intensity_threshold": 70,
+            "Droplet_Output":"C:\\tempmasks",
+            "Camera":"",
+            "Lens":"",
+            "Source_Type":".cr2",
+            "Destination_Type":".jpg",
+            "ListenerDefaultMasking":"Canny",
+            "CV2_Export_Type":".png",
+            "Roboflow_API_Key":"2Poz4dUWVrbqc1ZLNVCQ"
+        },
+
+        "ortery":
+        {
+            "pics_per_revolution":12,
+            "pics_per_cam":{"1":12,
+                            "2":9,
+                            "3":6,
+                            "4":6,
+                            "5":4,
+                            "6":12,
+                            "7":9,
+                            "8":6,
+                            "9":6,
+                            "10":4}
+        },
+        "watcher":
+        {
+            "listen_directory":"E:\\Photogrammetry\\Kish_Ceramics",
+            "project_base":"E:\\automation",
+            "listen_and_send":"",
+            "temp_scratch":"E:\\temp",
+            "networkdrive":""
+            
+        },
+        "postprocessing":
+        {
+            "script_directory":"C:\\Users\\kjohnston\\Documents\\projects\\museumcode\\blender_scripts",
+            "blender_exec":"C:\\Program Files\\Blender Foundation\\Blender 4.2\\blender.exe",
+            "scale_path":"C:\\Users\\kjohnston\\Documents\\projects\\museumcode\\util\\5 cm scale in millimeters.ply",
+            "rot_x":0.0,
+            "rot_y":0.0,
+            "rot_z":90.0
+        },
+        "photogrammetry":
+        {
+            "sparse_cloud_quality":0,
+            "model_quality":2,
+            "mask_path": "Masks",
+            "output_path":"Output",
+            "mask_ext":".png",
+            "error_thresholds":{
+                "reconstruction_uncertainty":10,
+                "projection_accuracy":200,
+                "reprojection_error":0.3,
+                "reprojection_max_selection_per_iteration":0.1,
+                "reprojection_max_selection":0.5,
+                "projection_accuracy_max_selection":0.5,
+                "reconstruction_uncertainty_max_selection":0.5
+            },
+            "multibanded":{
+                "irir":{
+                    "desc":"Reflected Infared",
+                    "path":"irir",
+                    "pointcloud_reference":"irir",
+                    "graychannel":"b",
+                    "eightbit":"True",
+                    "grayscale_ortho":"True",
+                    "brightness":1.0},
+                "uvuv":{
+                    "desc":"Reflected Ultraviolet",
+                    "path":"uvuv",
+                    "pointcloud_reference":"uvvis",
+                    "grayscale_ortho":"True",
+                    "eightbit":"True",
+                    "graychannel":"b",
+                    "brightness":1.9},
+                "uvvis":{
+                    "desc":"Visible Flourescence",
+                    "path":"uvvis",
+                    "pointcloud_reference":"uvvis",
+                    "grayscale_ortho":"True",
+                    "eightbit":"True",
+                    "graychannel":"b",
+                    "brightness":1.0},
+                "visir":{
+                    "desc":"Visible Induced IR",
+                    "path":"visir",
+                    "grayscale_ortho":"True",
+                    "pointcloud_reference":"visvis",
+                    "eightbit":"True",
+                    "graychannel":"b",
+                    "brightness":1.0},
+                "visvis":{
+                    "desc":"Visible Light",
+                    "path":"visvis",
+                    "grayscale_ortho":"False",
+                    "eightbit":"False",
+                    "pointcloud_reference":"visvis",
+                    "graychannel":"b",
+                    "brightness":1.0}
+                },
+            "custom_face_count":1000000,
+            "low_res_poly_count":100000,
+            "texture_size":4096,
+            "texture_count":4,
+            "orthomosaic_mtopixel_x":0.0002,
+            "orthomosaic_mtopixel_y":0.0002,
+            "export_as":".obj",
+            "palette":"Multibanded",
+            "build_low_res":false,
+            "use_cutting_plane":false,
+            "cut_x":100.0,
+            "cut_y":100.0,
+            "cut_z":25.0,
+            "cut_from_top":true
+        }
+
+    }
+}

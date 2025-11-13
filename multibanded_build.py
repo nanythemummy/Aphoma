@@ -110,15 +110,25 @@ def executeTasklist(taskqueue:Queue):
     
     getGlobalLogger(__name__).info("Executing Tasklist.")
     succeeded = True
-    while(succeeded):
+    finished = False
+    phase = "setup"
+    while(not finished):
         task = taskqueue.get()
-        succeeded &= task.setup()
+        succeeded,code = task.setup()
         if succeeded:
-            succeeded &= task.execute()
-            task.exit()
-        if taskqueue.empty():
-            getGlobalLogger(__name__).info("Finished the tasklist, ending.")
+            phase = "execute"
+            succeeded, code =task.execute()
+            if succeeded:
+                phase = "exit"
+                succeeded,code = task.exit()
+        if not succeeded:
+            getGlobalLogger(__name__).error("Phase %s for Task %s failed with error %s",phase, str(task),ErrorCodes.numToFriendlyString(code))
             break
+        if taskqueue.empty():
+            finished = True
+            getGlobalLogger(__name__).info("Finished the tasklist, ending.")
+        
+
     InstrumentationStatistics.getStatistics().logReport()
     InstrumentationStatistics.destroyStatistics()
     MetashapeFileSingleton.destroyDoc() #gets created by metashape tasks "align photos."
@@ -130,7 +140,7 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
             for fb in ["front","back"]:
                 if  item.get(fb,None) is None:
                     continue
-                if len(item[fb]["references"]) == 0:
+                if len(item[fb]["references"]) == 0 or len(item[fb]["files"]) == 0:
                     chunks[k].pop(fb)
                     continue
                 tasks.put(MetashapeTask_AlignPhotos({"input":sourcedir,
@@ -179,16 +189,17 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
         for fb in ["front","back"]:
             if  item.get(fb,None) is None:
                 continue
-            tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
-                        "output":projectdir,
-                        "projectname":projectname,
-                        "chunkname":f"{projectname}_{fb}visvis",
-                        "chunklist":[f"{projectname}_{fb}{band}" for band in chunks.keys()],
-                        "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS}))
+
             tasks.put(MetashapeTask_BuildModel({"input":sourcedir,
                                 "output":projectdir,
                                 "projectname":projectname,
                                 "chunkname":f"{projectname}_{fb}{k}"}))
+            tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
+                                "output":projectdir,
+                                "projectname":projectname,
+                                "chunkname":f"{projectname}_{fb}visvis",
+                                "chunklist":[f"{projectname}_{fb}{band}" for band in chunks.keys()],
+                                "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS}))
             tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
                                         "output":projectdir,
                                         "projectname":projectname,
@@ -200,8 +211,8 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                             "replace_these":chunks[k][fb]["references"],
                             "to_replace_with":chunks[k][fb]["files"]}))
            
+    doc = MetashapeFileSingleton.getMetashapeDoc(projectname,Path(projectdir))
     for i in ["front","back"]:
-        doc = MetashapeFileSingleton.getMetashapeDoc(projectname,Path(projectdir))
         chunklist = []
         for otherchunk in doc.chunks:
             if otherchunk.label.startswith(f"{projectname}_{i}"):
@@ -249,7 +260,7 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                 "extension":".ply",
                 "conform_to_shape": False}))
             
-    return tasks
+    return tasks 
 
 def build_multibanded_cmd(args):
     projdir = args.projectdir

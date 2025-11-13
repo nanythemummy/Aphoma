@@ -7,8 +7,8 @@ import re
 import Metashape
 import cv2
 from util.InstrumentationStatistics import *
-from util.util import MaskingOptions
-from util.util import AlignmentTypes
+
+from util.ErrorCodeConsts import ErrorCodes
 from util.PipelineLogging import getLogger as getGlobalLogger
 from util.Configurator import Configurator
 from util.MetashapeFileHandleSingleton import MetashapeFileSingleton
@@ -82,38 +82,39 @@ class MetashapeTask_ReorientSpecial(MetashapeTask):
         return "Metashape Task: Reorient Model--SPECIAL"
     
     def setup(self):
-        success = super().setup()
-        
+        success, code = super().setup()
+        if not success:
+            return success, code
         if self.chunk and self.palette_name:
             print("Calculating axes.")
             palettedict = util.load_palettes()
             self.palette_info = palettedict[self.palette_name]
-            self.axes, planedata, xaxisdata = ModelHelpers.find_axes_from_markers_in_plane(self.chunk,self.palette_info)
-            if self.axes and planedata and xaxisdata:
-                getGlobalLogger(__name__).info("Found axis from markers: axes: %s.",self.axes)
-                getGlobalLogger(__name__).info("Found planes: %s to %s to %s : (%s,%s,%s)", planedata[0]['name'],planedata[1]['name'],planedata[2]['name'],planedata[0]['pos'],planedata[1]['pos'],planedata[2]['pos'])
-                getGlobalLogger(__name__).info("Found x-axis: %s to %s : (%s,%s)",xaxisdata[0]['name'],xaxisdata[1]['name'],xaxisdata[0]['pos'],xaxisdata[1]['pos'])
+            if self.chunk.model:
+                self.axes, planedata, xaxisdata = ModelHelpers.find_axes_from_markers_in_plane(self.chunk,self.palette_info)
+                if self.axes and planedata and xaxisdata:
+                    getGlobalLogger(__name__).info("Found axis from markers: axes: %s.",self.axes)
+                    getGlobalLogger(__name__).info("Found planes: %s to %s to %s : (%s,%s,%s)", planedata[0]['name'],planedata[1]['name'],planedata[2]['name'],planedata[0]['pos'],planedata[1]['pos'],planedata[2]['pos'])
+                    getGlobalLogger(__name__).info("Found x-axis: %s to %s : (%s,%s)",xaxisdata[0]['name'],xaxisdata[1]['name'],xaxisdata[0]['pos'],xaxisdata[1]['pos'])
+                else:
+                    success = False
+                    code = ErrorCodes.NO_AXES
             else:
                 success = False
-        return success
+                code = ErrorCodes.NO_MODEL_FOUND
+        return success, code
         
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
+        success, code = super().execute()
         if success:
-            try:     
-                if self.chunk.model:
-                    if len(self.axes)==0:
-                        getGlobalLogger(__name__).warning("No axes on which to orient chunk %s",self.chunkname)
-                    else:
-                        getGlobalLogger(__name__).info("Reorienting chunk %s according to markers on palette.",self.chunkname)
-                        ModelHelpers.align_markers_to_axes(self.chunk,self.axes,1.0)
-                        ModelHelpers.move_model_to_world_origin(self.chunk)
-            except Exception as e:
-                getGlobalLogger(__name__).error(e)
-                success = False
-                raise e
-        return success
+            if len(self.axes)==0:
+                getGlobalLogger(__name__).warning("No axes on which to orient chunk %s",self.chunkname)
+            else:
+                getGlobalLogger(__name__).info("Reorienting chunk %s according to markers on palette.",self.chunkname)
+                ModelHelpers.align_markers_to_axes(self.chunk,self.axes,1.0)
+                ModelHelpers.move_model_to_world_origin(self.chunk) 
+        return success, code
+    
 class MetashapeTask_CopyMarkersFromChunk(MetashapeTask):
     """
     Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
@@ -133,7 +134,7 @@ class MetashapeTask_CopyMarkersFromChunk(MetashapeTask):
         return "Metashape Task: Copy markers from a specified second chunk"
     
     def setup(self):
-        success = super().setup()
+        success, code = super().setup
         if success and self.chunk:
             doc = self.doc
             for c in doc.chunks:
@@ -141,17 +142,31 @@ class MetashapeTask_CopyMarkersFromChunk(MetashapeTask):
                 if c.label == self.otherchunkname:
                     self.otherchunk = c
                     break
-            success = success and (self.otherchunk is not None)
-        return success
+            if self.otherchunk is None:
+                success = False
+                success = ErrorCodes.MISSING_TARGET_CHUNK
+        return success, code
     
     def execute(self):
-        print("copying markers")
-        copyMarkersFromChunkToOtherChunk(self.otherchunk,self.chunk)
-        return len(self.otherchunk.markers)==len(self.chunk.markers)
+        success, code = super().setup()
+        if not success:
+            return success, code
+        if success:
+            getGlobalLogger(__name__).info("Copying markers from %s to %s.", self.chunk.label, self.otherchunk.label)
+            copyMarkersFromChunkToOtherChunk(self.otherchunk,self.chunk)
+        return success, code
+    
+    def exit(self):
+        success, code = super().exit()
+        if not success:
+            return success, code
+        if not len(self.otherchunk.markers)==len(self.chunk.markers):
+            success = False
+            code = ErrorCodes.MISSING_MARKER
+        return success, code
 class MetashapeTask_ResizeBoundingBox(MetashapeTask):
     """
-    Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
-    color data of the targets.
+    -This is a task for resizing a bounding box given a centerpoint and a Metashape vector of width,depth,height
     -This expects an argdict on init with: {"width_depth_height":MEtashape vector with float members detailing the dimensions of the box in meters.
                                             "centerpoint": Metashape vector with x,y,z of the box centerpoint
                                             "chunkname": the name of the chunk you are operating on.
@@ -167,21 +182,21 @@ class MetashapeTask_ResizeBoundingBox(MetashapeTask):
     def __repr__(self):
         return "Metashape Task: SetBoundingBoxDimensions"
     
-    def setup(self):
-        success = super().setup()
-        return success
-    
     def execute(self):
         
         getGlobalLogger(__name__).info("At least I got here.")
         #transform local coordinates to the coordinate reference system if there is one.
+        success, code = super().execute()
+        if not success:
+            return success, code
         region = self.chunk.region
         region.size = self.width_depth_height
         region.center = self.centerpoint 
-        
         self.chunk.region = region
         #set the bounding box rotation to be the same as the object.
         self.doc.save()
+        return success, code
+    
 class MetashapeTask_CopyBoundingBoxToChunks(MetashapeTask):
     """
     Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
@@ -199,11 +214,11 @@ class MetashapeTask_CopyBoundingBoxToChunks(MetashapeTask):
     def __repr__(self):
         return "Metashape Task: Copy Bounding Box to Chunks."
     
-    def setup(self):
-        success = super().setup()
-        return success
     
     def execute(self):
+        success, code = super().execute()
+        if not success:
+            return success, code
         region = self.chunk.region
         rrot = region.rot
         rcent = region.center
@@ -227,8 +242,18 @@ class MetashapeTask_CopyBoundingBoxToChunks(MetashapeTask):
             cregion.size = rsize*scale  #transfer the old bounding box center into the current chunk's local coordinates.
             cregion.center = newc
             c.region = cregion
+
+        marker = self.chunk.addMarker() #this is a nasty hack because metashape won't actually save after some minor changes.
         self.doc.save()
-        return True
+        self.chunk.remove(marker)
+        self.doc.save()
+        return self,code
+    
+    def exit(self):
+        success,code = super().exit()
+        return success,code
+
+
 class MetashapeTask_RotateBoundingBox(MetashapeTask):
     """
     Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
@@ -246,14 +271,15 @@ class MetashapeTask_RotateBoundingBox(MetashapeTask):
     def __repr__(self):
         return "Metashape Task: Set Boundingbox Rotation"
     
-    def setup(self):
-        success = super().setup()
-        return success
+
     
     def execute(self):
-
+        success,code= super().execute()
+        if not success:
+            return success, code
         getGlobalLogger(__name__).info("At least I got here.")
         ModelHelpers.rotate_boundingbox(self.chunk,self.rot_x_y_z)
+        return success,code
 
 class MetashapeTask_ImportModel(MetashapeTask):
     """
@@ -272,28 +298,33 @@ class MetashapeTask_ImportModel(MetashapeTask):
         return "Metashape Task: ImportModel"
    
     def setup(self):
-        success = super().setup()
-        success = success and self.modelfilename.is_file()
-        return success
+        success, code = super().setup()
+        if not success:
+            return success, code
+        if not self.modelfilename.is_file():
+            success = False
+            code = ErrorCodes.INVALID_FILE
+        return success,code
    
     def execute(self):
-        getGlobalLogger(__name__).info("At least I got here.")
+        success,code = super().execute()
+        if not success:
+            return success, code
         #transform local coordinates to the coordinate reference system if there is one.
         self.chunk.importModel(str(self.modelfilename),
                                Metashape.ModelFormat.ModelFormatPLY if self.modelfilename.suffix.upper()==".PLY" else Metashape.ModelFormat.ModelFormatOBJ,
                                 replace_asset = True)
         if not self.chunk.model:
-            return False
-        else:
-            return  True
+            success = False
+            code = ErrorCodes.NO_MODEL_FOUND
 
+        return success, code
         #set the bounding box rotation to be the same as the object.
 
 
 class MetashapeTask_ChangeImagePathsPerChunk(MetashapeTask):
     """
-    Task object for copying a set of markers from one set of identical images to another. Use for when you have a camera with two sensors taking two imagesets where one imageset doesn't record the black and white
-    color data of the targets.
+     Task object for replacing images on a chunk with images in a different directory.
     -This expects an argdict on init with: {"replace_these: a list of images to replace
                                             "to_replace_with":a 1:1 list of image paths to replace the existing images with.
                                             "chunkname": the name of the chunk you are operating on.
@@ -306,28 +337,55 @@ class MetashapeTask_ChangeImagePathsPerChunk(MetashapeTask):
        self.replacenames = argdict["to_replace_with"]
        self.imagestoreplace = argdict["replace_these"]
     
+    def setup(self):
+        success,code = super().setup()
+        if success:
+            for image in self.imagestoreplace:
+                if not Path(image).exists:
+                    success = False
+                    code = ErrorCodes.INVALID_FILE
+                    break
+        return success, code
+
     def __repr__(self):
-        return "Metashape Task: Repalce images in chunk with others."
+        return "Metashape Task: Replace images in chunk with others."
     
     
     def execute(self):
-        for c in self.chunk.cameras:
-            if c.type == Metashape.Camera.Type.Regular:
-                for i,cams in enumerate(self.imagestoreplace):
-                    temp = PurePosixPath(cams)
-                    metashapepath = str(c.photo.path)
-                    if str(temp)==metashapepath:
-                        newpath = str(PurePosixPath(self.replacenames[i]))
-                        photocopy = c.photo.copy()
-                        photocopy.path  = str(PurePosixPath(newpath))
-                        c.photo = photocopy
-                        getGlobalLogger(__name__).info("replacing %s with %s",metashapepath,newpath)
-                        break
-        marker = self.chunk.addMarker() #this is a nasty hack because metashape doesn't save paths if that's all you do before you save.
-        self.doc.save()
-        self.chunk.remove(marker)
+        success,code = super().execute()
+        if success:
+            for c in self.chunk.cameras:
+                if c.type == Metashape.Camera.Type.Regular:
+                    for i,cams in enumerate(self.imagestoreplace):
+                        temp = PurePosixPath(cams)
+                        metashapepath = str(c.photo.path)
+                        if str(temp)==metashapepath:
+                            newpath = str(PurePosixPath(self.replacenames[i]))
+                            photocopy = c.photo.copy()
+                            photocopy.path  = str(PurePosixPath(newpath))
+                            c.photo = photocopy
+                            getGlobalLogger(__name__).info("replacing %s with %s",metashapepath,newpath)
+                            break
+            marker = self.chunk.addMarker() #this is a nasty hack because metashape doesn't save paths if that's all you do before you save.
+            self.doc.save()
+            self.chunk.remove(marker)
+            self.doc.save()
 
-        return True
+        return success,code
+    
+    def exit(self):
+        success, code = super().exit()
+        if success:
+            replacenames = [str(r.name) for r in self.replacenames]
+            for c in self.chunk.cameras:
+                if c.type == Metashape.Camera.Type.Regular:
+                    pt = str(Path(c.photo.path).name)
+                    if pt not in replacenames:
+                        success = False
+                        code = ErrorCodes.REPLACE_IMAGES_FAILURE
+                        break
+        return success,code
+                    
 
 class MetashapeTask_ResizeBoundingBoxFromMarkers(MetashapeTask):
       
@@ -350,45 +408,44 @@ class MetashapeTask_ResizeBoundingBoxFromMarkers(MetashapeTask):
         return "Metashape Task: Set the dimensions of the bounding box based on specified markers"
     
     def setup(self):
-        success =  super().setup()
+        success,code =  super().setup()
         self.widthmarkers = [self.findTargetFromNumber(self.dimensions[f]) for f in range(0,2)]
         self.depthmarkers = [self.findTargetFromNumber(self.dimensions[f]) for f in range(2,4)]
         success = success and len(self.widthmarkers)==2 and len(self.depthmarkers)==2
         if None in self.widthmarkers or None in self.depthmarkers:
             success = False
-        return success 
+            code = ErrorCodes.MISSING_MARKER
+        return success,code
     
     def execute(self):
-        wv = self.widthmarkers[1].position-self.widthmarkers[0].position
-        #calculate width and depth from markers. This assumes that markers are placed on at least three sides of the object
-        width = math.sqrt(wv.x**2 +wv.y**2 +wv.z**2) #get the magnitude of the vector between point 1 and 2.
-        dv = self.depthmarkers[1].position-self.depthmarkers[0].position
-        depth =math.sqrt(dv.x**2 +dv.y**2 +dv.z**2)*2 
-        centerxy = (self.widthmarkers[1].position-self.depthmarkers[1].position)/2 + self.depthmarkers[1].position 
-        #calculate centerpoint. This assumes that the second depth and width markers are diagonal from each other and on opposite sides of the object.
-        #it's very specific to FMNH setup which only puts markers on three sides of the object.
-        print(f"{self.widthmarkers[1].label}={self.widthmarkers[1].position}, {self.depthmarkers[1].label} = {self.depthmarkers[1].position}")
-        height = 1 #hardcoding it for now because there are no height markers.
-        wdh = Metashape.Vector((width,depth,height))
-        # reg=self.chunk.region
-        # palettedict = util.load_palettes()
-        # palette_info = palettedict[Configurator.getConfig().getProperty("photogrammetry","palette")]
-        # xyz,_,_ = ModelHelpers.find_axes_from_markers_in_plane(self.chunk,palette_info)
-        # R  = Metashape.Matrix([[xyz[0].x,xyz[0].y, xyz[0].z],
-        #            [xyz[1].x,xyz[1].y,xyz[1].z],
-        #            [xyz[2].x, xyz[2].y,xyz[2].z],])
-        # scale = R.row(0).norm() #the rows are the original x,y,z axes M*Rot*Scale Calculating the length of one of them gets the scale factof IF they are uniformly scaled.
-        # R = R * (1/scale) #remove the scale from the rotation matrix to get a pure rotation.
-        # reg.rot = R # #region becomes therotation of the current chunk*the rotation of the region.
-        tasklist = []
-        tasklist.append( MetashapeTask_ResizeBoundingBox({"input":"","output":self.output ,"projectname":self.projectname,"chunkname":self.chunk.label,"width_depth_height":wdh,"centerpoint":centerxy}))
-        
-        tasklist.append( MetashapeTask_RotateBoundingBox({"input":"","output":self.output,"projectname":self.projectname,"chunkname":self.chunk.label,"xyz":[0,0,0]}))    #just hardcoding it for now.
-        for task in tasklist:
-            if task.setup():
-                task.execute()
-            task.exit()
-        return super().execute()
+        success, code = super().execute()
+        if success:
+            wv = self.widthmarkers[1].position-self.widthmarkers[0].position
+            #calculate width and depth from markers. This assumes that markers are placed on at least three sides of the object
+            width = math.sqrt(wv.x**2 +wv.y**2 +wv.z**2) #get the magnitude of the vector between point 1 and 2.
+            dv = self.depthmarkers[1].position-self.depthmarkers[0].position
+            depth =math.sqrt(dv.x**2 +dv.y**2 +dv.z**2)*2 
+            centerxy = (self.widthmarkers[1].position-self.depthmarkers[1].position)/2 + self.depthmarkers[1].position 
+            #calculate centerpoint. This assumes that the second depth and width markers are diagonal from each other and on opposite sides of the object.
+            #it's very specific to FMNH setup which only puts markers on three sides of the object.
+            print(f"{self.widthmarkers[1].label}={self.widthmarkers[1].position}, {self.depthmarkers[1].label} = {self.depthmarkers[1].position}")
+            height = 5 #hardcoding it for now because there are no height markers.
+            #Adding some fudge factors to width and depth so it's not cutting through the markers on the top and side.
+            wdh = Metashape.Vector((width+2.0,depth+2.0,height))
+            tasklist = []
+            tasklist.append( MetashapeTask_ResizeBoundingBox({"input":"","output":self.output ,"projectname":self.projectname,"chunkname":self.chunk.label,"width_depth_height":wdh,"centerpoint":centerxy}))  
+            tasklist.append( MetashapeTask_RotateBoundingBox({"input":"","output":self.output,"projectname":self.projectname,"chunkname":self.chunk.label,"xyz":[0,0,0]}))    #just hardcoding it for now.
+            for task in tasklist:
+                subsuccess, subcode = task.setup()
+                if subsuccess:
+                    subsuccess, subcode = task.execute()
+                    if subsuccess:
+                        subsuccess, subcode = task.exit()
+                if subsuccess is False:
+                    success = subsuccess
+                    code = subcode
+                    break   
+        return success,code
         
 
 class MetashapeTask_DetectMarkersFromThresholdedImage(MetashapeTask_DetectMarkers):
@@ -415,9 +472,8 @@ class MetashapeTask_DetectMarkersFromThresholdedImage(MetashapeTask_DetectMarker
         return "Metashape Task: Detect Markers from Thresholded Images"
     
     def setup(self):
-        success = super().setup()
+        success,code = super().setup()
         if success and self.chunk:
-            success = super().setup()
             doc = MetashapeFileSingleton.getMetashapeDoc(self.projectname,self.output)
             currentworkingdir = Path(doc.path).parent
             photostomunge=[]
@@ -441,23 +497,35 @@ class MetashapeTask_DetectMarkersFromThresholdedImage(MetashapeTask_DetectMarker
             for photo in photostomunge:
                 if Path(photo).suffix.upper() ==".JPG":
                     self.chunk.addPhotos(photo)
-        return success
+           
+        return success, code
         
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
+        success,code = super().execute()
         if success:
+            doc = MetashapeFileSingleton.getMetashapeDoc(self.projectname,self.output)
             copyMarkersFromChunkToOtherChunk(self.chunk,self.oldchunk)
-        return success
-    
-    def exit(self):
-        doc = MetashapeFileSingleton.getMetashapeDoc(self.projectname,self.output)
-        if doc.chunk.label =="Tempchunk":
-            tempchunk = doc.chunk
-            doc.chunk = self.oldchunk
-            self.chunk = doc.chunk
+             #cleanup
+            tempchunk = self.chunk
+            self.chunk =  doc.chunk = self.oldchunk
             self.chunkname = doc.chunk.label
             doc.remove(tempchunk)
             doc.save()
-        if self.deletetemp:
-            shutil.rmtree(Path(Path(doc.path).parent,'temp'))
+            if self.deletetemp:
+                shutil.rmtree(Path(Path(doc.path).parent,'temp'))
+        return success,code
+    
+    def exit(self):
+        success,code = super().exit()
+        if success:
+            if self.deletetemp:
+                doc = MetashapeFileSingleton.getMetashapeDoc(self.projectname,self.output)
+                if Path(Path(doc.path).parent,'temp').is_dir():
+                    success = False
+                    code = ErrorCodes.FAILURE_TO_REMOVE_FILE
+            if success and (self.chunk.markers is None or len(self.chunk.markers) ==0):
+                success = False
+                code = ErrorCodes.MISSING_MARKER
+  
+        return success, code

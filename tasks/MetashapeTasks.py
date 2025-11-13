@@ -2,6 +2,7 @@ from pathlib import Path
 from os import mkdir,listdir,sep
 import Metashape
 import shutil
+from util.ErrorCodeConsts import *
 from util.InstrumentationStatistics import *
 from util.util import MaskingOptions
 from util.util import AlignmentTypes
@@ -22,7 +23,7 @@ class MetashapeTask(BaseTask):
         self.chunkname = argdict["chunkname"]
         self.chunk = None
     def setup(self):
-        success = super().setup()
+        success,code = super().setup()
         self.doc =MetashapeFileSingleton.getMetashapeDoc(self.projectname,self.output)
         for chunk in self.doc.chunks:
             if chunk.label == self.chunkname:
@@ -30,11 +31,12 @@ class MetashapeTask(BaseTask):
                 break
         if self.chunk is None:
             success = False
+            code = ErrorCodes.NO_CHUNK
             getLogger(__name__).warning("Setup task failed to execute because there is no chunk %s",self.chunkname)
-        return success
+        return success,code
     def exit(self):
         success = super().exit()
-        return success
+        return success, ErrorCodes.NONE
 
 
 class MetashapeTask_AlignPhotos(MetashapeTask):
@@ -58,20 +60,27 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
         return "Metashape Task: Align Photos"
     def setup(self):
         #in order for this task to succeed, there must be a chunk, and there must be photos.
-        success = super().setup()
+        success,code = super().setup()
         print(self.maskpath)
-        if success is False:
+        if success is False and code is ErrorCodes.NO_CHUNK:
             #the only way this fails is if there is no chunk.
             self.chunk = self.doc.addChunk()
             self.chunk.label=self.chunkname
             self.doc.save()      
             getLogger(__name__).info('Added chunk %s.',self.chunkname)
             success = True
+            code = ErrorCodes.NONE
         if self.maskoption is not MaskingOptions.NOMASKS and not self.maskpath.exists():
             mkdir(self.maskpath)
-
-        success &= self.input.exists()
-        return success
+        p = [i for i in self.photos if Path(i).is_file() and Path(i).suffix.upper()==".JPG"]
+        if len(self.photos)==0 or len([i for i in self.photos if Path(i).is_file() and Path(i).suffix.upper()==".JPG"])==0:
+            success = False
+            code = ErrorCodes.INVALID_FILE
+        
+        if not self.input.exists():
+            success = False
+            code = ErrorCodes.INVALID_FILE
+        return success, code
     
     def loadPhotos(self):
         if len(self.photos)>0:
@@ -110,45 +119,62 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
             template = f"{maskpath}{sep}{{filename}}{ext}"
             self.chunk.generateMasks(template, Metashape.MaskingMode.MaskingModeFile)
         return
+    def checkAlignment(self):
+        unaligned = []
+        cams = self.chunk.cameras
+        for c in cams:
+            if not c.transform:
+                unaligned.append(c)
+        return unaligned
     
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        print("Executing")
-        success = super().execute()
+       
+        success, code = super().execute()
         if success:
+            
+            downscale_factor = Configurator.getConfig().getProperty("photogrammetry","sparse_cloud_quality")
+            if len(self.chunk.cameras)==0:
+                self.loadPhotos()
+                if not self.maskoption is MaskingOptions.NOMASKS:
+                    self.loadMasks()      
+            if not self.chunk.point_cloud:   
+                self.chunk.matchPhotos(downscale=downscale_factor,
+                    generic_preselection=True,
+                    reference_preselection=True,
+                    reference_preselection_mode=Metashape.ReferencePreselectionMode.ReferencePreselectionSource,
+                    filter_mask=(self.maskpath!=None and self.maskoption !=MaskingOptions.NOMASKS),
+                    mask_tiepoints=False,
+                    filter_stationary_points=True,
+                    tiepoint_limit=0,
+                    reset_matches=False)
+                getLogger(__name__).info("Aligning Cameras.")
+                self.chunk.alignCameras()
             try:
-                downscale_factor = Configurator.getConfig().getProperty("photogrammetry","sparse_cloud_quality")
-                if len(self.chunk.cameras)==0:
-                    self.loadPhotos()
-                    if not self.maskoption is MaskingOptions.NOMASKS:
-                        self.loadMasks()      
-                if not self.chunk.point_cloud:   
-                    self.chunk.matchPhotos(downscale=downscale_factor,
-                        generic_preselection=True,
-                        reference_preselection=True,
-                        reference_preselection_mode=Metashape.ReferencePreselectionMode.ReferencePreselectionSource,
-                        filter_mask=(self.maskpath!=None and self.maskoption !=MaskingOptions.NOMASKS),
-                        mask_tiepoints=False,
-                        filter_stationary_points=True,
-                        tiepoint_limit=0,
-                        reset_matches=False)
-                    getLogger(__name__).info("Aligning Cameras.")
-                    self.chunk.alignCameras()
                     self.doc.save()
-            except Exception as e:
+            except OSError as e:
                 getLogger(__name__).error(e)
                 success = False
-                raise e
-        return success
+                code = ErrorCodes.METASHAPE_FILE_LOCKED
+
+        return success,code
     
     def exit(self):
         #verify that the build was a success.
-        success = True
-        if not len(self.chunk.cameras) >0 and self.chunk.point_cloud and len(self.chunk.tie_points)>0:
-            getLogger(__name__).error("Failed to create points or import cameras on chunk %s",self.chunk.label)
-            success= False
-        success &= super().exit()
-        return success          
+        success,code = super().exit()
+        if success:
+            if not len(self.chunk.cameras) >0 and self.chunk.point_cloud and len(self.chunk.tie_points)>0:
+                getLogger(__name__).error("Failed to create points or import cameras on chunk %s",self.chunk.label)
+                success= False
+                code = ErrorCodes.NO_TIEPOINTS
+                return success, code
+            unaligned = self.checkAlignment()
+            if len(unaligned)>0:
+                success = False
+                code = ErrorCodes.UNALIGNED_CAMERAS
+                getLogger(__name__).error("failing execution due to unaligned cameras %s on chunk %s", self.chunk.label, unaligned)
+                return success, code
+        return success, code
 
 class MetashapeTask_AddScales(MetashapeTask):
     
@@ -173,16 +199,16 @@ class MetashapeTask_AddScales(MetashapeTask):
     
     def setup(self):
         #in order for this task to succeed, there must be a chunk, and there must be photos.
-        success = super().setup()
+        success,code = super().setup()
         if self.chunk and self.palette_name:
             palettedict = util.load_palettes()
             self.palette_info = palettedict[self.palette_name]
-        return success
+        return success,code
 
     
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
+        success,code = super().execute()
         if success:
             try:
                 if len(self.chunk.markers) >0:
@@ -195,21 +221,21 @@ class MetashapeTask_AddScales(MetashapeTask):
                         self.doc.save() 
             except Exception as e:
                 getLogger(__name__).error(e)
+                code = ErrorCodes.UNKNOWN
                 success = False
                 raise e
-        return success
+        return success,code
     
     def exit(self):
         #verify that the build was a success.
-        success = True
-        if self.palette_info:
-            success &= len(self.chunk.markers)>0
-        if "scalebars" in self.palette_info.keys():
-            success &= len(self.chunk.scalebars)>0
-        success &= super().exit()
-        if not success:
-            getLogger(__name__).warning("The expected targets for this palette were not found on the model.")
-        return True          
+        success,code = super().exit()
+        if success:
+            if self.palette_info and "scalebars" in self.palette_info.keys():
+                if  len(self.chunk.scalebars)==0:
+                    success = False
+                    code = ErrorCodes.NO_SCALEBARS_FOUND
+                    getLogger(__name__).warning("The expected targets for this palette were not found on the model.")
+        return success,code          
     
 class MetashapeTask_AlignChunks(MetashapeTask):
     """
@@ -230,20 +256,23 @@ class MetashapeTask_AlignChunks(MetashapeTask):
         if  self.palette_name and self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
             palettedict= util.load_palettes()
             self.palette_info = palettedict[self.palette_name]
+
     def __repr__(self):
         return "Metashape Task: Align Chunks by Marker"
+    
     def setup(self):
         #for this to succeed, if in marker based alignment, there must be a palette.
-        success = super().setup()
+        success,code = super().setup()
         if success:
             if  self.palette_name and self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
                 palettedict= util.load_palettes()
                 self.palette_info = palettedict[self.palette_name]
-            else:
+            else:               
                 getLogger(__name__).info("Setup for align chunks failed. Check that the right alignment type was passed and that the palette type was specified.")
-                success &=False
-        
-        return success
+                success =False
+                code = ErrorCodes.UNSUPPORTED_ALIGNMENT_TYPE
+        return success,code
+    
     def buildChunklist(self):
         chunklist = []  
         names =  [] if self.chunkstoalign is None else self.chunkstoalign
@@ -259,10 +288,11 @@ class MetashapeTask_AlignChunks(MetashapeTask):
             markerlist = [marker.key for marker in self.chunk.markers]
             self.doc.alignChunks(chunkstoalign,self.chunk,method=1,markers=markerlist)
             self.doc.save()
-        return True
+        return True, ErrorCodes.NONE
+    
     def exit(self):
-        success = True and super().exit()
-        return success
+        success,code=super().exit()
+        return success,code
 
     
 class MetashapeTask_DetectMarkers(MetashapeTask):
@@ -287,16 +317,16 @@ class MetashapeTask_DetectMarkers(MetashapeTask):
     
     def setup(self):
         #in order for this task to succeed, there must be a chunk, and there must be photos.
-        success = super().setup()
+        success,code = super().setup()
         if self.chunk and self.palette_name:
             palettedict = util.load_palettes()
             self.palette_info = palettedict[self.palette_name]
-        return success
+        return success, code
 
     
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
+        success,code = super().execute()
         if success:
             try:
                 if self.palette_name:
@@ -306,20 +336,24 @@ class MetashapeTask_DetectMarkers(MetashapeTask):
                         self.doc.save()
             except Exception as e:
                 getLogger(__name__).error(e)
+                code = ErrorCodes.UNKNOWN
                 success = False
                 raise e
-        return success
+        return success,code
     
     def exit(self):
         "verifies that markers were detected if they were specified."
-        success = True
-        if self.palette_info:
-            success &= len(self.chunk.markers)>0
+        success, code =  super().exit()
+        if success:
+            if self.palette_info:
+                if len(self.chunk.markers)==0:
+                    success = False
+                    code = ErrorCodes.NO_MARKERS_FOUND
+         
         
-        success &= super().exit()
         if not success:
             getLogger(__name__).warning("No markers found for chunk %s",(self.chunkname))
-        return True          
+        return success,code          
 
 class MetashapeTask_ErrorReduction(MetashapeTask):
 
@@ -339,7 +373,7 @@ class MetashapeTask_ErrorReduction(MetashapeTask):
     
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
+        success,code = super().execute()
         if success:
             try:     
                 if self.chunk.tie_points and not self.chunk.model:  
@@ -347,16 +381,12 @@ class MetashapeTask_ErrorReduction(MetashapeTask):
                     ModelHelpers.refine_sparse_cloud(self.doc, self.chunk,thresholds)
             except Exception as e:
                 getLogger(__name__).error(e)
+                code = ErrorCodes.UNKNOWN
                 success = False
                 raise e
-        return success
+        return success,code
 
-    def exit(self):
-        #verify that the build was a success.
-        success = True
-        success &= super().exit()
-        return success            
-    
+
 class MetashapeTask_BuildModel(MetashapeTask):
     """
     Task object for building a model from depthmaps. It will build the depthmaps and then the model. It requires:
@@ -368,40 +398,50 @@ class MetashapeTask_BuildModel(MetashapeTask):
     """
     def __repr__(self):
         return "Metashape Task: Build Model from Depth Maps"
+    
+    def setup(self):
+        success,code = super().setup()
+        if success:
+            if not self.chunk.tie_points:
+                success = False
+                code = ErrorCodes.NO_TIEPOINTS
+        return success,code
 
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
-        if success:
-            try:       
-                if  self.chunk.tie_points and not self.chunk.model:
-                    facecount = None or Configurator.getConfig().getProperty("photogrammetry","custom_face_count")
-                    dmquality = Configurator.getConfig().getProperty("photogrammetry","model_quality")
-                    targetfacecount = facecount or 200000
-                    facecountconst = Metashape.FaceCount.CustomFaceCount if facecount else Metashape.FaceCount.HighFaceCount
-                    getLogger(__name__).info("Building Depth Maps.")
-                    self.chunk.buildDepthMaps(downscale=dmquality, filter_mode = Metashape.FilterMode.MildFiltering)
-                    getLogger(__name__).info("Building Model.")
-                    self.chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData, 
-                                            face_count = facecountconst,
-                                            face_count_custom = targetfacecount)
-                    getLogger(__name__).info("Cleaning up blobs on Model.")
-                    ModelHelpers.cleanup_blobs(self.chunk)
-                    getLogger(__name__).info("Closing Holes.")
-                    ModelHelpers.close_holes(self.chunk)
-                    self.doc.save()
-            except Exception as e:
+        success, code = super().execute()
+        if success:                  
+            if not self.chunk.model:
+                facecount = None or Configurator.getConfig().getProperty("photogrammetry","custom_face_count")
+                dmquality = Configurator.getConfig().getProperty("photogrammetry","model_quality")
+                targetfacecount = facecount or 200000
+                facecountconst = Metashape.FaceCount.CustomFaceCount if facecount else Metashape.FaceCount.HighFaceCount
+                getLogger(__name__).info("Building Depth Maps.")
+                self.chunk.buildDepthMaps(downscale=dmquality, filter_mode = Metashape.FilterMode.MildFiltering)
+                getLogger(__name__).info("Building Model.")
+                self.chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData, 
+                                        face_count = facecountconst,
+                                        face_count_custom = targetfacecount)
+                getLogger(__name__).info("Cleaning up blobs on Model.")
+                ModelHelpers.cleanup_blobs(self.chunk)
+                getLogger(__name__).info("Closing Holes.")
+                ModelHelpers.close_holes(self.chunk)
+            try:
+                self.doc.save()
+            except OSError as e:
                 getLogger(__name__).error(e)
                 success = False
-                raise e
-        return success
+                code = ErrorCodes.METASHAPE_FILE_LOCKED
+        return success,code
 
     def exit(self):
         #verify that the build was a success.
-        success = True
-        if not self.chunk.model:
-            success = False
-        return (success & super().exit())          
+        success, code = super().exit()
+        if success:
+            if not self.chunk.model:
+                success = False
+                code = ErrorCodes.NO_MODEL_FOUND
+        return success, code
 
 class MetashapeTask_BuildTextures(MetashapeTask):
 
@@ -418,29 +458,39 @@ class MetashapeTask_BuildTextures(MetashapeTask):
     def __repr__(self):
         return "Metashape Task: Build UV Maps and Textures"
     
+    def setup(self):
+        success, code = super().setup()
+        if success:
+            if not self.chunk.model:
+                success = False
+                code = ErrorCodes.NO_MODEL_FOUND
+        return success, code
+    
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
-        if success:
-            try:     
-                if not len(self.chunk.model.textures)>0:
-                    pages = Configurator.getConfig().getProperty("photogrammetry","texture_count")
-                    tsize = Configurator.getConfig().getProperty("photogrammetry","texture_size")
-                    getLogger(__name__).info("Building UV Map and Texture for chunk %s",self.chunk.label)
-                    self.chunk.buildUV(page_count=pages, texture_size=tsize)
-                    self.chunk.buildTexture(texture_size=tsize, ghosting_filter=True)
-                    self.doc.save()
-            except Exception as e:
+        success, code = super().execute()
+        if success:     
+            if not len(self.chunk.model.textures)>0:
+                pages = Configurator.getConfig().getProperty("photogrammetry","texture_count")
+                tsize = Configurator.getConfig().getProperty("photogrammetry","texture_size")
+                getLogger(__name__).info("Building UV Map and Texture for chunk %s",self.chunk.label)
+                self.chunk.buildUV(page_count=pages, texture_size=tsize)
+                self.chunk.buildTexture(texture_size=tsize, ghosting_filter=True)
+            try: 
+                self.doc.save()
+            except OSError as e:
                 getLogger(__name__).error(e)
                 success = False
-                raise e
-        return success
+                code = ErrorCodes.METASHAPE_FILE_LOCKED
+        return success,code
+    
     def exit(self):
         #verify that the build was a success.
-        success = True
+        success,code = super().exit()
         if not self.chunk.model.textures:
             success = False
-        return (success & super().exit())   
+            code = ErrorCodes.NO_TEXTURES_FOUND
+        return success,code 
     
 
 
@@ -468,30 +518,27 @@ class MetashapeTask_Reorient(MetashapeTask):
         return "Metashape Task: Reorient Model"
     
     def setup(self):
-        success = super().setup()
-        if self.chunk and self.palette_name:
+        success,code = super().setup()
+        if self.palette_name:
             palettedict = util.load_palettes()
             self.palette_info = palettedict[self.palette_name]
             self.axes = ModelHelpers.find_axes_from_markers(self.chunk,self.palette_info)
-        return success
+        if len(self.axes)==0:
+            code = ErrorCodes.NO_AXES
+        return success, code
         
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
+        success, code = super().execute()
         if success:
-            try:     
-                if self.chunk.model:
-                    if len(self.axes)==0:
-                        getLogger(__name__).warning("No axes on which to orient chunk %s",self.chunkname)
-                    else:
-                        getLogger(__name__).info("Reorienting chunk %s according to markers on palette.",self.chunkname)
-                        ModelHelpers.align_markers_to_axes(self.chunk,self.axes)
-                        ModelHelpers.move_model_to_world_origin(self.chunk)
-            except Exception as e:
-                getLogger(__name__).error(e)
-                success = False
-                raise e
-        return success
+            if self.chunk.model:
+                if len(self.axes)==0:
+                    getLogger(__name__).warning("No axes on which to orient chunk %s",self.chunkname)
+                else:
+                    getLogger(__name__).info("Reorienting chunk %s according to markers on palette.",self.chunkname)
+                    ModelHelpers.align_markers_to_axes(self.chunk,self.axes)
+                    ModelHelpers.move_model_to_world_origin(self.chunk)
+        return success,code
   
 class MetashapeTask_ExportModel(MetashapeTask):
     """
@@ -512,68 +559,72 @@ class MetashapeTask_ExportModel(MetashapeTask):
         self.outputfile = ""
         self.extn = argdict["extension"]
         self.conform_to_shape=argdict["conform_to_shape"]
+
     def __repr__(self):
         return "Metashape Task: Export Chunk"
+    
     def setup(self):
-        success = super().setup()
+        success, code = super().setup()
         outputfolder = Configurator.getConfig().getProperty("photogrammetry","output_path")
         self.outputfolder = Path(self.output,outputfolder)
         self.outputfile = util.get_export_filename(self.chunkname.replace(" ",""),self.extn)
-        return success
+        return success, code
+    
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
-        success = super().execute()
+        success, code = super().execute()
         if success:
-            try:                
-                getLogger(__name__).info("Now, exporting chunk %s as %s",self.chunk.label,self.outputfile )
-                self.chunk.exportModel(path=str(Path(self.outputfolder,f"{self.outputfile}{self.extn}")),
-                                    texture_format = Metashape.ImageFormat.ImageFormatPNG,
-                                    embed_texture=(self.extn==".ply"),
-                                    clip_to_boundary=self.conform_to_shape )
-            except Exception as e:
-                getLogger(__name__).error(e)
-                success = False
-                raise e
-        return success
+            getLogger(__name__).info("Now, exporting chunk %s as %s",self.chunk.label,self.outputfile )
+            self.chunk.exportModel(path=str(Path(self.outputfolder,f"{self.outputfile}{self.extn}")),
+                                texture_format = Metashape.ImageFormat.ImageFormatPNG,
+                                embed_texture=(self.extn==".ply"),
+                                clip_to_boundary=self.conform_to_shape )
+        return success, code
     
     def exit(self):
-        success = True
+        success, code = super().exit()
         if not Path(self.outputfile,self.outputfolder).exists():
             success = False
-        return (success & super().exit())    
+            code = ErrorCodes.EXPORT_FAILURE_MODEL
+        return success, code  
     
 class MetashapeTask_ExportOrthomosaic(MetashapeTask):
-    def __init__(self,argdict:dict):
-        super().__init__(argdict)
+
     def __repr__(self):
         return "Metashape Task: Export Orthomosaic"
     def setup(self):
-        success = super().setup()
-        if self.chunk.orthomosaic:
-            return success and True
-        else:
-            getLogger(__name__).warning("Failing the orthomosaic export because there's no orthomosaic for chunk %s",self.chunkname)
-            return False
+        success, code = super().setup()
+        if success:
+            outputfolder = Configurator.getConfig().getProperty("photogrammetry","output_path")
+            self.outputfolder = Path(self.output,outputfolder)
+            if not self.chunk.orthomosaic:
+                getLogger(__name__).warning("Failing the orthomosaic export because there's no orthomosaic for chunk %s",self.chunkname)
+                success = False
+                code = ErrorCodes.NO_ORTHOMOSAIC
+        return success,code
+
+            
     def execute(self):
-        outputfolder = Configurator.getConfig().getProperty("photogrammetry", "output_path")
-        resolutionx = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x"))
-        resolutiony = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y"))
-        self.chunk.exportRaster(str(Path(self.output,outputfolder,f"{self.chunkname}_Orthomosaic.tif")),
-                                format = Metashape.RasterFormat.RasterFormatTiles,
-                                image_format=Metashape.ImageFormat.ImageFormatTIFF,
-                                raster_transform = Metashape.RasterTransformType.RasterTransformNone,
-                                resolution_x=resolutionx,
-                                resolution_y = resolutiony)
-        
-        return True
+        success, code = super().execute()
+        if success:
+            resolutionx = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x"))
+            resolutiony = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y"))
+            self.chunk.exportRaster(str(Path(self.output,self.outputfolder,f"{self.chunkname}_Orthomosaic.tif")),
+                                    format = Metashape.RasterFormat.RasterFormatTiles,
+                                    image_format=Metashape.ImageFormat.ImageFormatTIFF,
+                                    raster_transform = Metashape.RasterTransformType.RasterTransformNone,
+                                    resolution_x=resolutionx,
+                                    resolution_y = resolutiony)
+        return success, code
+    
     def exit(self):
-        succeeded  = super().exit()
-        expectedoutput = Path(self.output,f"{self.chunkname}_Orthomosaic.tif")
-        if expectedoutput.exists():
-            return succeeded and True
-        else:
+        success, code  = super().exit()
+        expectedoutput = Path(self.output,self.outputfolder,f"{self.chunkname}_Orthomosaic.tif")
+        if not expectedoutput.exists():
             getLogger(__name__).warning("Export Orthomosaic did not succeed because File %s was not created.",expectedoutput)
-            return False
+            success =False
+            code = ErrorCodes.EXPORT_FAILURE_ORTHOMOSAIC
+        return success, code
     
 
 class MetashapeTask_BuildOrthomosaic(MetashapeTask):
@@ -590,36 +641,41 @@ class MetashapeTask_BuildOrthomosaic(MetashapeTask):
 
     def __repr__(self):
         return "Metashape Task: Build Orthomosaic"
+    
     def setup(self):
-        success = super().setup()
-        return success
+        success,code = super().setup()
+        if not self.chunk.model:
+            success = False
+            code = ErrorCodes.NO_MODEL_FOUND
+        return success,code
+    
     @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)
     def execute(self):
-        success = super().execute()
-        if success:
+        success, code = super().execute()
+        if success: 
+            # Only build orthomosaic if there is a model and no orthomosaic yet
+            if self.chunk.model and not self.chunk.orthomosaic:
+                getLogger(__name__).info("Building Orthomosaic.")
+                scalex = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x")
+                scaley = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y")
+                self.chunk.buildOrthomosaic(
+                    surface_data=Metashape.DataSource.ModelData,
+                    blending_mode=Metashape.BlendingMode.MosaicBlending,
+                    resolution_x=scalex,
+                    resolution_y=scaley
+                )
             try:
-                # Only build orthomosaic if there is a model and no orthomosaic yet
-                if self.chunk.model and not self.chunk.orthomosaic:
-                    getLogger(__name__).info("Building Orthomosaic.")
-                    
-                    scalex = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x")
-                    scaley = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y")
-                    self.chunk.buildOrthomosaic(
-                        surface_data=Metashape.DataSource.ModelData,
-                        blending_mode=Metashape.BlendingMode.MosaicBlending,
-                        resolution_x=scalex,
-                        resolution_y=scaley
-                    )
-                    self.doc.save()
-            except Exception as e:
+                self.doc.save()
+            except OSError as e:
                 getLogger(__name__).error(e)
                 success = False
-                raise e
-        return success
+                code = ErrorCodes.METASHAPE_FILE_LOCKED
+        return success, code
 
     def exit(self):
         # Verify that the orthomosaic was built successfully
-        success = True
+        success, code = super().exit()
         if not hasattr(self.chunk, 'orthomosaic'):
             success = False
-        return (success & super().exit())      
+            code = ErrorCodes.NO_ORTHOMOSAIC
+        return success, code

@@ -282,9 +282,9 @@ def detect_markers(chunk, markertype:str):
 
     # bail if we have no markers
     if len(chunk.markers) ==  0:
-        print("- no markers detected")
+        getGlobalLogger(__name__).info("- no markers detected")
     else:
-        print(f"- found {len(chunk.markers)} markers")
+        getGlobalLogger(__name__).info("- found %s markers",len(chunk.markers))
     # update markers
     chunk.refineMarkers()
 

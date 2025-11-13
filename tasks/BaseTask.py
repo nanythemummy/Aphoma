@@ -1,7 +1,7 @@
 
 from enum import Enum
 from util.PipelineLogging import getLogger
-
+from util.ErrorCodeConsts import *
 class TaskStatus(Enum):
     """Class containing constants for state status."""
     NONE = 0
@@ -20,15 +20,15 @@ class BaseTask():
     def setup(self)->bool:
         self._status = TaskStatus.SETUP
         getLogger(__name__).info("Starting %s",self._statename)
-        return True
+        return True, ErrorCodes.NONE
     def exit(self)->bool:
         self._status = TaskStatus.FINISHED
         getLogger(__name__).info("Exiting %s",self._statename)
-        return True
+        return True, ErrorCodes.NONE
     def execute(self)->bool:
         self._status = TaskStatus.RUNNING
         getLogger(__name__).info("Executing %s",self._statename)
-        return True
+        return True, ErrorCodes.NONE
     def getStatus(self)->int:
         return self._status
     def getName(self)->str:
