@@ -17,15 +17,15 @@ class BaseTask():
         self._status = TaskStatus.NONE
         self._statename = self.__repr__()
         
-    def setup(self)->bool:
+    def setup(self)->tuple[bool,ErrorCodes]:
         self._status = TaskStatus.SETUP
         getLogger(__name__).info("Starting %s",self._statename)
         return True, ErrorCodes.NONE
-    def exit(self)->bool:
+    def exit(self)->tuple[bool,ErrorCodes]:
         self._status = TaskStatus.FINISHED
         getLogger(__name__).info("Exiting %s",self._statename)
         return True, ErrorCodes.NONE
-    def execute(self)->bool:
+    def execute(self)->tuple[bool,ErrorCodes]:
         self._status = TaskStatus.RUNNING
         getLogger(__name__).info("Executing %s",self._statename)
         return True, ErrorCodes.NONE

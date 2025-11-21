@@ -48,7 +48,7 @@ class BuildFrame(PipelineFrameBase):
             Configurator.getConfig().setProperty("photogrammetry","palette", args.pal_name.get())
             phscripts.build_model(jobname = args.proj_name.get(),
                                 inputdir = args.image_path.get(),
-                                outputdir = args.proj_base.get(),
+                                basedir = args.proj_base.get(),
                                 mask_option = UIConsts.MASKOPTIONS[args.mask_option.get()],
                                 snapshot=True)
 
@@ -58,6 +58,10 @@ class BuildFrame(PipelineFrameBase):
             raise e
         finally:
             self.disable_enable_all(False)
+
+    def cancel(self):
+        self.disable_enable_all(False)
+        phscripts.FINISHED = True
 
     def __init__(self,container):
 
@@ -82,6 +86,7 @@ class BuildFrame(PipelineFrameBase):
         paletteoption.current(0)
         paletteoption.grid(column=0,row=11)
         ttk.Button(self,text="Build",command=lambda:self.execute(self.svars)).grid(column=0, row=12)
+        ttk.Button(self, name="cancelbutton",text="Cancel", command=self.cancel).grid(column=1, row=12)
 
 
         

@@ -14,7 +14,8 @@
             "Camera":"",
             "Lens":"",
             "Source_Type":".cr2",
-            "Destination_Type":".jpg",
+            "Destination_Type": [".jpg",".tif"],
+            "Build_From_Format":".jpg",
             "ListenerDefaultMasking":"SmartSelectDroplet",
             "CV2_Export_Type":".png",
             "Roboflow_API_Key":""

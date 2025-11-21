@@ -4,8 +4,11 @@
 import os.path, json, argparse
 import time
 from pathlib import Path
+import glob
+from queue import Queue
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from util.ErrorCodeConsts import ErrorCodes
 from util.util import MaskingOptions, copy_file_to_dest, should_prune, get_export_filename
 from util.PipelineLogging import getLogger as getGlobalLogger
 from util.Configurator import Configurator
@@ -13,9 +16,11 @@ from util.InstrumentationStatistics import InstrumentationStatistics as statisti
 from util.InstrumentationStatistics import Statistic_Event_Types
 from processing import image_processing
 from transfer import transferscripts
-
+from tasks import MetashapeTasks,BlenderTasks,ConversionTasks,MaskingTasks
+from util import MetashapeFileHandleSingleton
 from postprocessing import MeshlabHelpers
 from util.buildManifest import Manifest
+
 
 def get_logger():
     return getGlobalLogger(__name__)
@@ -29,6 +34,7 @@ _CONFIG = {}
 PRUNE = False
 #logger is a logger. all methods to go to the console in the ui should use this so that we can filter the normal metashape and debugging messages from things like 
 #instrumentation.
+FINISHED = False
 
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
@@ -329,8 +335,97 @@ def build_model_from_manifest(manifestfile:str):
         copy_file_to_dest(filestoprocess["source"],source, True)
         build_model(projname,processed,project_folder,masktype,snapshot=True)
 
-                    
-def build_model(jobname,inputdir,outputdir,mask_option=MaskingOptions.NOMASKS,snapshot=False):
+def execute_task_queue(taskqueue:Queue,stop_on_empty=True):
+    getGlobalLogger(__name__).info("Executing Tasklist.")
+    succeeded = True
+    global FINISHED
+    FINISHED = False
+    phase = "setup"
+    while(not FINISHED):
+        task = taskqueue.get()
+        succeeded,code = task.setup()
+        if succeeded:
+            phase = "execute"
+            succeeded, code =task.execute()
+            if succeeded:
+                phase = "exit"
+                succeeded,code = task.exit()
+        if not succeeded:
+            getGlobalLogger(__name__).error("Phase %s for Task %s failed with error %s",phase, str(task),ErrorCodes.numToFriendlyString(code))
+            FINISHED=True
+            break
+        if stop_on_empty and taskqueue.empty():
+            FINISHED = True
+            getGlobalLogger(__name__).info("Finished the tasklist, ending.")
+        
+
+    statistics.getStatistics().logReport()
+    statistics.destroyStatistics()
+    MetashapeFileHandleSingleton.MetashapeFileSingleton.destroyDoc() #gets created by metashape tasks "align photos."
+
+def setup_conversion_tasks(task_queue:Queue,inputdir:Path,basedir:Path)->Queue:
+    config = Configurator.getConfig()
+    conversiontypes = config.getProperty("processing","Destination_Type")
+    desttype = config.getProperty("processing","Build_From_Format")
+
+    if desttype not in conversiontypes:
+       getGlobalLogger(__name__).error(" %s is not in list of conversion formats. Defaulting to JPG.",desttype)
+       desttype = ".jpg" #if we misconfigured this, default to jpg.
+
+    for f in os.listdir(inputdir):
+        filepath = Path(inputdir,f)
+        if filepath.is_file():
+            if filepath.suffix.upper() != ".JPG" and ".jpg" in conversiontypes:
+                jpgpath = Path(basedir,"JPG")
+                if not Path(jpgpath).exists():
+                    os.mkdir(jpgpath)
+                task_queue.put( ConversionTasks.ConvertToJPG({"input":Path(inputdir,filepath),"output":Path(jpgpath)}))
+            if filepath.suffix.upper() != "TIF" and ".tif" in conversiontypes:
+                tifpath = Path(basedir,"TIF")
+                if not Path(tifpath).exists():
+                    os.mkdir(tifpath)
+                task_queue.put( ConversionTasks.ConvertToTIF({"input":Path(inputdir,filepath),"output":Path(tifpath)}))
+    return task_queue
+
+def setup_masking_tasks(task_queue:Queue, pathlist:list, basedir:Path, mask_option=MaskingOptions.NOMASKS)->Queue:
+    config = Configurator.getConfig()
+    if mask_option != MaskingOptions.NOMASKS:
+        maskpath = Path(basedir,config.getProperty("photogrammetry","mask_path"))
+        if not maskpath.exists():
+            os.mkdir(maskpath)
+        for f in pathlist:
+            if mask_option == MaskingOptions.MASK_CONTEXT_AWARE_DROPLET:
+                task_queue.put(MaskingTasks.MaskDroplet({"input":f,"output":maskpath}))
+            elif mask_option == MaskingOptions.MASK_AI:
+                task_queue.put(MaskingTasks.MaskAI({"input":f,"output":maskpath}))
+            else: #use thresholding. 
+                task_queue.put(MaskingTasks.MaskThreshold({"input":f,"output":maskpath}))
+    return task_queue
+        
+def setup_model_tasks(task_queue:Queue,pathlist:list,jobname:str,inputdir:Path,basedir:Path,mask_option=MaskingOptions.NOMASKS):
+    config = Configurator.getConfig()
+    maskpath = Path(basedir,config.getProperty("photogrammetry","mask_path"))
+    outputextn = config.getProperty("photogrammetry","export_as")
+    paramsfortasks = {"input":inputdir,
+                        "output":basedir,
+                        "usemasks":mask_option != MaskingOptions.NOMASKS,
+                        "maskpath":maskpath,
+                        "projectname":jobname,
+                        "chunkname":jobname,
+                        "photos":pathlist,
+                        "extension":outputextn,
+                        "conform_to_shape": False
+                        }
+    task_queue.put(MetashapeTasks.MetashapeTask_AlignPhotos(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_ErrorReduction(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_DetectMarkers(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_AddScales(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_BuildModel(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_BuildTextures(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_ExportModel(paramsfortasks))
+    return task_queue
+
+def build_model(jobname,inputdir,basedir,mask_option=MaskingOptions.NOMASKS,snapshot=False):
     """Given a folder full of pictures, this function builds a 3D Model.
 
     Parameters:
@@ -342,38 +437,20 @@ def build_model(jobname,inputdir,outputdir,mask_option=MaskingOptions.NOMASKS,sn
     nomasks: boolean value determining whether to build masks or not.
     """
     config = Configurator.getConfig()
-    try:
-        from photogrammetry import MetashapeTools
-        if not os.path.exists(outputdir):
-            os.mkdir(outputdir)
+    tq = Queue()
+    buildfromformat = config.getProperty("processing","Build_From_Format")
+    buildfromdir= Path(basedir,str(buildfromformat[1:]).upper())
+    tq= setup_conversion_tasks(tq,inputdir,basedir)
+    filestouse = []
+    for images in os.listdir(inputdir):
+        filestouse.append(Path(buildfromdir,f"{Path(images).stem}{buildfromformat}"))
+    tq= setup_masking_tasks(tq,filestouse,basedir,mask_option)
+    tq = setup_model_tasks(tq,filestouse,jobname,buildfromdir,basedir,mask_option)
+    execute_task_queue(tq,True)           
 
-        processedpath = inputdir 
-              
-        with os.scandir(inputdir) as it:
-            for f in it:
-                if os.path.isfile(f):
-                    if f.name.upper().endswith(config.getProperty("processing","Source_Type")):
-                        tifpath = os.path.join(outputdir,config.getProperty("processing","Destination_Type")[1:])
-                        if not os.path.exists(tifpath):
-                            os.mkdir(tifpath)
-                        image_processing.process_image(f.path,tifpath,config.getProperty("processing","Destination_Type"))
-                        processedpath = tifpath       
-        if mask_option != MaskingOptions.NOMASKS:
-            maskpath = os.path.join(outputdir,config.getProperty("photogrammetry","mask_path"))
-            if not os.path.exists(maskpath):
-                os.mkdir(maskpath)
-                image_processing.build_masks(processedpath,maskpath,mask_option)
-        MetashapeTools.build_basic_model(photodir=processedpath,
-                                         projectname=jobname,
-                                         projectdir=outputdir,
-                                         maskoption=mask_option)
-        if snapshot:
-            build_snapshot(jobname,outputdir)
-        statistics.getStatistics().logReport()
-        statistics.destroyStatistics()
-    except ImportError as e:
-        print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
-        raise e
+        # if snapshot:
+        #     build_snapshot(jobname,basedir)
+
     
 def build_model_cmd(args):
     """The wrapper function that extracts arguments from the command line and runs the build model function with the correct params based on them.

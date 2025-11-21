@@ -56,6 +56,7 @@ class MetashapeFileSingleton():
     def destroyDoc():
         if MetashapeFileSingleton._METASHAPE_FILE  is not None:
             MetashapeFileSingleton._METASHAPE_FILE.closeProject()
+            MetashapeFileSingleton._METASHAPE_FILE = None
 
 
 

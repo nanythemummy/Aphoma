@@ -51,7 +51,7 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
     def __init__(self,argdict:dict):
         super().__init__(argdict)
         self.chunkname = argdict["chunkname"]
-        self.maskoption = argdict["maskoption"] if "maskoption" in argdict.keys() else MaskingOptions.NOMASKS
+        self.usemasks = argdict["usemasks"]
         self.chunk = None
         self.maskpath = argdict["maskpath"]
         self.photos = argdict["photos"] if "photos" in argdict.keys() else []
@@ -70,16 +70,12 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
             getLogger(__name__).info('Added chunk %s.',self.chunkname)
             success = True
             code = ErrorCodes.NONE
-        if self.maskoption is not MaskingOptions.NOMASKS and not self.maskpath.exists():
-            mkdir(self.maskpath)
-        p = [i for i in self.photos if Path(i).is_file() and Path(i).suffix.upper()==".JPG"]
+        if self.usemasks and not self.maskpath.exists():
+            return False, ErrorCodes.NO_MASKS_AVAILABLE
         if len(self.photos)==0 or len([i for i in self.photos if Path(i).is_file() and Path(i).suffix.upper()==".JPG"])==0:
-            success = False
-            code = ErrorCodes.INVALID_FILE
-        
+            return False, ErrorCodes.INVALID_FILE
         if not self.input.exists():
-            success = False
-            code = ErrorCodes.INVALID_FILE
+            return False, ErrorCodes.INVALID_FILE
         return success, code
     
     def loadPhotos(self):
@@ -136,14 +132,14 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
             downscale_factor = Configurator.getConfig().getProperty("photogrammetry","sparse_cloud_quality")
             if len(self.chunk.cameras)==0:
                 self.loadPhotos()
-                if not self.maskoption is MaskingOptions.NOMASKS:
+                if not self.usemasks is MaskingOptions.NOMASKS:
                     self.loadMasks()      
             if not self.chunk.point_cloud:   
                 self.chunk.matchPhotos(downscale=downscale_factor,
                     generic_preselection=True,
                     reference_preselection=True,
                     reference_preselection_mode=Metashape.ReferencePreselectionMode.ReferencePreselectionSource,
-                    filter_mask=(self.maskpath!=None and self.maskoption !=MaskingOptions.NOMASKS),
+                    filter_mask=(self.maskpath!=None and self.usemasks !=MaskingOptions.NOMASKS),
                     mask_tiepoints=False,
                     filter_stationary_points=True,
                     tiepoint_limit=0,
@@ -602,8 +598,8 @@ class MetashapeTask_ExportOrthomosaic(MetashapeTask):
                 success = False
                 code = ErrorCodes.NO_ORTHOMOSAIC
         return success,code
-
-            
+    
+    @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)      
     def execute(self):
         success, code = super().execute()
         if success:

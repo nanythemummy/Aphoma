@@ -34,7 +34,7 @@ class PipelineFrameBase(ttk.Frame):
 
     def disable_enable_all(self,disable=True):
          for child in self.winfo_children():
-            if child.widgetName != 'frame': #frames have no state
+            if child.widgetName != 'frame':
                 if not disable:
                     child.configure(state='normal')
                 else:
