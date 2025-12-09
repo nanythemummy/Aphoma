@@ -28,6 +28,9 @@ class ErrorCodes(Enum):
     CONFIGURATION_ERROR = 23
     INFERENCE_ENGINE_FAILURE = 24
     NO_MASKS_AVAILABLE = 25
+    EXTERNAL_EXECUTABLE_MISSING = 26
+    INVALID_BLENDER_SCRIPT_DIRECTORY=27
+    BLENDER_SCRIPT_FAILURE = 28
 
 
     @classmethod
@@ -57,7 +60,10 @@ class ErrorCodes(Enum):
                 "Mask Creation Failure.",
                 "Invalid entry in config file.",
                 "AI Masking Inference Engine Error",
-                "No masks were found"]
+                "No masks were found",
+                "Missing external executable",
+                "Invalid blender script directory. Check config.",
+                "Blender Script Failure"]
     @classmethod
     def numToFriendlyString(cls, num): 
         if isinstance(num, ErrorCodes):

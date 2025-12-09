@@ -18,6 +18,7 @@ from processing import image_processing
 from transfer import transferscripts
 from tasks import MetashapeTasks,BlenderTasks,ConversionTasks,MaskingTasks
 from util import MetashapeFileHandleSingleton
+
 from postprocessing import MeshlabHelpers
 from util.buildManifest import Manifest
 
@@ -401,7 +402,18 @@ def setup_masking_tasks(task_queue:Queue, pathlist:list, basedir:Path, mask_opti
             else: #use thresholding. 
                 task_queue.put(MaskingTasks.MaskThreshold({"input":f,"output":maskpath}))
     return task_queue
-        
+
+def setup_post_tasks(task_queue:Queue,jobname:str,basedir:Path)->Queue:
+    config = Configurator.getConfig()
+    outputpath = Path(basedir,config.getProperty("photogrammetry","output_path"))
+    objname =  Path(outputpath,get_export_filename(jobname,config.getProperty("photogrammetry","export_as")))
+    objfullname = f"{objname}{config.getProperty("photogrammetry","export_as")}"
+
+    if config.getProperty("postprocessing","script_directory") != "" and \
+    config.getProperty("postprocessing","blender_exec")!="":
+        task_queue.put(BlenderTasks.BlenderSnapshotTask({"inputobj":objfullname,"output":outputpath,"scale":True}))
+    return task_queue
+
 def setup_model_tasks(task_queue:Queue,pathlist:list,jobname:str,inputdir:Path,basedir:Path,mask_option=MaskingOptions.NOMASKS):
     config = Configurator.getConfig()
     maskpath = Path(basedir,config.getProperty("photogrammetry","mask_path"))
@@ -421,6 +433,7 @@ def setup_model_tasks(task_queue:Queue,pathlist:list,jobname:str,inputdir:Path,b
     task_queue.put(MetashapeTasks.MetashapeTask_DetectMarkers(paramsfortasks))
     task_queue.put(MetashapeTasks.MetashapeTask_AddScales(paramsfortasks))
     task_queue.put(MetashapeTasks.MetashapeTask_BuildModel(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_Reorient(paramsfortasks))
     task_queue.put(MetashapeTasks.MetashapeTask_BuildTextures(paramsfortasks))
     task_queue.put(MetashapeTasks.MetashapeTask_ExportModel(paramsfortasks))
     return task_queue
@@ -446,6 +459,7 @@ def build_model(jobname,inputdir,basedir,mask_option=MaskingOptions.NOMASKS,snap
         filestouse.append(Path(buildfromdir,f"{Path(images).stem}{buildfromformat}"))
     tq= setup_masking_tasks(tq,filestouse,basedir,mask_option)
     tq = setup_model_tasks(tq,filestouse,jobname,buildfromdir,basedir,mask_option)
+    tq = setup_post_tasks(tq,jobname,basedir)
     execute_task_queue(tq,True)           
 
         # if snapshot:
