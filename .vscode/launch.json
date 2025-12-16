@@ -6,6 +6,15 @@
     "configurations": [
 
         {
+            "name": "DebugConversionStandalone",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "scripts/ConvertFromRAW.py",
+            "console": "integratedTerminal",
+            "args":["/Volumes/AAAAAHHHH/Meroitic POts/archival images","/Volumes/AAAAAHHHH/Meroitic POts/archival images/TIF","--convert","0"]
+        
+        },
+        {
             "name": "test_multibanded",
             "type": "debugpy",
             "request": "launch",

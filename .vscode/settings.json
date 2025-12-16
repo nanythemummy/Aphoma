@@ -1,3 +1,4 @@
 {
+    "github.copilot.inlineSuggest.enable": false,
     "python.REPL.enableREPLSmartSend": false
 }

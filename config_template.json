@@ -18,7 +18,8 @@
             "Build_From_Format":".jpg",
             "ListenerDefaultMasking":"SmartSelectDroplet",
             "CV2_Export_Type":".png",
-            "Roboflow_API_Key":""
+            "Roboflow_API_Key":"",
+            "Exiftool_Path":"/opt/homebrew/bin/exiftool"
 
         },
 

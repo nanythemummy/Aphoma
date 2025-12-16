@@ -1,11 +1,13 @@
 from pathlib import Path
 import imageio
-from os import mkdir
+from os import mkdir,remove
 
 from PIL import Image as PILImage
 from tasks.BaseTask import BaseTask
 from util import util
 from util.ErrorCodeConsts import ErrorCodes
+from util.Configurator import Configurator
+import subprocess
 
 import rawpy
 
@@ -44,9 +46,18 @@ class ConvertToTIF(BaseTask):
         try:
             if ext ==".CR2" or ext == ".NEF":
                 print("Converting from RAW")
+                exiftoolpath = Configurator.getConfig().getProperty("processing","Exiftool_Path")
                 with rawpy.imread(str(ipname)) as raw:
                     rgb = raw.postprocess(use_camera_wb=True)
                     imageio.imwrite(outputname,rgb)
+                if Path(exiftoolpath).exists():
+                    cmd = f"\"{exiftoolpath}\" -tagsFromFile \"{ipname}\" \"{outputname}\""
+                    print(cmd)
+                    subprocess.run(cmd,shell=True,check = False)
+                    backup = Path(f"{outputname}_original")
+                    if backup.exists():
+                        remove(backup)
+                    
             else:
                 print("Converting from JPG")
                 f=PILImage.open(ipname)
