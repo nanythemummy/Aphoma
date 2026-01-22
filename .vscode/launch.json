@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "configurations": [
 
+
         {
             "name": "test_multibanded",
             "type": "debugpy",
@@ -65,13 +66,13 @@
 
         },
         {
-            "name": "Python Debugger: MetashapeTools",
+            "name": "Python Debugger: ConversionTasks",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["build", "E22373", "D:\\Meroitic Fineware E33272\\TIF","D:\\Meroitic Fineware E22373","config.json"]
+            "args":["convert",  "E:\\Conversion\\RAW","E:\\Conversion\\TIF","--profile_correction"]
 
 
         },

@@ -364,7 +364,7 @@ def execute_task_queue(taskqueue:Queue,stop_on_empty=True):
     statistics.destroyStatistics()
     MetashapeFileHandleSingleton.MetashapeFileSingleton.destroyDoc() #gets created by metashape tasks "align photos."
 
-def setup_conversion_tasks(task_queue:Queue,inputdir:Path,basedir:Path)->Queue:
+def setup_conversion_tasks(task_queue:Queue,inputdir:Path,basedir:Path,profile_correction:"False")->Queue:
     config = Configurator.getConfig()
     conversiontypes = config.getProperty("processing","Destination_Type")
     desttype = config.getProperty("processing","Build_From_Format")
@@ -380,12 +380,12 @@ def setup_conversion_tasks(task_queue:Queue,inputdir:Path,basedir:Path)->Queue:
                 jpgpath = Path(basedir,"JPG")
                 if not Path(jpgpath).exists():
                     os.mkdir(jpgpath)
-                task_queue.put( ConversionTasks.ConvertToJPG({"input":Path(inputdir,filepath),"output":Path(jpgpath)}))
+                task_queue.put( ConversionTasks.ConvertToJPG({"input":Path(inputdir,filepath),"output":Path(jpgpath),"profile_correction":profile_correction}))
             if filepath.suffix.upper() != "TIF" and ".tif" in conversiontypes:
                 tifpath = Path(basedir,"TIF")
                 if not Path(tifpath).exists():
                     os.mkdir(tifpath)
-                task_queue.put( ConversionTasks.ConvertToTIF({"input":Path(inputdir,filepath),"output":Path(tifpath)}))
+                task_queue.put( ConversionTasks.ConvertToTIF({"input":Path(inputdir,filepath),"output":Path(tifpath),"profile_correction":profile_correction}))
     return task_queue
 
 def setup_masking_tasks(task_queue:Queue, pathlist:list, basedir:Path, mask_option=MaskingOptions.NOMASKS)->Queue:
@@ -551,23 +551,15 @@ def convert_raw_to_format_cmd(args):
     inputdir (a directory of images to convert)
     outputdir (a place to put the converted images.)
     """
-    inputdir = args.imagedirectory
-    outputdir = args.outputdirectory
+    inputdir = Path(args.imagedirectory)
+    outputdir = Path(args.outputdirectory)
+    tq = Queue()
+
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
-    with os.scandir(inputdir) as it: #scans through a given directory, returning an interator.
-        print(inputdir)
-        for f in it:
-            if os.path.isfile(f):
-                if f.name.upper().endswith(".CR2"): #CANON CAMERA!
-                    if args.dng:
-                        image_processing.convert_CR2_to_DNG(os.path.join(f),outputdir)
-                    if args.tif:
-                        image_processing.convert_CR2_to_TIF(os.path.join(f),outputdir)
-                    if args.jpg:
-                        image_processing.convertToJPG(os.path.join(f),outputdir)
-                elif f.name.upper().endswith("TIF") and args.jpg:
-                    image_processing.convertToJPG(os.path.join(f),outputdir)
+
+    tq = setup_conversion_tasks(tq,inputdir,inputdir.parent,bool(args.profile_correction))
+    execute_task_queue(tq,True)
 
 def load_config():
     """Loads the configuration values in config.json and stores them in a dictionary.
@@ -582,11 +574,9 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(prog="photogrammetryScripts")
     subparsers = parser.add_subparsers(help="Sub-command help")
     convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
-    convertprocessor.add_argument("--dng",help="Converts RAW to dng type", action="store_true")
-    convertprocessor.add_argument("--tif", help = "Convert RAW to tif type", action="store_true")
-    convertprocessor.add_argument("--jpg", help="Converts TIF to jpg.", action="store_true")
     convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
     convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
+    convertprocessor.add_argument("--profile_correction", action="store_true",help="Use Profile Correction?")
     convertprocessor.set_defaults(func=convert_raw_to_format_cmd)
 
     transferparser = subparsers.add_parser("transfer", help="transfers files to a network drive from the specified folder.")

@@ -1,38 +1,85 @@
+
+from os import mkdir
 from pathlib import Path
 import imageio
-from os import mkdir
-
+import copy
+import rawpy
+import lensfunpy
+import cv2
 from PIL import Image as PILImage
 from tasks.BaseTask import BaseTask
 from util import util
 from util.ErrorCodeConsts import ErrorCodes
+from util.Configurator import Configurator 
 
-import rawpy
+
 
 from util.InstrumentationStatistics import *
 from util.PipelineLogging import getLogger
 
-class ConvertToTIF(BaseTask):
-    '''Each of these requires a dictionary with {"input":string and "output":string}, 
-    the first is the file you want to convert with its extension
-    the second is the directory you want to save it in. The task converts the input file to a tif, and the exit function confirms that this happened
-    by checking if there is an jpg with the input filename in the output directory'''
-
+class ConvertToTask(BaseTask):
     def __init__(self, argdict:dict):
         super().__init__()
         self.input = Path(argdict["input"])
         self.output = Path(argdict["output"])
-
-    def __repr__(self):
-        return "Conversions: ConvertToTIF"
-    
+        self.profile_correction = bool(argdict["profile_correction"])
     def setup(self):
         success,code =super().setup()
         if success:
             if not self.output.exists or not self.output.is_dir:
                 mkdir(self.output)
         return success,code
+    def profileCorrection(self, tifhandle): #tifhandle needs to be a cv2 numpy array
+        if self.profile_correction:
+            cam = Configurator.getConfig().getProperty("processing","Camera")
+            lens = Configurator.getConfig().getProperty("processing","Lens")
+            #do lens profile correction This code was borrowed from here: https://pypi.org/project/lensfunpy/
+            exif = util.get_exif_data(self.input)
+            clprofile = util.get_camera_lens_profile(cam,lens)
+            cam_make = exif.get("Make",clprofile["camera"]["maker"])
+            cam_model = exif.get("Model",clprofile["camera"]["model"])
+            lens_model = exif.get("LensModel",clprofile["lens"]["model"])
+            lens_make = clprofile["lens"]["maker"]
+            lensdb = lensfunpy.Database()
+            #both of these return a list, the first item of which should be our camera. If not, we need to be more specific.
+            caminfo = lensdb.find_cameras(cam_make,cam_model)[0]
+            lensinfo = lensdb.find_lenses(caminfo,lens_make,lens_model)[0]
+            #get data needed for calc from exif data
+            
+            focal_length = exif["FocalLength"] if "FocalLength" in exif.keys() else 0
+            aperture = exif["FNumber"] if "FNumber" in exif.keys() else 0
+        
+
+            if focal_length ==0 or aperture ==0:
+                getLogger(__name__).error("WARNING: Can't do profile corrections, because there is no value for aperture or f-number in the exif data of the photo.")
+                return tifhandle
+            distance = 1.0 #can't think of a great way to calculate this so I'm going to hardcode it since it's about a meter in person and with the ortery.
+            img_width = tifhandle.shape[1]
+            img_height = tifhandle.shape[0]
+            modifier = lensfunpy.Modifier(lensinfo,caminfo.crop_factor,img_width,img_height)
+            print(f"focal_length = {focal_length}, aperture ={aperture}, distance={distance}, cam:{caminfo}, lens:{lensinfo}")
+            modifier.initialize(focal_length,aperture,distance,pixel_format = tifhandle.dtype.type ) #demo code has this as just dtype, but it has a keyerror exception.
+            undist_coords = modifier.apply_geometry_distortion()
+            newimg = cv2.remap(tifhandle,undist_coords, None, cv2.INTER_LANCZOS4)
+            if not modifier.apply_color_modification(newimg):
+                getLogger(__name__).error("WARNING: Failed to remove vignetting.")
+            return newimg
+        else:
+            return tifhandle
+class ConvertToTIF(ConvertToTask):
     
+    '''Each of these requires a dictionary with {"input":string and "output":string}, 
+    the first is the file you want to convert with its extension
+    the second is the directory you want to save it in. The task converts the input file to a tif, and the exit function confirms that this happened
+    by checking if there is an jpg with the input filename in the output directory'''
+
+
+
+    def __repr__(self):
+        return "Conversions: ConvertToTIF"
+    
+
+
     def convert(self,fn:Path)->bool:
         success = True
         fp = fn.stem
@@ -44,14 +91,19 @@ class ConvertToTIF(BaseTask):
         try:
             if ext ==".CR2" or ext == ".NEF":
                 print("Converting from RAW")
+                corrected = None
                 with rawpy.imread(str(ipname)) as raw:
                     rgb = raw.postprocess(use_camera_wb=True)
-                    imageio.imwrite(outputname,rgb)
+                    corrected = self.profileCorrection(rgb)
+                im = PILImage.fromarray(corrected)
+                im.save(outputname)
+
             else:
                 print("Converting from JPG")
                 f=PILImage.open(ipname)
                 rgb = f.convert('RGB')
                 rgb.save(outputname)
+            util.copy_exif_data(ipname,outputname)
 
         except Exception as e:
             getLogger(__name__).error(e)
@@ -85,26 +137,16 @@ class ConvertToTIF(BaseTask):
         return success,code
 
 
-class ConvertToJPG(BaseTask):
+class ConvertToJPG(ConvertToTask):
     '''Each of these requires a dictionary with {"input":string and "output":string}, 
     the first is the file you want to convert with its extension
     the second is the directory you want to save it in. The task converts the input file to a jpg, and the exit function confirms that this happened
     by checking if there is an jpg with the input filename in the output directory'''
 
-    def __init__(self, argdict:dict):
-        super().__init__()
-        self.input = Path(argdict["input"])
-        self.output = Path(argdict["output"])
 
     def __repr__(self):
         return "Conversions: ConvertToJPG"
     
-    def setup(self):
-        success,code =super().setup()
-        if success:
-            if not self.output.exists or not self.output.is_dir:
-                mkdir(self.output)
-        return success,code
     
 
     def convert(self,fn:Path)->bool:
@@ -120,13 +162,15 @@ class ConvertToJPG(BaseTask):
                 print("Converting from RAW")
                 with rawpy.imread(str(ipname)) as raw:
                     rgb = raw.postprocess(use_camera_wb=True)
-                    imageio.imwrite(outputname,rgb)
+                    corrected = self.profileCorrection(rgb)
+                    im = PILImage.fromarray(corrected)
+                    im.save(outputname)
             else:
                 print("Converting from TIF")
                 f=PILImage.open(ipname)
                 rgb = f.convert('RGB')
                 rgb.save(outputname,quality=95)
-
+            util.copy_exif_data(ipname,outputname)
         except Exception as e:
             getLogger(__name__).error(e)
             success = False

@@ -7,7 +7,10 @@ import shutil
 import os
 import re
 import argparse
+import subprocess
 from enum import Enum
+
+from PIL import ExifTags, Image as PILImage
 from util.Configurator import Configurator
 
 class ColorChannelConstants(Enum):
@@ -230,3 +233,39 @@ def get_export_filename(chunkname:str, type:str):
     exporttype = type.upper()
     exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
     return exportname
+
+def copy_exif_data(filea:Path,fileb:Path):
+    exiftool = Path(Configurator.getConfig().getProperty("processing","ExifTool"))
+    cmd = f"\"{str(exiftool)}\" -TagsFromFile \"{str(filea)}\" \"{str(fileb)}\""
+    print(cmd)
+
+    subprocess.run(cmd,shell=True,check = True)
+def get_exif_data(filename: str) -> dict:
+    """ Gets the Exif data from an image file if it exists, and returns a dictionary of key value pairs.
+
+        Data nested under IFD Codes will be flattened out and will be on the same level as the
+        rest of the exif data in the returned dictionary.
+
+        Parameters:
+        ------------------
+        filename: The path to the image file whose exif data needs to be retreived.
+
+        Returns: A dictionary of key value pairs.
+    """
+    exif = {}
+    skiplist=["MakerNote","UserComment"] #These are not needed and are encoded anyway.
+    with PILImage.open(filename,'r') as pi:
+        exif = pi.getexif()
+        IFD_CODES = {i.value: i.name for i in ExifTags.IFD}
+        for code, val in exif.items():
+            if code in IFD_CODES:
+                ifd_data = exif.get_ifd(code)
+                for nk,nv in ifd_data.items():
+                    nested_tag = ExifTags.GPSTAGS.get(nk,None) or ExifTags.TAGS.get(nk,None) or nk
+                    if nested_tag in skiplist:
+                        continue
+                    exif[nested_tag]=nv
+            else:
+                tagname = ExifTags.TAGS.get(code,code)
+                exif[tagname]=val
+    return exif

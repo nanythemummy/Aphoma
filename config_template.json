@@ -7,6 +7,7 @@
             "DNG_Converter":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
             "SmartSelectDroplet":"util/MaskBySmartSelect.exe",
             "FuzzySelectDroplet":"util/MaskByFuzzySelect.exe",
+            "ExifTool":"c:\\exiftool\\exiftool.exe",
             "thresholding_lower_gray_threshold":230,
             "canny_lower_intensity_threshold": 0,
             "canny_higher_intensity_threshold": 80,
