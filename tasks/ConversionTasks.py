@@ -38,7 +38,7 @@ class ConvertToTask(BaseTask):
             clprofile = util.get_camera_lens_profile(cam,lens)
             cam_make = exif.get("Make",clprofile["camera"]["maker"])
             cam_model = exif.get("Model",clprofile["camera"]["model"])
-            lens_model = exif.get("LensModel",clprofile["lens"]["model"])
+            lens_model = exif.get("Lens",clprofile["lens"]["model"])
             lens_make = clprofile["lens"]["maker"]
             lensdb = lensfunpy.Database()
             #both of these return a list, the first item of which should be our camera. If not, we need to be more specific.
