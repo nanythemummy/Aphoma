@@ -16,7 +16,8 @@ Automated asset pipeline for building 3D Models with Photogrammetry, either usin
 5.  Adobe Photoshop if you wish to use droplets to build masks. Otherwise, openCV will be used, which is much faster anyway, but less transparent to the end user.
 6.  Python 3.11+
 7.  Meshlab [https://meshlab.net] if you want to use any of the meshlab automations. (These are still in progress and have been superseeded by the Blender functionality since Meshlab's Python API cannot render out screenshots.)
-8. Windows 10 or Windows 11. Theoretically, this will all work on Mac and Linux, too since most of the windows specific functionality can be configured. However, I have not yet had the opportunity to test extensively on MacOS or Linux.
+8. Windows 10 or Windows 11. Also works on MacOS Sequoia, but the UI crashes instead of properly displaying error messages and I'm going to have to fix it.
+9. Exiftool. For now, exiftool is being used to copy exif data between pictures when converting from raw to tif or jpg and from tif to jpg. You can get it here [Exif Tool](https://exiftool.org/install.html). Configure the path in the config.json file under Processing->ExifTool.
 
 ## Setup:
 In the Windows cmd terminal, powershell terminal, or Unix terminal, do the following on both the Ortery computer and the comptuer you will be using to do the model building. Windows commands will be given. If you are familiar with the MacOS/Linux terminal you should be able to figure out the equivalents.

@@ -132,7 +132,7 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
             downscale_factor = Configurator.getConfig().getProperty("photogrammetry","sparse_cloud_quality")
             if len(self.chunk.cameras)==0:
                 self.loadPhotos()
-                if not self.usemasks is MaskingOptions.NOMASKS:
+                if self.usemasks != False:
                     self.loadMasks()      
             if not self.chunk.point_cloud:   
                 self.chunk.matchPhotos(downscale=downscale_factor,

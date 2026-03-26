@@ -4,15 +4,21 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
-
+        {
+            "name": "orterysim",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "OrterySimulator.py",
+            "console": "integratedTerminal",
+            "args":["E:\\Conversion\\RAW", "E:\\Conversion\\Test", "50"]
+        },
         {
             "name": "DebugConversionStandalone",
             "type": "debugpy",
             "request": "launch",
             "program": "scripts/ConvertFromRAW.py",
             "console": "integratedTerminal",
-            "args":["/Volumes/AAAAAHHHH/Meroitic POts/archival images","/Volumes/AAAAAHHHH/Meroitic POts/archival images/TIF","--convert","0"]
+            "args":["e:\\Conversion\\RAW","e:\\Conversion\\TIF","--convert","0"]
         
         },
         {

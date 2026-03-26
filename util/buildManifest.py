@@ -34,7 +34,7 @@ class Manifest:
         """
         self.endtime = datetime.now()
         outputjson = {self.projectname:
-                      {    "maskmode":self.maskmode,
+                      {    "maskmode":self.maskmode.name,
                           "files":self.sentfiles,
                           "photo_start_time":datetime.strftime(self.starttime,"%Y-%m-%d %H:%M:%S.%f"),
                           "photo_end_time":datetime.strftime(self.endtime,"%Y-%m-%d %H:%M:%S.%f")

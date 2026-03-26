@@ -1,9 +1,9 @@
 
 from os import mkdir
 from pathlib import Path
-import imageio
-import copy
 import rawpy
+import imageio
+import numpy
 import lensfunpy
 import cv2
 from PIL import Image as PILImage
@@ -22,11 +22,11 @@ class ConvertToTask(BaseTask):
         super().__init__()
         self.input = Path(argdict["input"])
         self.output = Path(argdict["output"])
-        self.profile_correction = bool(argdict["profile_correction"])
+        self.profile_correction = bool(argdict.get("profile_correction",False))
     def setup(self):
         success,code =super().setup()
         if success:
-            if not self.output.exists or not self.output.is_dir:
+            if not self.output.exists() or not self.output.is_dir():
                 mkdir(self.output)
         return success,code
     def profileCorrection(self, tifhandle): #tifhandle needs to be a cv2 numpy array
@@ -93,15 +93,23 @@ class ConvertToTIF(ConvertToTask):
                 print("Converting from RAW")
                 corrected = None
                 with rawpy.imread(str(ipname)) as raw:
-                    rgb = raw.postprocess(use_camera_wb=True)
-                    corrected = self.profileCorrection(rgb)
-                im = PILImage.fromarray(corrected)
-                im.save(outputname)
+                    if not self.profile_correction:
+                        rgb = raw.postprocess(use_camera_wb=True)
+                    else:
+                        rgb = raw.postprocess(use_camera_wb=True,
+                                              use_auto_wb = False,
+                                              output_color = rawpy.ColorSpace.sRGB, 
+                                              output_bps=16,
+                                              user_flip=0,
+                                              user_black=None,
+                                              user_sat = None)
+                    #corrected = self.profileCorrection(rgb)
+                imageio.imwrite(outputname,rgb)
 
             else:
                 print("Converting from JPG")
                 f=PILImage.open(ipname)
-                rgb = f.convert('RGB')
+                rgb = f.convert('sRGB')
                 rgb.save(outputname)
             util.copy_exif_data(ipname,outputname)
 

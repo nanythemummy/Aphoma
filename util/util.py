@@ -8,7 +8,7 @@ import os
 import re
 import argparse
 import subprocess
-from enum import Enum
+from enum import Enum, IntEnum
 
 from PIL import ExifTags, Image as PILImage
 from util.Configurator import Configurator
@@ -58,6 +58,9 @@ class MaskingOptions(Enum):
     MASK_THRESHOLDING = 4
     MASK_AI = 5
      
+    def __str__(self):
+        return str(self.name)
+    
     @classmethod 
     def getFriendlyStrings(cls):
         return ["None", "SmartSelectDroplet","FuzzySelectDroplet","EdgeDetection","Thresholding", "AI"]
@@ -70,9 +73,9 @@ class MaskingOptions(Enum):
     def friendlyToEnum(cls, searchstring:str):
         friendly = MaskingOptions.getFriendlyStrings()
         for i,fr in enumerate(friendly):
-            if fr is searchstring:
+            if fr == searchstring:
                 return MaskingOptions(i)
-        return 0
+        return MaskingOptions.NOMASKS
 
         
 def delete_manifests_images(directory):

@@ -4,7 +4,6 @@
 import os.path, json, argparse
 import time
 from pathlib import Path
-import glob
 from queue import Queue
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -144,16 +143,16 @@ class WatcherRecipientHandler(FileSystemEventHandler):
         if eventpath.endswith("_manifest.txt"):
             build_model_from_manifest(eventpath)
         else:
+           
             scratchdir = config.getProperty("watcher","temp_scratch")
-            maskpath = os.path.join(scratchdir,config.getProperty("photogrammetry","mask_path"))
+            maskpath = Path(scratchdir,config.getProperty("photogrammetry","mask_path"))
             desttype =config.getProperty("processing","Destination_Type")
-            imagetypes = [".CR2",".JPG",".TIF"]
-            eventpathext = os.path.splitext(eventpath)[1].upper()
-            processedpath = os.path.join(scratchdir,"processed")
-            basename_with_ext = os.path.split(eventpath)[1]
-            basename = os.path.splitext(basename_with_ext)[0]
+            eventpathext = Path(eventpath).suffix.upper()
+            processedpath = Path(scratchdir,"processed")
+            basename = Path(eventpath).stem
             
-            if eventpathext in imagetypes and eventpathext != desttype.upper():
+            if eventpathext in [".CR2",".NEF",".TIF"] and eventpathext != desttype.upper():
+                
                 image_processing.process_image(eventpath,processedpath,desttype)
             elif eventpathext ==desttype.upper():
                 copy_file_to_dest([eventpath],processedpath, False)
@@ -187,7 +186,6 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                     last_size = current_size
                     current_size = os.path.getsize(event.src_path)
                     print(f"{last_size} :{current_size} for {event.src_path}")
-                    
                     if current_size==last_size:
                         break
                 if current_size != 0:
@@ -367,6 +365,7 @@ def execute_task_queue(taskqueue:Queue,stop_on_empty=True):
 def setup_conversion_tasks(task_queue:Queue,inputdir:Path,basedir:Path,profile_correction:"False")->Queue:
     config = Configurator.getConfig()
     conversiontypes = config.getProperty("processing","Destination_Type")
+    sourcetypes = config.getProperty("processing","Source_Type")
     desttype = config.getProperty("processing","Build_From_Format")
 
     if desttype not in conversiontypes:
@@ -375,7 +374,7 @@ def setup_conversion_tasks(task_queue:Queue,inputdir:Path,basedir:Path,profile_c
 
     for f in os.listdir(inputdir):
         filepath = Path(inputdir,f)
-        if filepath.is_file():
+        if filepath.is_file() and filepath.suffix.upper() in sourcetypes: #should we bother converting this at all?
             if filepath.suffix.upper() != ".JPG" and ".jpg" in conversiontypes:
                 jpgpath = Path(basedir,"JPG")
                 if not Path(jpgpath).exists():
@@ -453,7 +452,7 @@ def build_model(jobname,inputdir,basedir,mask_option=MaskingOptions.NOMASKS,snap
     tq = Queue()
     buildfromformat = config.getProperty("processing","Build_From_Format")
     buildfromdir= Path(basedir,str(buildfromformat[1:]).upper())
-    tq= setup_conversion_tasks(tq,inputdir,basedir)
+    tq= setup_conversion_tasks(tq,inputdir,basedir,False)
     filestouse = []
     for images in os.listdir(inputdir):
         filestouse.append(Path(buildfromdir,f"{Path(images).stem}{buildfromformat}"))

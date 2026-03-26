@@ -34,11 +34,12 @@ class PipelineFrameBase(ttk.Frame):
 
     def disable_enable_all(self,disable=True):
          for child in self.winfo_children():
-            if child.widgetName != 'frame':
+            if isinstance(child,ttk.Button):
                 if not disable:
                     child.configure(state='normal')
                 else:
-                    child.configure(state='disabled')
+                    if child.cget("text").lower() != "cancel":
+                         child.configure(state='disabled')
     def destroy(self):
         super().destroy()
         for t in self.threads:

@@ -16,9 +16,9 @@ def buildQueue(input, output, type):
         paths = Path(input).glob("*.CR2")
         for path in paths:
             if int(type) == 0:
-                q.put(ConvertToTIF({"input":path,"output":output}))
+                q.put(ConvertToTIF({"input":path,"output":output,"profile_correction":True}))
             else:
-                q.put(ConvertToJPG({"input":path,"output":output}))
+                q.put(ConvertToJPG({"input":path,"output":output,"profile_correction":False}))
     return q
 
 def execute_tasks(task_queue:Queue):
@@ -28,19 +28,20 @@ def execute_tasks(task_queue:Queue):
     FINISHED = False
     phase = "setup"
     while(not FINISHED):
-        task = task_queue.get()
-        succeeded,code = task.setup()
-        if succeeded:
-            phase = "execute"
-            succeeded, code =task.execute()
+        if not task_queue.empty():
+            task = task_queue.get()
+            succeeded,code = task.setup()
             if succeeded:
-                phase = "exit"
-                succeeded,code = task.exit()
-        if not succeeded:
-            getGlobalLogger(__name__).error("Phase %s for Task %s failed with error %s",phase, str(task),ErrorCodes.numToFriendlyString(code))
-            FINISHED=True
-            break
-        if task_queue.empty():
+                phase = "execute"
+                succeeded, code =task.execute()
+                if succeeded:
+                    phase = "exit"
+                    succeeded,code = task.exit()
+            if not succeeded:
+                getGlobalLogger(__name__).error("Phase %s for Task %s failed with error %s",phase, str(task),ErrorCodes.numToFriendlyString(code))
+                FINISHED=True
+                break
+        else:
             FINISHED = True
             getGlobalLogger(__name__).info("Finished the tasklist, ending.")
 
