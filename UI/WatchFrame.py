@@ -40,9 +40,7 @@ class WatchFrame(PipelineFrameBase):
     def stop_watching(self):
         if not self.state=="stopped":
             self.state = "stopped"
-            if self.watcher:
-                self.watcher.stoprequest=True
-                self.after(5,self.update_buttons)
+            phscripts.cmd_watch_cancel()
 
     def clear_directories(self):
         temp = Configurator.getConfig().getProperty("watcher","temp_scratch")
@@ -59,9 +57,10 @@ class WatchFrame(PipelineFrameBase):
             self.state = "running"
             mask_option = UIConsts.MASKOPTIONS[args.masking_option.get()]
             Configurator.getConfig().setProperty("processing","ListenerDefaultMasking", MaskingOptions.numToFriendlyString(mask_option))
-            self.watcher = phscripts.Watcher(args.input_dir.get(), False) 
+            #phscripts.Watcher(args.input_dir.get(), False) 
             self.stopbutton.configure(state="normal")
-            self.watcher.run()
+            phscripts.cmd_start_watcher(args.input_dir.get(), "watcher") 
+
         except Exception as e:
             messagebox.showerror("Build Exception",e)
             raise e

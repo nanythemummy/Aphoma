@@ -5,6 +5,8 @@ import os.path, json, argparse
 import time
 from pathlib import Path
 from queue import Queue
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from util.ErrorCodeConsts import ErrorCodes
@@ -140,7 +142,7 @@ class WatcherRecipientHandler(FileSystemEventHandler):
     @staticmethod
     def process_incomming_file(eventpath):
         config = Configurator.getConfig()
-        if eventpath.endswith("_manifest.txt"):
+        if str(eventpath).endswith("_manifest.txt"):
             build_model_from_manifest(eventpath)
         else:
            
@@ -190,6 +192,117 @@ class WatcherRecipientHandler(FileSystemEventHandler):
                         break
                 if current_size != 0:
                     WatcherRecipientHandler.process_incomming_file(event.src_path)
+
+
+EVENT_CANCEL = threading.Event()
+EVENT_STOP_ON_EMPTY = threading.Event()
+EVENT_QUEUE = Queue()
+def cmd_watch_cancel():
+    EVENT_CANCEL.set()
+class FSWatcherHandler(FileSystemEventHandler):
+    def __init__(self, eventqueue: Queue):
+        self._event_queue = eventqueue
+        super().__init__()
+
+   
+    def process_incomming_file(self,eventpath):
+        
+        config = Configurator.getConfig()
+        if str(eventpath).endswith("_manifest.txt"):
+            #check the manifest.
+            #EVENT_STOP_ON_EMPTY.set()
+            build_model_from_manifest(eventpath)
+        else:
+            scratchdir = config.getProperty("watcher","temp_scratch")
+            maskpath = Path(scratchdir,config.getProperty("photogrammetry","mask_path"))
+            desttype =config.getProperty("processing","Destination_Type")
+            defmask = config.getProperty("processing","ListenerDefaultMasking")
+            eventpathext = Path(eventpath).suffix.upper()
+            processedpath = Path(scratchdir,"processed")
+            predictedfinal = Path(processedpath,f"{Path(eventpath).stem}.JPG")
+            for d in desttype:
+                if eventpathext in [".CR2",".NEF",".TIF"] and eventpathext != d.upper():   
+                    if d.upper() == ".TIF":
+                        self._event_queue.put(ConversionTasks.ConvertToTIF({"input":eventpath,"output":processedpath}))
+                    elif d.upper() == ".JPG": 
+                        self._event_queue.put(ConversionTasks.ConvertToJPG({"input":eventpath,"output":processedpath}))
+                    elif eventpathext ==d.upper():
+                        copy_file_to_dest([eventpath],processedpath, False)
+                    else:
+                        print("Unrecognized filetype: {eventpathext}")
+                        return
+            
+            mode = MaskingOptions.friendlyToEnum(defmask)
+            if mode !=  MaskingOptions.NOMASKS.value:
+                if mode == MaskingOptions.MASK_CONTEXT_AWARE_DROPLET:
+                    self._event_queue.put(MaskingTasks.MaskDroplet({"input":predictedfinal,"output":maskpath}))
+                elif mode == MaskingOptions.MASK_AI:
+                    self._event_queue.put(MaskingTasks.MaskAI({"input":predictedfinal,"output":maskpath}))
+                else: #use thresholding. 
+                    self._event_queue.put(MaskingTasks.MaskThreshold({"input":predictedfinal,"output":maskpath}))
+
+   
+    def on_any_event(self,event):
+        """Event handler for any file system event. When an event of the type file created happens, if a CR2 file is created, the files will be processed and converted to TIF
+        if a manifest file is created, a model will be built based on the manifest's files.
+        Parameters:
+        -------------------
+        event: a watchdog.event from the watchdog library.
+        """
+        if event.event_type=="created":
+            newpath = Path(event.src_path)
+            ext = newpath.suffix
+            if ext.upper() in [".JPG",".CR2",".TIF",".NEF",".JSON"]:
+                last_size = -1
+                current_size = newpath.stat().st_size
+                while True:
+                    time.sleep(1)
+                    last_size = current_size
+                    current_size = newpath.stat().st_size
+                    print(f"{last_size} :{current_size} for {newpath}")
+                    if current_size==last_size:
+                        break
+                if current_size != 0:
+                    self.process_incomming_file(newpath)
+
+def event_queue(eq:Queue):
+    getGlobalLogger(__name__).info("Executing Tasklist.") 
+    phase = "setup"
+    while(not EVENT_CANCEL.is_set()):
+        if not eq.empty():
+            task = eq.get()
+            succeeded,code = task.setup()
+            if succeeded:
+                phase = "execute"
+                succeeded, code =task.execute()
+                if succeeded:
+                    phase = "exit"
+                    succeeded,code = task.exit()
+            if not succeeded:
+                getGlobalLogger(__name__).error("Phase %s for Task %s failed with error %s",phase, str(task),ErrorCodes.numToFriendlyString(code))
+                break
+        if EVENT_STOP_ON_EMPTY.is_set() and eq.empty():
+            getGlobalLogger(__name__).info("Finished the tasklist, ending.")
+            break
+    statistics.getStatistics().logReport()
+    statistics.destroyStatistics()
+    MetashapeFileHandleSingleton.MetashapeFileSingleton.destroyDoc() #gets created by metashape tasks "align photos."
+
+def cmd_start_watcher(watchdir:Path, projectname:str=""):
+    eq = Queue()
+    EVENT_CANCEL.clear()
+    qprocessor = threading.Thread(target =event_queue, args = (eq,))
+    fshandler = FSWatcherHandler(eq)
+    fsobserver = Observer()
+    fsobserver.schedule(fshandler,watchdir,recursive=True)
+    fsobserver.start()
+    qprocessor.start()
+    while not EVENT_CANCEL.is_set() :
+        time.sleep(1)
+
+    fsobserver.stop()
+    qprocessor.join()
+    
 
 class Watcher:
     """These classes are part of a filesystem watcher which watches for the 

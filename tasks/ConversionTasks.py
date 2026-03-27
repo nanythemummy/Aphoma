@@ -1,5 +1,5 @@
 
-from os import mkdir
+from os import mkdir, makedirs
 from pathlib import Path
 import rawpy
 import imageio
@@ -27,7 +27,7 @@ class ConvertToTask(BaseTask):
         success,code =super().setup()
         if success:
             if not self.output.exists() or not self.output.is_dir():
-                mkdir(self.output)
+                makedirs(self.output)
         return success,code
     def profileCorrection(self, tifhandle): #tifhandle needs to be a cv2 numpy array
         if self.profile_correction:
