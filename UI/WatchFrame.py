@@ -42,7 +42,7 @@ class WatchFrame(PipelineFrameBase):
         self.stopbutton.configure(state="normal")
         self.cancel_event.clear()
         try:
-            thr = threading.Thread(target=phscripts.cmd_start_watcher,args=(args.input_dir.get(),mask_option,self.cancel_event),daemon=False)
+            thr = threading.Thread(target=phscripts.startWatcher,args=(args.input_dir.get(),self.cancel_event),daemon=False)
             self.threads.append(thr)
             thr.start()
             self.disable_enable_all(True)
@@ -51,20 +51,6 @@ class WatchFrame(PipelineFrameBase):
             self.disable_enable_all(False)
             raise e
 
-
-
-       
-    # def update_buttons(self):
-    #     stillrunning = False 
-    #     for t in self.threads:
-    #         if t.is_alive():
-    #             stillrunning=True
-    #             break
-    #     if stillrunning:
-    #         self.disable_enable_all(True)
-    #         self.after(5,self.update_buttons)
-    #     else:
-    #         self.disable_enable_all(False)
 
     def stop_watching(self):
         self.cancel_event.set()
@@ -91,7 +77,7 @@ class WatchFrame(PipelineFrameBase):
             Configurator.getConfig().setProperty("processing","ListenerDefaultMasking", MaskingOptions.numToFriendlyString(mask_option))
             #phscripts.Watcher(args.input_dir.get(), False) 
             self.stopbutton.configure(state="normal")
-            phscripts.cmd_start_watcher(args.input_dir.get(), "watcher",self.cancel_event) 
+            phscripts.startWatcher(args.input_dir.get(),self.cancel_event) 
 
         except Exception as e:
             messagebox.showerror("Build Exception",e)

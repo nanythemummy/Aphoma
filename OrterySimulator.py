@@ -27,9 +27,12 @@ def RunSimulation(inputdir,outputdir,rate):
     s = sched.scheduler(time.time,time.sleep)
     for f in Path(inputdir).iterdir():
         if f.is_file() and f.suffix.upper() in allowedsuffixes:
-            print(f"Sleeping {interval}")
-            s.enter(curinterval,1, CopyFiles,(inputdir,outputdir,f.name))
-            curinterval +=interval
+            if Path(outputdir,f.name).is_file():
+                getGlobalLogger(__name__).info("File %s already exists in %s. Skipping",f.name,outputdir)
+                MANIFEST.addFile(str(Path(outputdir,f.name)))
+            else:
+                s.enter(curinterval,1, CopyFiles,(inputdir,outputdir,f.name))
+                curinterval +=interval
     s.enter(curinterval,1,MANIFEST.finalize,(outputdir,))
     s.run()
 

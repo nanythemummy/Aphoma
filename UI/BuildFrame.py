@@ -6,11 +6,11 @@ from tkinter import messagebox
 from pathlib import Path
 from UI.UIconsts import UIConsts
 from UI.PipelineFrame import *
-import photogrammetryScripts as phscripts
+
 from util.util import getPaletteOptions
 from util.Configurator import Configurator
 import util.PipelineLogging
-
+import photogrammetryScripts as phscripts
 
 class BuildFormItems(FormItemsInterface):
 
