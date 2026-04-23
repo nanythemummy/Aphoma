@@ -16,9 +16,9 @@
             "name": "DebugConversionStandalone",
             "type": "debugpy",
             "request": "launch",
-            "program": "scripts/ConvertFromRAW.py",
+            "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
-            "args":["e:\\Conversion\\RAW","e:\\Conversion\\TIF","--convert","0"]
+            "args":["convert","e:\\testfiles","e:\\temp","--profile_correction"]
         
         },
         {

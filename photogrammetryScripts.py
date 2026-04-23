@@ -490,28 +490,6 @@ def build_model_cmd(args):
 
 
 
-
-def split_shapes_cmd(args):
-
-    """Wrapper script for taking a psx file and splitting the model inside into multiple cubic components which are exported as named obj files."""
-    print("Got there.")
-    inputdir = Path(args.inputdir)
-    project = args.projectname
-    projdir = Path(inputdir,f"{project}.psx")
-    shapes = args.shapenames.split(",")
-    print(f"{projdir}")
-    if projdir.exists():
-
-        try:
-            from photogrammetry import MetashapeTools
-            MetashapeTools.splitModelIntoShapes(projdir)
-        except ImportError as e:
-            print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
-            raise e
-
-
-
-
 def build_masks_cmd(args):
     """Wrapper script for building masks from contents of a folder using a photoshop droplet.
     Parameters:
@@ -524,39 +502,17 @@ def build_masks_cmd(args):
     output = args.outputdir
     image_processing.build_masks(input,output,int(args.maskoption))
 
-def convert_raw_to_format_cmd(args):
-    """wrapper script for using the RAW image conversion fucntions via the command line.
-    Parameters:
-    ---------
-    args: an object containing atributes passed in from the command line. These are: 
-    inputdir (a directory of images to convert)
-    outputdir (a place to put the converted images.)
-    """
-    inputdir = Path(args.imagedirectory)
-    outputdir = Path(args.outputdirectory)
-    tq = Queue()
 
-    if not os.path.exists(outputdir):
-        os.makedirs(outputdir)
-    convertfiles =   [f for f in os.listdir(inputdir) if Path(f).suffix in Configurator.getConfig().getProperty("processing","source_type")],
-
-    tq = setup_conversion_tasks(tq,convertfiles,inputdir.parent,bool(args.profile_correction))
-    execute_task_queue(tq,True,True, None)
-
-
-
-def watch_and_process_cmd(args):
+def WatchAndProcess(args):
+    """WatchAndProcess
+    Parameter: args--an object with an attribute "inputdir". 
+    This function is a hook called by the UI to start the observer that grabs and converts files and manifests that get placed in a particular folder.
+    It gets called from the Watch tab of the UI when "Watch" is pressed. """
     startWatcher(args.inputdir,None)
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(prog="photogrammetryScripts")
     subparsers = parser.add_subparsers(help="Sub-command help")
-    convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
-    convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
-    convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
-    convertprocessor.add_argument("--profile_correction", action="store_true",help="Use Profile Correction?")
-    convertprocessor.set_defaults(func=convert_raw_to_format_cmd)
-
 
     photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
     photogrammetryparser.add_argument("jobname", help="The name of the project")
@@ -573,7 +529,7 @@ if __name__=="__main__":
 
     watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
     watcherparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    watcherparser.set_defaults(func=watch_and_process_cmd)      
+    watcherparser.set_defaults(func=WatchAndProcess)      
 
     listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
     listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
@@ -587,13 +543,6 @@ if __name__=="__main__":
                             default=0)
     listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
     listensendparser.set_defaults(func=listen_and_send)    
-
-   
-    modelbyshapeparser = subparsers.add_parser("splitshapes", help="Splits a finished model into cube-shaped sub-components based on shapes pre-drawn by the user in metashape.")
-    modelbyshapeparser.add_argument("inputdir",help="Directory of project")
-    modelbyshapeparser.add_argument("projectname", type=str, help="Name of the psx file.")
-    modelbyshapeparser.add_argument("shapenames", type=str, help="Comma-separated list of names for the individual shapes.")
-    modelbyshapeparser.set_defaults(func = split_shapes_cmd)
 
     args = parser.parse_args()
     if hasattr(args,"func"):
