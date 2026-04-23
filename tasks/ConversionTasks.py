@@ -42,30 +42,34 @@ class ConvertToTask(BaseTask):
             lens_make = clprofile["lens"]["maker"]
             lensdb = lensfunpy.Database()
             #both of these return a list, the first item of which should be our camera. If not, we need to be more specific.
-            caminfo = lensdb.find_cameras(cam_make,cam_model)[0]
-            lensinfo = lensdb.find_lenses(caminfo,lens_make,lens_model)[0]
+            cams = lensdb.find_cameras(cam_make,cam_model)
+            if len(cams)>0:
+                caminfo = cams[0]
+                lenses = lensdb.find_lenses(caminfo,lens_make,lens_model)
+                if len(lenses)>0:
+                    lensinfo = lenses[0]
+               
             #get data needed for calc from exif data
             
-            focal_length = exif["FocalLength"] if "FocalLength" in exif.keys() else 0
-            aperture = exif["FNumber"] if "FNumber" in exif.keys() else 0
-        
+                    focal_length = exif["FocalLength"] if "FocalLength" in exif.keys() else 0
+                    aperture = exif["FNumber"] if "FNumber" in exif.keys() else 0
+            
 
-            if focal_length ==0 or aperture ==0:
-                getLogger(__name__).error("WARNING: Can't do profile corrections, because there is no value for aperture or f-number in the exif data of the photo.")
-                return tifhandle
-            distance = 1.0 #can't think of a great way to calculate this so I'm going to hardcode it since it's about a meter in person and with the ortery.
-            img_width = tifhandle.shape[1]
-            img_height = tifhandle.shape[0]
-            modifier = lensfunpy.Modifier(lensinfo,caminfo.crop_factor,img_width,img_height)
-            print(f"focal_length = {focal_length}, aperture ={aperture}, distance={distance}, cam:{caminfo}, lens:{lensinfo}")
-            modifier.initialize(focal_length,aperture,distance,pixel_format = tifhandle.dtype.type ) #demo code has this as just dtype, but it has a keyerror exception.
-            undist_coords = modifier.apply_geometry_distortion()
-            newimg = cv2.remap(tifhandle,undist_coords, None, cv2.INTER_LANCZOS4)
-            if not modifier.apply_color_modification(newimg):
-                getLogger(__name__).error("WARNING: Failed to remove vignetting.")
-            return newimg
-        else:
-            return tifhandle
+                    if focal_length ==0 or aperture ==0:
+                        getLogger(__name__).error("WARNING: Can't do profile corrections, because there is no value for aperture or f-number in the exif data of the photo.")
+                        return tifhandle
+                    distance = 1.0 #can't think of a great way to calculate this so I'm going to hardcode it since it's about a meter in person and with the ortery.
+                    img_width = tifhandle.shape[1]
+                    img_height = tifhandle.shape[0]
+                    modifier = lensfunpy.Modifier(lensinfo,caminfo.crop_factor,img_width,img_height)
+                    modifier.initialize(focal_length,aperture,distance,pixel_format = tifhandle.dtype.type ) #demo code has this as just dtype, but it has a keyerror exception.
+                    undist_coords = modifier.apply_geometry_distortion()
+                    newimg = cv2.remap(tifhandle,undist_coords, None, cv2.INTER_LANCZOS4)
+                    if not modifier.apply_color_modification(newimg):
+                        getLogger(__name__).error("WARNING: Failed to remove vignetting.")
+                    return newimg
+
+        return tifhandle
 class ConvertToTIF(ConvertToTask):
     
     '''Each of these requires a dictionary with {"input":string and "output":string}, 
@@ -109,7 +113,7 @@ class ConvertToTIF(ConvertToTask):
             else:
                 print("Converting from JPG")
                 f=PILImage.open(ipname)
-                rgb = f.convert('sRGB')
+                rgb = f.convert('RGB')
                 rgb.save(outputname)
             util.copy_exif_data(ipname,outputname)
 

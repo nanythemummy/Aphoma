@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "OrterySimulator.py",
             "console": "integratedTerminal",
-            "args":["E:\\Conversion\\RAW", "E:\\Conversion\\Test", "50"]
+            "args":["E:\\testfiles", "E:\\ortest", "400"]
         },
         {
             "name": "DebugConversionStandalone",
