@@ -84,19 +84,19 @@ def verifyManifest(tq:Queue,manifest:dict, basedir:Path,mode:MaskingOptions, rep
                         copy_file_to_dest([f],subfolder)
                     else:
                         get_logger().info("Did not find %s  file for %s in %s. Attempting to convert or transfer.",t,f.stem,processedpath)
-                        tq=setup_conversion_tasks(tq,[f],processedpath,False)     
+                        tq=setupConversionTasks(tq,[f],processedpath,False)     
                 fullmanifest[destsubfolder].append(processedfile)
             if is_masked:
                 maskfile =Path(maskpath,f"{f.stem}{maskext}")
                 if not maskfile.exists():
                     get_logger().info("Warning: did not find mask for %s in %s. Attempting to make one.", f.name,maskpath)
                     masksource = Path(processedpath,"jpg",f"{f.stem}.jpg")
-                    tq=setup_masking_tasks(tq,[masksource],processedpath,mode)
+                    tq=setupMaskingTasks(tq,[masksource],processedpath,mode)
                 fullmanifest["masks"].append(maskfile)
         else:
             get_logger().warning("Did not find Original file: %s in %s. Manifest verification will fail.",f.name,basedir)
             foundallfiles = False
-    execute_task_queue(tq,True,False,cancelevent)
+    executeTaskQueue(tq,True,False,cancelevent)
     return foundallfiles,fullmanifest, tq
 
 class WatcherSenderHandler(FileSystemEventHandler):
@@ -149,7 +149,7 @@ class FSWatcherHandler(FileSystemEventHandler):
         buildtype = config.getProperty("processing","Build_From_Format")
         mode = MaskingOptions.friendlyToEnum(defmask)
         if str(eventpath).endswith("_manifest.json"):
-            build_model_from_manifest(self._event_queue,eventpath,mode)
+            buildModelFromManifest(self._event_queue,eventpath,mode)
         else:
             e = Path(eventpath)
             eventpathext = Path(eventpath).suffix.lower()
@@ -158,7 +158,7 @@ class FSWatcherHandler(FileSystemEventHandler):
             filedest = Path(processedpath,eventpath.suffix[1:])
             if eventpathext.lower() not in desttype or len(desttype)>0: 
                 #basically run this if there are multiple conversion types and the input is one of them or if the input is not in the list of output types.
-                setup_conversion_tasks(self._event_queue,[e],processedpath, False)
+                setupConversionTasks(self._event_queue,[e],processedpath, False)
                 if eventpathext.lower() in desttype:
                     copy_file_to_dest([eventpath],filedest, False)
                 
@@ -166,9 +166,9 @@ class FSWatcherHandler(FileSystemEventHandler):
                 copy_file_to_dest([eventpath],filedest, False)
             
             if mode !=  MaskingOptions.NOMASKS.value:
-               setup_masking_tasks(self._event_queue,[predictedfinal],processedpath,mode)
+               setupMaskingTasks(self._event_queue,[predictedfinal],processedpath,mode)
                     
-            execute_task_queue(self._event_queue,True,False,self.cancel_event)
+            executeTaskQueue(self._event_queue,True,False,self.cancel_event)
 
    
     def on_any_event(self,event):
@@ -271,33 +271,35 @@ def listen_and_send(args):
     pics will be created by the photography software . 
     Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
     """
-    inputdir =  Configurator.getConfig().getProperty("watcher","listen_and_send")
-    global PRUNE
-    PRUNE = args.prune
-    masktype = int(args.maskoption) if args.maskoption else 0
-    if not os.path.exists(inputdir):
-        print(f"Cannot listen on a directory that does not exist: {inputdir}")
+    inputdir =  Path(Configurator.getConfig().getProperty("watcher","listen_and_send"))
+    #global PRUNE
+    prune = bool(args.prune)
+    masktype = MaskingOptions(int(args.maskoption) if args.maskoption else 0)
+    if not inputdir.exists() or not inputdir.is_dir():
+        get_logger()(f"Cannot listen on a directory that does not exist: {inputdir}")
     watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
     watcher.maskmode = masktype
 
     watcher.run()
-def build_snapshot(projname,basefolder):
-    cfg=Configurator.getConfig()
-    fn  = get_export_filename(projname,"obj")
-    objpath = Path(basefolder,"output",f"{fn}.obj")
-    if objpath.exists():
-        MeshlabHelpers.snapshot(objpath,
-                                cfg.getProperty("postprocessing","rot_x"),
-                                cfg.getProperty("postprocessing","rot_y"),
-                                cfg.getProperty("postprocessing","rot_z"),True)
 
-#This script contains the full automation flow and is triggered by the watcher
-def build_model_from_manifest(tq:Queue,manifestfile:str, maskmode:MaskingOptions):
-    """Builds a model from the files listed in a text file manifest.
+def buildModelFromManifest(tq:Queue,manifestfile:Path, maskmode:MaskingOptions):
+    """buildModelFromManifest: Builds a model from unconverted raw files (if necessary) using the source files found in a json manifest. 
+    This gets called by the watcher handler from the ortery and is meant to be used when the masking tasks or conversion tasks are partly done but the model has not
+    yet been built because the photography is still underway. When the photography is finished, a manifest is sent inventorying the original files. This builds
+    a model from that list.
 
     Parameters:
     -----------
-    manifest: A path to a text file manifest with a comma seperated list of paths to image files.
+    tq: a Queue of tasks--this can be partially filled or not filled at all. Needed tasks will be added by the verify manifest function.
+    manifest: A pathlib:Path to a text file manifest with a comma seperated list of paths to image files.
+    maskmode: An instance of maskingOptions corresponding to the type of masks that ought to be made for each picture in the manifest Pass MaskingOptions:None for none.
+
+    It uses the following config values:
+    watcher:project_base -- the user configures a place to store the model and its intermediary files including masks.
+    photogrammetry:mask_path -- the subdirectory in which masks will be stored ( or moved from the temp directory where they are placed when they are being made on the fly.)
+    processing:Destination_type -- a list of the types of image files that the incoming raw files will be converted to, ie ["jpg","tif"]
+    processing:Build_From_Format -- the image format which will be used to build the model. If you don't want a crash, it should be in the list processing:Destination_type.
+        
     """
     manifest = {}
     parentdir= Path(manifestfile).parent
@@ -326,10 +328,23 @@ def build_model_from_manifest(tq:Queue,manifestfile:str, maskmode:MaskingOptions
             processed =Path(project_folder,subfolder)
             copy_file_to_dest(filestoprocess[subfolder],processed, True)
         bformat = config.getProperty("processing","Build_From_Format")[1:]
-        build_model(projname,Path(project_folder,bformat),project_folder,maskmode,snapshot=True,tasks=tq)
+        buildModel(projname,Path(project_folder,bformat),project_folder,maskmode,snapshot=True,tasks=tq)
 
-def execute_task_queue(taskqueue:Queue,stop_on_empty=True, report_statistics=True, cancelthreadevent:threading.Event = None):
-    getGlobalLogger(__name__).info("Executing Tasklist.")
+def executeTaskQueue(taskqueue:Queue,stop_on_empty:bool=True, report_statistics:bool=True, cancelthreadevent:threading.Event = None):
+    """executeTaskQueue: Given a task queue, this executes tasks until the queue is empty, running the setup, execute, and exit method on each task. 
+    The function returns if an error is encountered on any of these phases. It will also return if the cancelthreadedevent threading event is set--this is set by the 
+    cancel button in the UI.
+
+    Parameters:
+    ------------------
+    task_queue: A queue filled with tasks to execute in the order in which they ought to be executed
+    filestoconvert: stop_on_empty--whether the function should return when the queue is empty or continue executing in hopes that more tasks will be added.
+    This will be useful if the function is ever multithreaded.
+    report_statistics: Reports the time taken for each class of tasks on the end of the run.
+    cancelthreadedevent: an event which can be set by another thread. When the event is set, the queue stops being processed. Now, it gets set by the UI.
+
+    """
+    get_logger().info("Executing Tasklist.")
     succeeded = True
     global FINISHED
     FINISHED = False
@@ -345,13 +360,13 @@ def execute_task_queue(taskqueue:Queue,stop_on_empty=True, report_statistics=Tru
                     phase = "exit"
                     succeeded,code = task.exit()
             if not succeeded:
-                getGlobalLogger(__name__).error("Phase %s for Task %s failed with error %s",phase, str(task),ErrorCodes.numToFriendlyString(code))
+                get_logger().error("Phase %s for Task %s failed with error %s",phase, str(task),ErrorCodes.numToFriendlyString(code))
                 FINISHED=True
                 break
         
         if stop_on_empty and taskqueue.empty() or (cancelthreadevent and cancelthreadevent.is_set()):
             FINISHED = True
-            getGlobalLogger(__name__).info("Finished the tasklist, ending.")
+            get_logger().info("Finished the tasklist, ending.")
         
     if report_statistics:
         statistics.getStatistics().logReport()
@@ -359,14 +374,32 @@ def execute_task_queue(taskqueue:Queue,stop_on_empty=True, report_statistics=Tru
         MetashapeFileHandleSingleton.MetashapeFileSingleton.destroyDoc() #gets created by metashape tasks "align photos."
 
 
-def setup_conversion_tasks(task_queue:Queue,filestoconvert:list,basedir:Path,profile_correction:"False")->Queue:
+def setupConversionTasks(task_queue:Queue,filestoconvert:list,basedir:Path,profile_correction:bool=False)->Queue:
+    """setupConversionTasks: Given a queue, add tasks needed to convert the specified files to a format that can be used to build a 3d model.
+
+    Parameters:
+    ------------------
+    task_queue: A queue, populated with tasks that ought to be performed before this one. It can be empty.
+    filestoconvert: a list of pathutil:Paths of images.
+    basedir: The directory where the model, and psx file, and all intermediary files will be placed.
+    profile_correction: whether profile correction ought to be used on these pictures. Only pass True if you used a DSLR camera with a detachable lens.
+    This function can be useful if you are using this function to set up a workflow which converts RAW files to TIFs, but do not plan to build a model from the results, 
+    Otherwise,the user should exercise caution because attempting to programmatically correct lens
+    distortion at conversion time may cause unintended consequences in the final model.
+
+    Additionally, this function relies on the following values in config.json, which can be changed via the UI or via editing the json file.
+    Processing:Destination_Type: list of all image  formats that the program should output. Recommended: ["jpg"]. However, some uses may want to convert to jpg and tif for archiving.
+    Processing:Source_Type: a list of allowable picture formats that the program can process: currently cr2 (cannon RAW), nef (Nikon RAW), tif, and jpg.
+    Processing:Build_From_Format: extension for the format of images the model will be built from. Supported are jpg and tif.
+    Returns: the task queue with the new tasks.
+    """
     config = Configurator.getConfig()
     conversiontypes = config.getProperty("processing","Destination_Type")
     sourcetypes = config.getProperty("processing","Source_Type")
     desttype = config.getProperty("processing","Build_From_Format")
 
     if desttype not in conversiontypes:
-       getGlobalLogger(__name__).error(" %s is not in list of conversion formats. Defaulting to JPG.",desttype)
+       get_logger().error(" %s is not in list of conversion formats. Defaulting to JPG.",desttype)
        desttype = ".jpg" #if we misconfigured this, default to jpg.
 
     for filepath in filestoconvert:
@@ -382,7 +415,22 @@ def setup_conversion_tasks(task_queue:Queue,filestoconvert:list,basedir:Path,pro
                         task_queue.put( ConversionTasks.ConvertToTIF({"input":Path(filepath),"output":Path(destpath),"profile_correction":profile_correction}))
     return task_queue
 
-def setup_masking_tasks(task_queue:Queue, pathlist:list, basedir:Path, mask_option=MaskingOptions.NOMASKS)->Queue:
+def setupMaskingTasks(task_queue:Queue, pathlist:list, basedir:Path, mask_option=MaskingOptions.NOMASKS)->Queue:
+    """setupMaskingTasks: Given a queue, add tasks needed to build masks for the images in the passed-in list, using the task corresponding for the
+    algorithm specified in mask_optiopns.
+
+    Parameters:
+    ------------------
+    task_queue: A queue, populated with tasks that ought to be performed before this one. If the model is finished, it can be empty.
+    pathlist: a list of pathutil:Paths of images.
+    basedir: The directory where the model, and psx file, and all intermediary files will be placed.
+    mask_option: the algorithm to use for masking, in the form of a MaskingOptions enumeration.
+    
+    Additionally, this function relies on the following values in config.json, which can be changed via the UI or via editing the json file.
+    photogrammetry:mask_path: this is the subdirectory where the created masks will be stored.
+
+    Returns: the task queue with the new tasks.
+    """
     config = Configurator.getConfig()
     if mask_option != MaskingOptions.NOMASKS:
         maskpath = Path(basedir,config.getProperty("photogrammetry","mask_path"))
@@ -397,18 +445,50 @@ def setup_masking_tasks(task_queue:Queue, pathlist:list, basedir:Path, mask_opti
                 task_queue.put(MaskingTasks.MaskThreshold({"input":f,"output":maskpath}))
     return task_queue
 
-def setup_post_tasks(task_queue:Queue,jobname:str,basedir:Path)->Queue:
+def setupPostTasks(task_queue:Queue,jobname:str,basedir:Path, snapshot:bool = True)->Queue:
+    """setupPostTasks: Given a queue, add tasks need to process a finished 3d model to that queue, including automated manipulation in blender or meshlab.
+    Currently, the only thing this function does is setup the blender snapshot task. This function can be disabled by passing false in the snapshot param.
+
+    Parameters:
+    ------------------
+    task_queue: A queue, populated with tasks that ought to be performed before this one. If the model is finished, it can be empty.
+    jobname: The name of the model (and of the chunk and metashape file)
+    basedir: The directory where the model, and psx file, and all intermediary files will be placed.
+    snapshot: should this function set up the tasks to make a blender snapshot?
+
+    
+    Additionally, this function relies on the following values in config.json, which can be changed via the UI or via editing the json file.
+    photogrammetry: output_path: The subdirectory of basedir where the model and its associated files will be stored.
+    photogrammetry: export_as: The format of 3d model to export: Supported options are currently  ply and obj
+
+    Returns: the task queue with the new tasks.
+    """
     config = Configurator.getConfig()
     outputpath = Path(basedir,config.getProperty("photogrammetry","output_path"))
     objname =  Path(outputpath,get_export_filename(jobname,config.getProperty("photogrammetry","export_as")))
     objfullname = f"{objname}{config.getProperty("photogrammetry","export_as")}"
 
-    if config.getProperty("postprocessing","script_directory") != "" and \
+    if snapshot and config.getProperty("postprocessing","script_directory") != "" and \
     config.getProperty("postprocessing","blender_exec")!="":
         task_queue.put(BlenderTasks.BlenderSnapshotTask({"inputobj":objfullname,"output":outputpath,"scale":True}))
     return task_queue
 
-def setup_model_tasks(task_queue:Queue,pathlist:list,jobname:str,inputdir:Path,basedir:Path,mask_option=MaskingOptions.NOMASKS):
+def setupModelTasks(task_queue:Queue,pathlist:list,jobname:str,inputdir:Path,basedir:Path,mask_option=MaskingOptions.NOMASKS)->Queue:
+    """setupModelTasks: Given a queue,add tasks neede to build a model to that queue.
+
+    Parameters:
+    ------------------
+    task_queue: a queue, populated with tasks needed to build masks if desired and to convert any raw or tif files into jpgs, from which a model will be built.
+    pathlist: a list of pathutil:Paths to jpg files which will be used in the model. These need not exist yet, but it is assumed that they will exist by the time model tasks get
+    executed.
+    jobname: The name of the model (and of the chunk and metashape file)
+    inputdir: The directory containing the JPG or TIF files that will be used to build the model.
+    basedir: The directory where the model, and psx file, and all intermediary files will be placed.
+    mask_option: the method for building the mask as represented in the MaskingOption enumeration class.
+
+    Returns: the task queue with the new tasks.
+    """
+     
     config = Configurator.getConfig()
     maskpath = Path(basedir,config.getProperty("photogrammetry","mask_path"))
     outputextn = config.getProperty("photogrammetry","export_as")
@@ -432,49 +512,55 @@ def setup_model_tasks(task_queue:Queue,pathlist:list,jobname:str,inputdir:Path,b
     task_queue.put(MetashapeTasks.MetashapeTask_ExportModel(paramsfortasks))
     return task_queue
 
-def build_model(jobname,
-                inputdir,
-                basedir,
+def buildModel(jobname:str,
+                inputdir:str,
+                basedir:str,
                 mask_option=MaskingOptions.NOMASKS,
-                snapshot=False,
+                snapshot:bool=False,
                 tasks:Queue=None, 
-                report_statistics=True,
+                report_statistics:bool=True,
                 cancelthreadevent:threading.Event = None):
-    """Given a folder full of pictures, this function builds a 3D Model.
+    """buildModel: Given a folder full of pictures, this function builds a 3D Model.
 
     Parameters:
     ------------------
     jobname: the name of the model to be built.
     inputdir: a folder full of pictures in either CR2 or TIF format.
-    outputdir: The folder in which the model will be placed along with its intermediary files.
-    config: the full contents of config.json.
-    nomasks: boolean value determining whether to build masks or not.
+    basedir: The folder in which the model will be placed along with its intermediary files.
+    mask_option: the type of mask to build for each image
+    snapshot: whether to take a blender snapshot or not.
+    tasks: a queue with taks--None if you wish this function to build the queue. Useful if you want to build a custom task queue for image conversion and masking. 
+    This function will add tasks for model building.
+    report_statistics: should this report the time taken for things to build at the end? Default True.
+    canceltreadedevent: an event to signal to all threads launched here that the job has been cancelled. Sent from the UI and hooked up to the cancel button.
     """
     config = Configurator.getConfig()
-    tq = Queue() if not  tasks else tasks
+    
     buildfromformat = config.getProperty("processing","Build_From_Format")
     buildfromdir= Path(basedir,str(buildfromformat[1:]))
-    convertfiles = []
-    for fl in os.listdir(inputdir):
-        f = Path(fl)
-        if f.suffix in config.getProperty("processing","Source_Type"):
-            convertfiles.append(f)
-    tq= setup_conversion_tasks(tq,
-                              convertfiles,
-                              basedir,False)
-    filestouse = []
-    for images in os.listdir(inputdir):
-        filestouse.append(Path(buildfromdir,f"{Path(images).stem}{buildfromformat}"))
-    tq= setup_masking_tasks(tq,filestouse,basedir,mask_option)
-    tq = setup_model_tasks(tq,filestouse,jobname,buildfromdir,basedir,mask_option)
-    tq = setup_post_tasks(tq,jobname,basedir)
-    execute_task_queue(tq,True,report_statistics, cancelthreadevent)           
+    if not tasks or tasks.empty():
+        tq = Queue()
+        convertfiles = []
+        for fl in os.listdir(inputdir):
+            f = Path(fl)
+            if f.suffix in config.getProperty("processing","Source_Type"):
+                convertfiles.append(f)
+        tq= setupConversionTasks(tq,
+                                convertfiles,
+                                basedir,False)
+        filestouse = []
+        for images in os.listdir(inputdir):
+            filestouse.append(Path(buildfromdir,f"{Path(images).stem}{buildfromformat}"))
+        tq= setupMaskingTasks(tq,filestouse,basedir,mask_option)
+    else:
+        tq = tasks
+    tq = setupModelTasks(tq,filestouse,jobname,buildfromdir,basedir,mask_option)
+    tq = setupPostTasks(tq,jobname,basedir,snapshot)
+    executeTaskQueue(tq,True,report_statistics, cancelthreadevent)           
 
-        # if snapshot:
-        #     build_snapshot(jobname,basedir)
 
     
-def build_model_cmd(args):
+def buildModelCommand(args):
     """The wrapper function that extracts arguments from the command line and runs the build model function with the correct params based on them.
     Parameters:
     -------------------
@@ -485,29 +571,17 @@ def build_model_cmd(args):
     photoinput = args.photos
     outputdir = args.outputdirectory
     maskoption = int(args.maskoption)
-    build_model(job,photoinput,outputdir, MaskingOptions(maskoption))
+    buildModel(job,photoinput,outputdir, MaskingOptions(maskoption))
     
 
 
-
-def build_masks_cmd(args):
-    """Wrapper script for building masks from contents of a folder using a photoshop droplet.
+def watchAndProcess(args):
+    """WatchAndProcess: This function is a hook called by the UI to start the observer that grabs and converts files and manifests that get placed in a particular folder.
+    It gets called from the Watch tab of the UI when "Watch" is pressed.
     Parameters:
-    -----------
-    args: an object containing attributes which get passed in from the command line.  These are:
-    inputdir: the directory of pictures that need to be masked in TIF format.
-    output: the directory where the masks need to get copied when the masking is done.
+    --------------------------------------------------------------
+      args--an object with an attribute "inputdir". 
     """
-    input = args.inputdir
-    output = args.outputdir
-    image_processing.build_masks(input,output,int(args.maskoption))
-
-
-def WatchAndProcess(args):
-    """WatchAndProcess
-    Parameter: args--an object with an attribute "inputdir". 
-    This function is a hook called by the UI to start the observer that grabs and converts files and manifests that get placed in a particular folder.
-    It gets called from the Watch tab of the UI when "Watch" is pressed. """
     startWatcher(args.inputdir,None)
 
 if __name__=="__main__":
@@ -518,18 +592,17 @@ if __name__=="__main__":
     photogrammetryparser.add_argument("jobname", help="The name of the project")
     photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
     photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-    photogrammetryparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], help = "How do you want to build masks:0 = no masks,\
+    photogrammetryparser.add_argument("--maskoption", type = str, choices=["0","1","2","3"], help = "How do you want to build masks:0 = no masks,\
                                     1 = Photoshop droplet(context aware select), \
-                                    2 = Photoshop droplet (magic wand), \
-                                    3 = Canny Edge detection algorithm \
-                                    4 = Grayscale Thresholding",
+                                    2 = Grayscale Thresholding, \
+                                    3 = AI Inference Engine", 
                                     default=0)
 
-    photogrammetryparser.set_defaults(func=build_model_cmd)
+    photogrammetryparser.set_defaults(func=buildModelCommand)
 
     watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
     watcherparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    watcherparser.set_defaults(func=WatchAndProcess)      
+    watcherparser.set_defaults(func=watchAndProcess)      
 
     listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
     listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
@@ -537,9 +610,8 @@ if __name__=="__main__":
     listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
                             help = "How do you want to build masks:0 = no masks,\
                                     1 = Photoshop droplet(context aware select), \
-                                    2 = Photoshop droplet (magic wand), \
-                                    3 = Canny Edge detection algorithm \
-                                    4 = Grayscale Thresholding",
+                                    2 = Grayscale Thresholding, \
+                                    3 = AI Inference Engine", 
                             default=0)
     listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
     listensendparser.set_defaults(func=listen_and_send)    

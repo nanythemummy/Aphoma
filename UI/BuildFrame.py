@@ -46,7 +46,7 @@ class BuildFrame(PipelineFrameBase):
         try:
             self.disable_enable_all(True)
             Configurator.getConfig().setProperty("photogrammetry","palette", args.pal_name.get())
-            phscripts.build_model(jobname = args.proj_name.get(),
+            phscripts.buildModel(jobname = args.proj_name.get(),
                                 inputdir = args.image_path.get(),
                                 basedir = args.proj_base.get(),
                                 mask_option = UIConsts.MASKOPTIONS[args.mask_option.get()],

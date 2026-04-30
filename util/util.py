@@ -53,17 +53,15 @@ class MaskingOptions(Enum):
     """Class containing constants for masking options."""
     NOMASKS = 0
     MASK_CONTEXT_AWARE_DROPLET = 1
-    MASK_MAGIC_WAND_DROPLET =2
-    MASK_CANNY = 3
-    MASK_THRESHOLDING = 4
-    MASK_AI = 5
+    MASK_THRESHOLDING = 2
+    MASK_AI = 3
      
     def __str__(self):
         return str(self.name)
     
     @classmethod 
     def getFriendlyStrings(cls):
-        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","EdgeDetection","Thresholding", "AI"]
+        return ["None", "SmartSelectDroplet","Thresholding", "AI"]
     @classmethod
     def numToFriendlyString(cls, num): 
         if isinstance(num, MaskingOptions):
@@ -79,13 +77,13 @@ class MaskingOptions(Enum):
 
         
 def delete_manifests_images(directory):
-    dir = Path(directory)
+    delman = Path(directory)
     imtypes = ["cr2","jpg","tif","nef"]
-    if dir.exists():
-        files = [f for f in os.listdir(dir) if Path(dir,f).is_file()]
+    if delman.exists():
+        files = [f for f in os.listdir(delman) if Path(delman,f).is_file()]
         for fl in files:
             if Path(fl).suffix in imtypes or Path(fl).stem.endswith("_manifest"):
-                os.remove(Path(dir,fl))
+                os.remove(Path(delman,fl))
 
            
 
@@ -99,7 +97,7 @@ def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     * destpath: a string path to move them to.
     """
     if not os.path.exists(destpath):
-         os.makedirs(destpath)
+        os.makedirs(destpath)
     for f in sourcefiles:
         try:
             if deleteoriginal:
