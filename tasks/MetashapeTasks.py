@@ -282,7 +282,7 @@ class MetashapeTask_AlignChunks(MetashapeTask):
         if self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
             chunkstoalign = self.buildChunklist()
             markerlist = [marker.key for marker in self.chunk.markers]
-            self.doc.alignChunks(chunkstoalign,self.chunk,method=1,markers=markerlist)
+            self.doc.alignChunks(chunkstoalign,self.chunk.key,method=1,markers=markerlist)
             self.doc.save()
         return True, ErrorCodes.NONE
     

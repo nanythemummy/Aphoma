@@ -43,10 +43,10 @@ def convertOrthomosaicsToGray(projname,chunks,inputdirectory:Path):
         gray = True if str(multibanded_types[k].get("grayscale_ortho","True")).upper() == "TRUE" else False
         brightness = float(multibanded_types[k].get("brightness",1.0))
         eightbit = True if str(multibanded_types[k].get("eightbit","True")).upper() == "TRUE" else False
-        
-        orthopath = Path(inputdirectory,f"{projname}_{k}_Orthomosaic.tif")
-        if orthopath.exists():
-            convertToGrayscaleAdjustBrightness(orthopath,orthopath,gray,channel,eightbit,brightness)
+        for fb, _ in v.items():
+            orthopath = Path(inputdirectory,f"{projname}_{fb}{k}_Orthomosaic.tif")
+            if orthopath.exists():
+                convertToGrayscaleAdjustBrightness(orthopath,orthopath,gray,channel,eightbit,brightness)
 
 
 def setupReferences(chunks:dict,basedir:Path)->dict:
@@ -77,23 +77,23 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
     referencepath = Path(basedir,"references")
     if not referencepath.exists():
         os.mkdir(referencepath)
-    for k,_ in chunks.items():
-        if "references" not in chunks[k].keys():
-            chunks[k]["references"]=[]
+    for k,v in chunks.items():
         referencefiles = multibanded_types[k].get("pointcloud_reference",k)
         c = multibanded_types[k].get("graychannel","b")
         chans={"r":util.ColorChannelConstants.NUMPY_RED,"g":util.ColorChannelConstants.NUMPY_GREEN,"b":util.ColorChannelConstants.NUMPY_BLUE}
         channel = chans.get(c,util.ColorChannelConstants.NUMPY_BLUE)
         gray = True if str(multibanded_types[k].get("grayscale_ortho","True")).upper() == "TRUE" else False
         brightness = float(multibanded_types[k].get("brightness",1.0))
-
-        refs = chunks[referencefiles]["files"]
-        for reference in refs:
-            referenceimage = Path(reference)
-            output = Path(referencepath,f"{k}_ref_{referenceimage.stem}{referenceimage.suffix}")
-            if not output.exists():
-                convertToGrayscaleAdjustBrightness(referenceimage,output,gray,channel,False,brightness)
-            chunks[k]["references"].append(output)
+        for fbk, fbv in v.items():
+            #key will be front or back.
+            refs = chunks[referencefiles][fbk]["files"]
+            fbv["references"]=[]
+            for reference in refs:
+                referenceimage = Path(reference)
+                output = Path(referencepath,f"{k}_{fbk}_ref_{referenceimage.stem}{referenceimage.suffix}")
+                if not output.exists():
+                    convertToGrayscaleAdjustBrightness(referenceimage,output,gray,channel,False,brightness)
+                fbv["references"].append(output)
     return chunks
 
 
@@ -106,7 +106,7 @@ def sortFilesIntoBandsByName(filepath:Path)->dict:
     Parameters:
         filepath: The folder containing images to process. The images must be stored in this folder as this function is not recursive.
     Returns:
-        A dictionary with the following format {irir:{files:[]},uvuv:{files:[] ...etc}}
+        A dictionary with the following format {irir:{front:[],back:[]},uvuv:{front:[],back:[] ...etc}}
         where the elements in the lists are filenames. This dictionary is used to track which pictures correspond to the others in different
         bands. Again, there is an assumption that photo 1 of each band will be in the same physical location.
 
@@ -120,19 +120,26 @@ def sortFilesIntoBandsByName(filepath:Path)->dict:
     for k,v in multibanded_types.items():
        
         if not k in chunks.keys():
+    
             chunks[k]={}
-            chunks[k]={"regex":re.compile(r"\S+"+re.escape(v["path"])+r"_*[0-9]*.jpg",re.IGNORECASE),
+            chunks[k]["front"]={"regex":re.compile(r"\S+_Front"+re.escape(v["path"])+r"_*[0-9]*.jpg",re.IGNORECASE),
                                   "files":[]
-            }
-            
+                                  }
+            chunks[k]["back"]={"regex":re.compile(r"\S+_Back"+re.escape(v["path"])+r"_*[0-9]*.jpg",re.IGNORECASE),
+                                "files":[]
+                                }
     for file in files:
         for _, info in chunks.items():
-            filematch = info["regex"].match(file.name)
-            if filematch:
-                info["files"].append(file)
+            mf = info["front"]["regex"].match(file.name)
+            mb = info["back"]["regex"].match(file.name)
+            if mf:
+                info["front"]["files"].append(file)
+                break
+            elif mb:
+                info["back"]["files"].append(file)
                 break
     getGlobalLogger(__name__).info("The following bands exist with the following number of pics, respectively. %s",
-                                  [(a,len(chunks[a]["files"])) for a in chunks.keys()] )
+                                  [(a,b,len(chunks[a][b]["files"])) for a in chunks.keys() for b in chunks[a].keys() ] )
    
     return chunks
 
@@ -164,155 +171,132 @@ def executeTasklist(taskqueue:Queue):
     MetashapeFileSingleton.destroyDoc() #gets created by metashape tasks "align photos."
 
 def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
-    """
-    Function setupTasksPhaseOne sets up the task queue for building the point cloud and aligning all of the different models.
-        The result at the end of this task will n chunks with point clouds where n is the number of bands photographed based on the filename.
-        Note that these pointclouds will be based on whatever the reference for each chunk is configured to be, NOT the specified band. This means
-        that even if the chunk is called "IRIR," the pointcloud may be reliant on the data in the VISVIS pictures at the end of this process.
-        Phase two will build the models and reproject the photos from the original bands back onto the geometry.
-    Parameters:
-        chunks: the dictionary of files to build keyed by their band. 
-        It should look like: {irir:{files:[], references:[]},uvuv:{files:[], references:[] ...etc}}
-        sourcedir: the directory from which the image files will be pulled. All files should be in the same dir.
-        projectname: the name of the project--should be the same as the object catalogue number.
-        projectdir: The base directory of the project where intermediary files and the output folder will be stored.
-    Returns:
-    A dictionary of Tasks as defined in the class "BaseTask"
-
-    Additionally, this function uses the config values specified in config.json photogrammetry:multibanded. These can be finetuned to affect
-    the resulting orthomosaics.
-    """
     tasks = Queue()
     getGlobalLogger(__name__).info("Building Tasklist, including aligning, error reduction, and marker detection.")  
     for k,item in chunks.items():
-        if len(item["references"]) == 0 or len(item["files"]) == 0:
-            chunks.pop(k)
-            continue
-        tasks.put(MetashapeTask_AlignPhotos({"input":sourcedir,
-                                                    "output":projectdir,
-                                                    "usemasks":False,
-                                                    "maskpath": Path(projectdir,"masks"),
-                                                    "projectname":projectname,
-                                                    "chunkname":f"{projectname}_{k}",
-                                                    "photos":item["references"]
-                                                    }))
-        tasks.put(MetashapeTask_ErrorReduction({"input":sourcedir,
-                                                    "output":projectdir,
-                                                    "projectname":projectname,
-                                                    "chunkname":f"{projectname}_{k}"
+            for fb in ["front","back"]:
+                if  item.get(fb,None) is None:
+                    continue
+                if len(item[fb]["references"]) == 0 or len(item[fb]["files"]) == 0:
+                    chunks[k].pop(fb)
+                    continue
+                tasks.put(MetashapeTask_AlignPhotos({"input":sourcedir,
+                                                            "output":projectdir,
+                                                            "usemasks":False,
+                                                            "maskpath": Path(projectdir,"masks"),
+                                                            "projectname":projectname,
+                                                            "chunkname":f"{projectname}_{fb}{k}",
+                                                            "photos":item[fb]["references"]
+                                                            }))
+                tasks.put(MetashapeTask_ErrorReduction({"input":sourcedir,
+                                                            "output":projectdir,
+                                                            "projectname":projectname,
+                                                            "chunkname":f"{projectname}_{fb}{k}"
 
-        }))
-        tasks.put(MetashapeTask_DetectMarkers({"input":sourcedir,
-                        "output":projectdir,
-                        "projectname":projectname,
-                        "chunkname":f"{projectname}_{k}"}))
-        tasks.put(MetashapeTask_AddScales({"input":sourcedir,
+                }))
+                tasks.put(MetashapeTask_DetectMarkers({"input":sourcedir,
                                 "output":projectdir,
                                 "projectname":projectname,
-                                "chunkname":f"{projectname}_{k}"}))
-    visvis = chunks.get("visvis",None)
-    if visvis:
-        chunklist = [f"{projectname}_{band}" for band in chunks.keys() if band.lower() != "visvis"]
-        tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
-                        "output":projectdir,
-                        "projectname":projectname,
-                        "chunkname":f"{projectname}_visvis",
-                        "chunklist":chunklist,
-                        "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS
-    }
-    ))
+                                "chunkname":f"{projectname}_{fb}{k}"}))
+                tasks.put(MetashapeTask_AddScales({"input":sourcedir,
+                                        "output":projectdir,
+                                        "projectname":projectname,
+                                        "chunkname":f"{projectname}_{fb}{k}"}))
+
     
+    for fb in ["front","back"]:  
+        visvis = chunks.get("visvis",None)
+        if visvis and fb in visvis.keys():
+
+            chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys() if fb in chunks[band].keys()]
+            tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{fb}visvis",
+                            "chunklist":chunklist,
+                            "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS
+        }
+        ))
+       
         
     tasks = setupTasksPhaseTwo(chunks,sourcedir,projectname,projectdir, tasks)  
     return tasks
 
 def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = None):
-    """
-    Function setupTasksPhaseTwo sets up the task queue for building the models, aligning them by their markers, and subbing in the original
-        photographs.
-        The result at the end of this executing this tasklist
-         will b n chunks with point clouds where n is the number of bands photographed based on the filename. Each will have a model and an
-         orthomosaic, and will be aligned with the VISVIS chunk.
-       
-    Parameters:
-        chunks: the dictionary of files to build keyed by their band. 
-        It should look like: {irir:{files:[], references:[]},uvuv:{files:[], references:[] ...etc}}
-        sourcedir: the directory from which the image files will be pulled. All files should be in the same dir.
-        projectname: the name of the project--should be the same as the object catalogue number.
-        projectdir: The base directory of the project where intermediary files and the output folder will be stored.
-        tasklist: the output from setupTasksPhaseOne--a queue of tasks.
-    Returns:
-    A dictionary of Tasks as defined in the class "BaseTask"
-
-    Additionally, this function uses the config values specified in config.json photogrammetry:multibanded. These can be finetuned to affect
-    the resulting orthomosaics.
-    """
     tasks = Queue() if tasklist is None else tasklist
     getGlobalLogger(__name__).info("Building Tasklist, including selective scales, orientation, alignment, model, and orthophoto")
-    for k, _ in chunks.items():
+    for k, item in chunks.items():
+        for fb in ["front","back"]:
+            if  item.get(fb,None) is None:
+                continue
 
-        tasks.put(MetashapeTask_BuildModel({"input":sourcedir,
+            tasks.put(MetashapeTask_BuildModel({"input":sourcedir,
+                                "output":projectdir,
+                                "projectname":projectname,
+                                "chunkname":f"{projectname}_{fb}{k}"}))
+            tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
+                                "output":projectdir,
+                                "projectname":projectname,
+                                "chunkname":f"{projectname}_{fb}visvis",
+                                "chunklist":[f"{projectname}_{fb}{band}" for band in chunks.keys()],
+                                "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS}))
+            tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
+                                        "output":projectdir,
+                                        "projectname":projectname,
+                                        "chunkname":f"{projectname}_{fb}{k}"}))
+            tasks.put(MetashapeTask_ChangeImagePathsPerChunk({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,
-                            "chunkname":f"{projectname}_{k}"}))
-    tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
-                    "output":projectdir,
-                    "projectname":projectname,
-                    "chunkname":f"{projectname}_visvis",
-                    "chunklist":[f"{projectname}_{band}" for band in chunks.keys() if band != "visvis"],
-                    "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS}))
-    for k, _ in chunks.items():
-        tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
-                                    "output":projectdir,
-                                    "projectname":projectname,
-                                    "chunkname":f"{projectname}_{k}"}))
-        tasks.put(MetashapeTask_ChangeImagePathsPerChunk({"input":sourcedir,
-                        "output":projectdir,
-                        "projectname":projectname,
-                        "chunkname":f"{projectname}_{k}",
-                        "replace_these":chunks[k]["references"],
-                        "to_replace_with":chunks[k]["files"]}))
-            
+                            "chunkname":f"{projectname}_{fb}{k}",
+                            "replace_these":chunks[k][fb]["references"],
+                            "to_replace_with":chunks[k][fb]["files"]}))
+           
     doc = MetashapeFileSingleton.getMetashapeDoc(projectname,Path(projectdir))
-    
-    chunklist = []
-    for otherchunk in doc.chunks:
-        if otherchunk.label.startswith(f"{projectname}") and not otherchunk.label.endswith("_visvis"):
-            chunklist.append(otherchunk)
-    
-    tasks.put(MetashapeTask_ResizeBoundingBoxFromMarkers({"input":sourcedir,
-                                                    "output":projectdir,
-                                                    "projectname":projectname,
-                                                    "chunkname":f"{projectname}_visvis",
-                                                    "dimensionmarkers":[7,15,7,8]}
-                                                    ))         
-    tasks.put(MetashapeTask_CopyBoundingBoxToChunks({ "input":sourcedir,
+    for i in ["front","back"]:
+        chunklist = []
+        for otherchunk in doc.chunks:
+            if otherchunk.label.startswith(f"{projectname}_{i}"):
+                chunklist.append(otherchunk)
+        
+        tasks.put(MetashapeTask_ResizeBoundingBoxFromMarkers({"input":sourcedir,
                                                         "output":projectdir,
                                                         "projectname":projectname,
-                                                        "chunkname":f"{projectname}_visvis",
-                                                        "chunklist":chunklist}))
-    for k, _ in chunks.items():
+                                                        "chunkname":f"{projectname}_{i}visvis",
+                                                        "dimensionmarkers":[7,15,7,8]}
+                                                        ))         
+        tasks.put(MetashapeTask_CopyBoundingBoxToChunks({ "input":sourcedir,
+                                                            "output":projectdir,
+                                                            "projectname":projectname,
+                                                            "chunkname":f"{projectname}_{i}visvis",
+                                                            "chunklist":chunklist}))
+    for k, item in chunks.items():
+        for i in ["front","back"]:
+                          
+            if  item.get(fb,None) is None:
+                continue
+            tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{i}{k}"}))
 
-        tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,
-                        "output":projectdir,
-                        "projectname":projectname,
-                        "chunkname":f"{projectname}_{k}"}))
-        tasks.put(MetashapeTask_ExportOrthomosaic({"input":sourcedir,
-                        "output":projectdir,
-                        "projectname":projectname,
-                        "chunkname":f"{projectname}_{k}"}))
-    tasks.put(MetashapeTask_BuildTextures({"input":sourcedir,
-        "output":projectdir,
-        "projectname":projectname,
-        "chunkname":f"{projectname}_visvis"}))
-
-    tasks.put(MetashapeTask_ExportModel({"input":sourcedir,
+            tasks.put(MetashapeTask_ExportOrthomosaic({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{i}{k}"}))
+    for fb in ["front","back"]:
+        tasks.put(MetashapeTask_BuildTextures({"input":sourcedir,
             "output":projectdir,
             "projectname":projectname,
-            "chunkname":f"{projectname}_visvis",
-            "extension":".ply",
-            "conform_to_shape": False}))        
-    return tasks
+            "chunkname":f"{projectname}_{fb}visvis"}))
+
+        tasks.put(MetashapeTask_ExportModel({"input":sourcedir,
+                "output":projectdir,
+                "projectname":projectname,
+                "chunkname":f"{projectname}_{fb}visvis",
+                "extension":".ply",
+                "conform_to_shape": False}))
+            
+    return tasks 
 
 def build_multibanded_cmd(args):
     """

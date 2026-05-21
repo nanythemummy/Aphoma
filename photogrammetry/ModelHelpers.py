@@ -416,7 +416,7 @@ def find_axes_from_markers_in_plane(chunk,palette:dict):
         LOGGER.info("Calculating plane from %s, %s, %s",plane[0]["name"],plane[1]["name"],plane[2]["name"])
         veca = plane[1]["pos"]-plane[0]["pos"]
         vecb = plane[2]["pos"]-plane[0]["pos"]
-        z_axis = Metashape.Vector.cross(vecb,veca)
+        z_axis = Metashape.Vector.cross(vecb,veca)*-1.0
         z_axis.normalize()
         LOGGER.info("Z-axis is %s."%z_axis)
         x_axis = xaxispts[1]["pos"]-xaxispts[0]["pos"]

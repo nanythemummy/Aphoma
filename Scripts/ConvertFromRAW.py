@@ -20,7 +20,7 @@ def buildQueue(inputdir:str, outputdir:str, tp:int)->Queue:
     """
     q = Queue()
     if Path(inputdir).exists() and Path(outputdir).exists:
-        paths = Path(inputdir).glob("*.CR2")
+        paths = Path(inputdir).glob("*.NEF")
         for path in paths:
             if int(tp) == 0:
                 q.put(ConvertToTIF({"input":path,"output":outputdir,"profile_correction":True}))

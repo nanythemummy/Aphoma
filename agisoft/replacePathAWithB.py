@@ -9,7 +9,7 @@ from util.Configurator import Configurator
 
 
 def ReplaceAB():
-    #copies markers from a designated chunk to the currently selected chunk.
+   
     paths = str(sys.argv[1])
     a,b = paths.split(",")
     doc = Metashape.app.document

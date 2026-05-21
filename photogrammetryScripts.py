@@ -33,8 +33,7 @@ MANIFEST = None
 #prune is a boolean on whether the listener should prune pictures from the ortery or not. Probably ought to come up with
 # a non global var way of doing this.
 PRUNE = False
-#logger is a logger. all methods to go to the console in the ui should use this so that we can filter the normal metashape and debugging messages from things like 
-#instrumentation.
+
 FINISHED = False
 
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
@@ -54,6 +53,7 @@ def verifyManifest(tq:Queue,manifest:dict, basedir:Path,mode:MaskingOptions, rep
     
     returns: succeeded, full_manifest, where succeeded is true if all the masks and tifs and raw files expected were found, and 
     manifest contains each of these files and their full paths in the format {"raw":[],"tif":[],"masks":[]}"""
+
     #check to see if all the masks and tifs have been made for this manifest.
     get_logger().info("Verifying")
     config = Configurator.getConfig()
@@ -99,10 +99,15 @@ def verifyManifest(tq:Queue,manifest:dict, basedir:Path,mode:MaskingOptions, rep
     executeTaskQueue(tq,True,False,cancelevent)
     return foundallfiles,fullmanifest, tq
 
-class WatcherSenderHandler(FileSystemEventHandler):
+class FSSenderHandler(FileSystemEventHandler):
     """Listen in the specified directory for cr2 files. It extends Watchdog.FilesystemEventHandler"""
-    @staticmethod
-    def on_any_event(event):
+    def __init__(self, cancel_event:threading.Event, manifest_queue:Queue, shouldprune = False ):
+        self.should_pune = shouldprune
+        self.cancel_event = cancel_event
+        self.manifest_queue = manifest_queue
+        super().__init__()
+    
+    def on_any_event(self,event):
         """Event handler for any file system event. When an event of the type file created happens, if a CR2 file is created, the files will be processed and converted to TIF
         if a manifest file is created, a model will be built based on the manifest's files.
         Parameters:
@@ -110,27 +115,26 @@ class WatcherSenderHandler(FileSystemEventHandler):
         event: a watchdog.event from the watchdog library.
         """
 
-        ext = os.path.splitext(event.src_path)[1]
-        if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
-            fn = os.path.splitext(event.src_path)[0]
+        eventpath = Path(event.src_path)
+        allowableextensions = Configurator.getConfig().getProperty("processing","Source_Type")
+        if event.event_type=="created" and eventpath.suffix in allowableextensions:
+            fn = eventpath.name
             if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
-                if not should_prune(event.src_path):
+                if not should_prune(eventpath):
                     last_size = -1
-                    current_size = os.path.getsize(event.src_path)
+                    current_size = eventpath.stat().st_size
                     while True:
                         time.sleep(1)
                         last_size = current_size
-                        current_size = os.path.getsize(event.src_path)
+                        current_size = eventpath.stat().st_size
                         get_logger().debug("%s :%s for %s",last_size,current_size,event.src_path)
                         if current_size==last_size:
                             break
-                    if current_size >0:    
+                    if current_size >0:   
                         netdrive = Configurator.getConfig().getProperty("watcher","networkdrive")
                         transferscripts.transferToNetworkDirectory(netdrive, [event.src_path])
                         fn = Path(event.src_path).name
-                        global MANIFEST
-                        MANIFEST.addFile(fn)
-                        get_logger().info("Added file to manifest: %s",fn)
+                        self.manifest_queue.put(fn)
 
 
 class FSWatcherHandler(FileSystemEventHandler):
@@ -184,7 +188,7 @@ class FSWatcherHandler(FileSystemEventHandler):
             if ext.upper() in [".JPG",".CR2",".TIF",".NEF",".JSON"]:
                 last_size = -1
                 current_size = newpath.stat().st_size
-                while True:
+                while True and not self.cancel_event.is_set():
                     time.sleep(3)
                     last_size = current_size
                     current_size = newpath.stat().st_size
@@ -197,12 +201,19 @@ class FSWatcherHandler(FileSystemEventHandler):
 
 
 def startWatcher(watchdir:Path, cancelevent:threading.Event = None):
-    
+    """startWatcher: This is the function that the UI calls when the user wants to listen for incomming files on a network directory to build a model.
+    I'm debating whether to just wrap it in a class like I did with Photosender.
+
+        Parameters:
+        ------------
+        watchdir: A path to watch for incoming files.
+        cancelevent: A threading.event that gets set when the user presses a cancel button.
+        
+    """
     eq = Queue()
     fshandler = FSWatcherHandler(eq, cancelevent)
     fsobserver = Observer()
     fsobserver.schedule(fshandler,watchdir,recursive=True)
-   
     fsobserver.start()
     while not cancelevent.is_set():
         time.sleep(3)
@@ -210,77 +221,83 @@ def startWatcher(watchdir:Path, cancelevent:threading.Event = None):
     fsobserver.join()
 
 
-class Watcher:
-    """These classes are part of a filesystem watcher which watches for the 
-    appearance of a manifest file in the desired directory, then builds a model with the pictures
-    
+class PhotoSender:
+    """This class waits for files to appear in a specified directory, and if they are image files, it sends them to a network drive, based on whether
+    they should be pruned based on the pruning algorithm and whether they are files that can be processed by the system. It adds files that arrive
+    to a manfest which is set to the network drive when the photography is done or the user cancels via the UI.
+    It acts as a wrapper for a Watchdog:Observer class.
+
     Methods:
     ------------------------
     __init__(self,directory):initializes the class to watch a particular directory, configurabe in config.json.
     run(): makes a watcherHandler object and waits for it to intercept filesystem events.
     """
-    def __init__(self,  watchdir:str, isSender = False, projectname=""):
+
+    def __init__(self,  watchdir:Path, cancelevent:threading.Event, projectname:str="",  shouldPrune:bool=False):
+        """Photosender::__init__ initializes a Photosender object. This acts as a wrapper class for Watchdog:Observer. It has the logic which launches threads to watch for incomming calls on the filesystem
+        and it also checks the manifest queue to see if there are any new files in the manifest queue to add to the manifest. It sends the manifest when finished.
+        It should be run on the ortery computer or a computer attached to a camera taking pictures.
+
+        Parameters:
+        ------------
+        watchdir: A path to watch for incoming files.
+        cancelevent: A threading.event that gets set when the user presses a cancel button or anything else.
+        shouldPrune: should not transfer every xth picture according to the pruning tuning in config.json
+        
+        """
         self.observer = Observer()
         self.watched_dir = watchdir
-        self.isSender = isSender
         self.projectname = projectname
-        self.maskmode = 0
+        self.shouldPrune = shouldPrune
         self.stoprequest = False
+        self.cancelEvent = cancelevent
+        self.finished = False
+
+    def setCancelled(self,isFinished:bool=False):
+        """Photosender::setCancelled. sets the cancel threading event, signalling for all threads to halt and for the for loop in run to stop looping. It has a isFinished value
+        which should be set if the desired result is that the threads halt AND the manifest get sent to the network drive.
+        
+        Parameters:
+        --------------
+        isFinished: Set this boolean to true if the user is done photographing and would like to send the manifest to the processing computer. 
+        """
+        self.cancelEvent.set()
+        self.finished = isFinished
 
     def run(self):
-        """Manages the threads for the watcher scripts. Basically schedules threads to listen for changes to a folder on the filesystem
-        and sleeps until there is either an exception or the user presses the F key. Note that this non-blocking user input check is 
-        Windows Only and will have to be fixed to make this script mac/linux compatible. When the user hits the F key, if they are running
-        the listen_and_send scripts, it will send a manifest of the files that were transfered."""
+        """Photosender::Run Manages the threads for the watcher scripts. Basically schedules threads to listen for changes to a folder on the filesystem
+        and sleeps until there is either an exception or the user sets the cancel event using the cancel button in the ui. While waiting for new files, it adds
+        the previously added files to the manifest. When a cancel event comes through, and if self.finished is True, it sends the manifest, otherwise, the manifest remains unsent
+        this is to allow for both a stop and cancel button."""
 
-        global MANIFEST
-        MANIFEST = Manifest(self.projectname)
-        handler = WatcherSenderHandler()
+        manifest = Manifest(self.projectname)
+        manifestqueue=Queue()
+        handler = FSSenderHandler(self.cancelEvent,manifestqueue,self.shouldPrune)
 
         self.observer.schedule(handler,self.watched_dir,recursive=True)
         self.observer.start()
         try:
             get_logger().info("Waiting for pictures to process.")
-            listening=True
-            print("Type F to Finish.")           
-            while listening :
+            while not self.cancelEvent.is_set():
                 time.sleep(1)
-                if self.stoprequest:
-                    listening=False
-                    self.observer.stop()
-                    self.stoprequest=False
+                while not manifestqueue.empty():
+                    manifest.addFile(manifestqueue.get())
+            self.observer.stop()
+            if self.finished:
+                manifestpath=manifest.finalize(".").resolve()
+                get_logger().info("Sending manifest %s",manifestpath)
+                netdrive = Configurator.getConfig().getProperty("watcher","networkdrive")
+                transferscripts.transferToNetworkDirectory(netdrive,[manifestpath])
         except Exception as e:
             get_logger().error("Halting threads due to exception %s",e)
             self.observer.stop()
+            raise(e)
         finally:
             get_logger().info("Watcher stopping.")
             self.observer.join()
-        if  self.isSender and MANIFEST:
-           
-            manifestpath=MANIFEST.finalize(".").resolve()
-            get_logger().info("Sending manifest %s",manifestpath)
-            netdrive = Configurator.getConfig().getProperty("watcher","networkdrive")
-            transferscripts.transferToNetworkDirectory(netdrive,[manifestpath])
+            self.cancelEvent.clear()
+            self.finished=False
 
-def listen_and_send(args):
-    """Listens for incoming cr2 files and sends them to the network drive to be converted to tifs and then processed"
-
-    Parameters:
-    --------------------------
-    args:Argument object from the command line with the following attributes: inputdir: a directory to listen on, in this case, the palce where
-    pics will be created by the photography software . 
-    Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
-    """
-    inputdir =  Path(Configurator.getConfig().getProperty("watcher","listen_and_send"))
-    #global PRUNE
-    prune = bool(args.prune)
-    masktype = MaskingOptions(int(args.maskoption) if args.maskoption else 0)
-    if not inputdir.exists() or not inputdir.is_dir():
-        get_logger()(f"Cannot listen on a directory that does not exist: {inputdir}")
-    watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
-    watcher.maskmode = masktype
-
-    watcher.run()
 
 def buildModelFromManifest(tq:Queue,manifestfile:Path, maskmode:MaskingOptions):
     """buildModelFromManifest: Builds a model from unconverted raw files (if necessary) using the source files found in a json manifest. 
@@ -603,18 +620,6 @@ if __name__=="__main__":
     watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
     watcherparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
     watcherparser.set_defaults(func=watchAndProcess)      
-
-    listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
-    listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    listensendparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
-                            help = "How do you want to build masks:0 = no masks,\
-                                    1 = Photoshop droplet(context aware select), \
-                                    2 = Grayscale Thresholding, \
-                                    3 = AI Inference Engine", 
-                            default=0)
-    listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
-    listensendparser.set_defaults(func=listen_and_send)    
 
     args = parser.parse_args()
     if hasattr(args,"func"):

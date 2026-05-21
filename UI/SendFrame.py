@@ -51,7 +51,7 @@ class SendFrame(PipelineFrameBase):
             self.state = "running"
             Configurator.getConfig().setProperty("ortery","networkdrive",args.target_dir.get())
             phscripts.PRUNE = args.should_prune.get()
-            self.watcher = phscripts.Watcher(args.input_dir.get(), True, args.projectname.get()) 
+            self.watcher = phscripts.PhotoSender(args.input_dir.get(), True, args.projectname.get()) 
             self.watcher.maskmode = 0
             self.stopbutton.configure(state="normal")
             self.watcher.run()

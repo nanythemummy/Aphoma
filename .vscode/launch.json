@@ -27,7 +27,7 @@
             "request": "launch",
             "program": "multibanded_build.py",
             "console": "integratedTerminal",
-            "args":["E:/automation/SG3-Kea/SG-3 (new)/_input","E:/automation/SG3-Kea/SG-3 (new)/","SG3",]
+            "args":["E:/automation/Setjairetbinet/JPG","E:/automation/Setjairetbinet","A3697_31837.1-2"]
         },
                 {
             "name": "test_multibanded_part_2",
