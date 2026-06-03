@@ -10,10 +10,9 @@ import util
 class Manifest:
     """Class that manages the manifest written to the disk by the listen and send script on the ortery computer. Adds files to an
     internal list and writes them to disk when asked."""
-    def __init__(self, projectname, maskmode):
+    def __init__(self, projectname):
         self.sentfiles = []
         self.projectname = projectname
-        self.maskmode = maskmode
         self.starttime = datetime.now()
         self.endtime = None
     def addFile(self, filepath):
@@ -33,19 +32,18 @@ class Manifest:
         returns: the path+filename that it wrote.
         """
         self.endtime = datetime.now()
-        outputjson = {self.projectname:
-                      {    "maskmode":self.maskmode,
+        outputjson ={   "projectname":self.projectname,
                           "files":self.sentfiles,
                           "photo_start_time":datetime.strftime(self.starttime,"%Y-%m-%d %H:%M:%S.%f"),
                           "photo_end_time":datetime.strftime(self.endtime,"%Y-%m-%d %H:%M:%S.%f")
                       }
-        }
-        filenametowrite = PurePath(outputdir,f"{self.projectname}_manifest.txt")
+        
+        filenametowrite = PurePath(outputdir,f"{self.projectname}_manifest.json")
         with open(filenametowrite,'w',encoding='utf-8') as f:
             json.dump(outputjson,f)
         return Path(filenametowrite)
     
-def generate_manifest(jobname:str,directory:str ,mode:int):
+def generate_manifest(jobname:str,directory:str ):
     """Generates a manifest based on a file full of folders. 
     
     Parameters:
@@ -56,8 +54,7 @@ def generate_manifest(jobname:str,directory:str ,mode:int):
 
     returns: a dictionary which should be written to a json file.
     """
-    manifest = Manifest(jobname,mode)
-    files = []
+    manifest = Manifest(jobname)
     for f in listdir(directory):
         if f != 'Thumbs.db':
             manifest.addFile(f)
@@ -68,7 +65,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="buildManifest")
     parser.add_argument("projectname", help="A string naming the project.")
     parser.add_argument("imagedir",help="Directory of images for which to build a manifest")
-    parser.add_argument("maskingmode",choices=['0','1','2','3','4'], help="What type of masks should the manifest tell the recipient to build? 0=None, 1=From file, generate with Photoship droplet.")
     args = parser.parse_args()
-    generate_manifest(args.projectname, args.imagedir, int(args.maskingmode))
+    generate_manifest(args.projectname, args.imagedir)
 

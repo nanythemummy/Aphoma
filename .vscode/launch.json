@@ -4,14 +4,30 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
+        {
+            "name": "orterysim",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "OrterySimulator.py",
+            "console": "integratedTerminal",
+            "args":["E:\\testfiles", "E:\\ortest", "400"]
+        },
+        {
+            "name": "DebugConversionStandalone",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "photogrammetryScripts.py",
+            "console": "integratedTerminal",
+            "args":["convert","e:\\testfiles","e:\\temp","--profile_correction"]
+        
+        },
         {
             "name": "test_multibanded",
             "type": "debugpy",
             "request": "launch",
             "program": "multibanded_build.py",
             "console": "integratedTerminal",
-            "args":["E:/automation/SG3-Kea/SG-3 (new)/_input","E:/automation/SG3-Kea/SG-3 (new)/","SG3",]
+            "args":["E:/automation/Setjairetbinet/JPG","E:/automation/Setjairetbinet","A3697_31837.1-2"]
         },
                 {
             "name": "test_multibanded_part_2",
@@ -65,13 +81,13 @@
 
         },
         {
-            "name": "Python Debugger: MetashapeTools",
+            "name": "Python Debugger: ConversionTasks",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "photogrammetryScripts.py",
             "console": "integratedTerminal",
 
-            "args":["build", "E22373", "D:\\Meroitic Fineware E33272\\TIF","D:\\Meroitic Fineware E22373","config.json"]
+            "args":["convert",  "E:\\Conversion\\RAW","E:\\Conversion\\TIF","--profile_correction"]
 
 
         },

@@ -134,7 +134,7 @@ class MetashapeTask_CopyMarkersFromChunk(MetashapeTask):
         return "Metashape Task: Copy markers from a specified second chunk"
     
     def setup(self):
-        success, code = super().setup
+        success, code = super().setup()
         if success and self.chunk:
             doc = self.doc
             for c in doc.chunks:
@@ -147,6 +147,7 @@ class MetashapeTask_CopyMarkersFromChunk(MetashapeTask):
                 success = ErrorCodes.MISSING_TARGET_CHUNK
         return success, code
     
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success, code = super().setup()
         if not success:
@@ -182,6 +183,7 @@ class MetashapeTask_ResizeBoundingBox(MetashapeTask):
     def __repr__(self):
         return "Metashape Task: SetBoundingBoxDimensions"
     
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         
         getGlobalLogger(__name__).info("At least I got here.")
@@ -214,7 +216,7 @@ class MetashapeTask_CopyBoundingBoxToChunks(MetashapeTask):
     def __repr__(self):
         return "Metashape Task: Copy Bounding Box to Chunks."
     
-    
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success, code = super().execute()
         if not success:
@@ -272,7 +274,7 @@ class MetashapeTask_RotateBoundingBox(MetashapeTask):
         return "Metashape Task: Set Boundingbox Rotation"
     
 
-    
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success,code= super().execute()
         if not success:
@@ -305,7 +307,8 @@ class MetashapeTask_ImportModel(MetashapeTask):
             success = False
             code = ErrorCodes.INVALID_FILE
         return success,code
-   
+    
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success,code = super().execute()
         if not success:
@@ -350,7 +353,7 @@ class MetashapeTask_ChangeImagePathsPerChunk(MetashapeTask):
     def __repr__(self):
         return "Metashape Task: Replace images in chunk with others."
     
-    
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success,code = super().execute()
         if success:
@@ -417,6 +420,7 @@ class MetashapeTask_ResizeBoundingBoxFromMarkers(MetashapeTask):
             code = ErrorCodes.MISSING_MARKER
         return success,code
     
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success, code = super().execute()
         if success:

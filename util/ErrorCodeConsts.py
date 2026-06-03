@@ -23,6 +23,15 @@ class ErrorCodes(Enum):
     BBOX_SIZE_MISMATCH = 18
     REPLACE_IMAGES_FAILURE=19
     FAILURE_TO_REMOVE_FILE = 20
+    FILE_CONVERSION_FAILURE = 21
+    MASK_CREATION_FAILURE = 22
+    CONFIGURATION_ERROR = 23
+    INFERENCE_ENGINE_FAILURE = 24
+    NO_MASKS_AVAILABLE = 25
+    EXTERNAL_EXECUTABLE_MISSING = 26
+    INVALID_BLENDER_SCRIPT_DIRECTORY=27
+    BLENDER_SCRIPT_FAILURE = 28
+
 
     @classmethod
     def getFriendlyStrings(cls):
@@ -46,7 +55,15 @@ class ErrorCodes(Enum):
                 "Invalid chunk specified for multichunk operation.",
                 "Bounding box size mismatch.",
                 "Failure to replace images in chunk.",
-                "Failure to remove file or folder."]
+                "Failure to remove file or folder.",
+                "File Conversion Failure.",
+                "Mask Creation Failure.",
+                "Invalid entry in config file.",
+                "AI Masking Inference Engine Error",
+                "No masks were found",
+                "Missing external executable",
+                "Invalid blender script directory. Check config.",
+                "Blender Script Failure"]
     @classmethod
     def numToFriendlyString(cls, num): 
         if isinstance(num, ErrorCodes):

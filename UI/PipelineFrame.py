@@ -1,7 +1,7 @@
 import abc
 from tkinter import ttk
 from tkinter import messagebox
-from threading import Thread
+import threading
 
 class FormItemsInterface(metaclass=abc.ABCMeta):
     @classmethod
@@ -20,7 +20,7 @@ class PipelineFrameBase(ttk.Frame):
         if not validate["valid"]:
             messagebox.showerror("Validation Error", validate["message"])
             return
-        thr = Thread(target=lambda:self.task(args),daemon=False)
+        thr = threading.Thread(target=lambda:self.task(args),daemon=False)
         self.threads.append(thr)
         thr.start()
 
@@ -34,11 +34,13 @@ class PipelineFrameBase(ttk.Frame):
 
     def disable_enable_all(self,disable=True):
          for child in self.winfo_children():
-            if child.widgetName != 'frame': #frames have no state
+            if isinstance(child,ttk.Button):
                 if not disable:
                     child.configure(state='normal')
                 else:
-                    child.configure(state='disabled')
+                    if child.cget("text").lower() != "cancel":
+                         child.configure(state='disabled')
+
     def destroy(self):
         super().destroy()
         for t in self.threads:

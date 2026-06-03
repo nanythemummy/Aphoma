@@ -7,17 +7,20 @@
             "DNG_Converter":"C:\\Program Files\\Adobe\\Adobe DNG Converter\\Adobe DNG Converter.exe",
             "SmartSelectDroplet":"util/MaskBySmartSelect.exe",
             "FuzzySelectDroplet":"util/MaskByFuzzySelect.exe",
+            "ExifTool":"c:\\exiftool\\exiftool.exe",
             "thresholding_lower_gray_threshold":230,
             "canny_lower_intensity_threshold": 0,
             "canny_higher_intensity_threshold": 80,
             "Droplet_Output":"C:\\tempmasks",
             "Camera":"",
             "Lens":"",
-            "Source_Type":".cr2",
-            "Destination_Type":".jpg",
+            "Source_Type": [".CR2",".NEF"],
+            "Destination_Type": [".jpg",".tif"],
+            "Build_From_Format":".jpg",
             "ListenerDefaultMasking":"SmartSelectDroplet",
             "CV2_Export_Type":".png",
-            "Roboflow_API_Key":""
+            "Roboflow_API_Key":"",
+            "Exiftool_Path":"/opt/homebrew/bin/exiftool"
 
         },
 

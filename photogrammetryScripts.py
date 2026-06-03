@@ -2,10 +2,14 @@
 
 
 import os.path, json, argparse
+from os import makedirs
 import time
 from pathlib import Path
+from queue import Queue
+import threading
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from util.ErrorCodeConsts import ErrorCodes
 from util.util import MaskingOptions, copy_file_to_dest, should_prune, get_export_filename
 from util.PipelineLogging import getLogger as getGlobalLogger
 from util.Configurator import Configurator
@@ -13,38 +17,32 @@ from util.InstrumentationStatistics import InstrumentationStatistics as statisti
 from util.InstrumentationStatistics import Statistic_Event_Types
 from processing import image_processing
 from transfer import transferscripts
+from tasks import MetashapeTasks,BlenderTasks,ConversionTasks,MaskingTasks
+from util import MetashapeFileHandleSingleton
 
 from postprocessing import MeshlabHelpers
 from util.buildManifest import Manifest
+
 
 def get_logger():
     return getGlobalLogger(__name__)
 #Global Variables
 #because the callback methods are static for the watchers, we need a place to store the manifest of the files they are transfering.
 MANIFEST = None
-#This is the config file. I'm storing it in a global variable so I don't have to pass it or load it from disk constantly.
-_CONFIG = {}
+
 #prune is a boolean on whether the listener should prune pictures from the ortery or not. Probably ought to come up with
 # a non global var way of doing this.
 PRUNE = False
-#logger is a logger. all methods to go to the console in the ui should use this so that we can filter the normal metashape and debugging messages from things like 
-#instrumentation.
+
+FINISHED = False
 
 #These scripts  takes input and arguments from the command line and delegates them elsewhere.
 #For individual transfer scripts see the transfer module, likewise, see the processing module for processing scripts.
 
-def process_images(args):
-    """Entry point for one-off image processing via the process command. Runs lens profile corrections and color correction
-    on an image and resaves it as a tif in the directory specified. 
-    
-    Parameters:
-    args: an argument object passed by the command line that has attributes inputimage (str) and outputdir (str)
-      
-    """
-    image_processing.process_image(args.inputimage,args.outputdir,_CONFIG["processing"])
 
 
-def verifyManifest( manifest:dict, basedir):
+
+def verifyManifest(tq:Queue,manifest:dict, basedir:Path,mode:MaskingOptions, report_stats = True, cancelevent:threading.Event = None):
     """Goes through a dictionary taken from a manifest file on disk and checks to see that all of
     the RAW files are there, all the mask files have been made, and all of the tifs have been made.
     
@@ -55,49 +53,61 @@ def verifyManifest( manifest:dict, basedir):
     
     returns: succeeded, full_manifest, where succeeded is true if all the masks and tifs and raw files expected were found, and 
     manifest contains each of these files and their full paths in the format {"raw":[],"tif":[],"masks":[]}"""
+
     #check to see if all the masks and tifs have been made for this manifest.
+    get_logger().info("Verifying")
     config = Configurator.getConfig()
     scratchdir = config.getProperty("watcher","temp_scratch")
+    processedpath = Path(scratchdir,"processed")
     foundallfiles=True
-    project = next(iter(manifest))
-    files = manifest[project]["files"]
-    destformat = config.getProperty("processing","Destination_Type").upper()
-    fullmanifest = {"source":[],"masks":[],"processed":[]}
-    maskpath = os.path.join(scratchdir,"Masks")
+    project = manifest["projectname"]
+    files = [Path(basedir,Path(f).name) for f in manifest["files"]]
+    desttypes = config.getProperty("processing","Destination_Type") #strips out the leading dot on the extension.
+    fullmanifest = {"source":[],"masks":[],"project":project}
+    for d in desttypes:
+        fullmanifest[d[1:]]=[]
+    maskpath = Path(processedpath,"Masks")
     maskext=config.getProperty("photogrammetry","mask_ext")
-    isMasked = manifest[project]["maskmode"] !=0
+    is_masked = mode !=MaskingOptions.NOMASKS
     for f in files:
-        basename_with_ext = os.path.split(f)[1]
-        basename = os.path.splitext(basename_with_ext)[0]
-        if not os.path.exists(os.path.join(basedir,basename_with_ext)):
-            get_logger().warning("Did not find Original file: %s in %s. Manifest verification will fail.",basename_with_ext,basedir)
-            foundallfiles &= False
-        elif foundallfiles:
+        if f.exists() and f.is_file():
             #check to see if the processed version of the original image exists in the expected location, and if so, inventory it.
-            fullmanifest["source"].append(os.path.join(basedir,basename_with_ext))
-            processedpath = os.path.join(scratchdir,"processed")
-            if not os.path.exists(os.path.join(processedpath,f"{basename}{destformat}")):
-                get_logger().info("Did not find %s  file for %s in %s. Attempting to convert or transfer.",destformat,basename_with_ext,processedpath)
-                image_processing.process_image(os.path.join(basedir,basename_with_ext),processedpath,destformat)                   
-
-            processedfile = os.path.join(processedpath,f"{basename}{destformat}")
-            fullmanifest["processed"].append(processedfile)
-            foundallfiles &= os.path.exists(processedfile)
-            if isMasked:
-                if not os.path.exists(os.path.join(maskpath,f"{basename}{maskext}")):
-                    get_logger().info("Warning: did not find mask for %s in %s. Attempting to make one.", basename_with_ext,maskpath)
-                    image_processing.build_masks(processedfile,
-                                                 maskpath,
-                                                 manifest[project]["maskmode"])
-                maskfile = os.path.join(maskpath,f"{basename}{maskext}")
+            fullmanifest["source"].append(f)
+            for t in desttypes:
+                destsubfolder = t[1:]
+                subfolder = Path(processedpath,destsubfolder)
+                processedfile = Path(subfolder,f"{f.stem}{t}")
+                if destsubfolder not in fullmanifest.keys():
+                    fullmanifest[destsubfolder]=[]
+                if not processedfile.exists():
+                    if f.suffix==t: #ie, we added a file that is one of the destination types,
+                        copy_file_to_dest([f],subfolder)
+                    else:
+                        get_logger().info("Did not find %s  file for %s in %s. Attempting to convert or transfer.",t,f.stem,processedpath)
+                        tq=setupConversionTasks(tq,[f],processedpath,False)     
+                fullmanifest[destsubfolder].append(processedfile)
+            if is_masked:
+                maskfile =Path(maskpath,f"{f.stem}{maskext}")
+                if not maskfile.exists():
+                    get_logger().info("Warning: did not find mask for %s in %s. Attempting to make one.", f.name,maskpath)
+                    masksource = Path(processedpath,"jpg",f"{f.stem}.jpg")
+                    tq=setupMaskingTasks(tq,[masksource],processedpath,mode)
                 fullmanifest["masks"].append(maskfile)
-                foundallfiles &= os.path.exists(maskfile)
-    return foundallfiles,fullmanifest
+        else:
+            get_logger().warning("Did not find Original file: %s in %s. Manifest verification will fail.",f.name,basedir)
+            foundallfiles = False
+    executeTaskQueue(tq,True,False,cancelevent)
+    return foundallfiles,fullmanifest, tq
 
-class WatcherSenderHandler(FileSystemEventHandler):
+class FSSenderHandler(FileSystemEventHandler):
     """Listen in the specified directory for cr2 files. It extends Watchdog.FilesystemEventHandler"""
-    @staticmethod
-    def on_any_event(event):
+    def __init__(self, cancel_event:threading.Event, manifest_queue:Queue, shouldprune = False ):
+        self.should_pune = shouldprune
+        self.cancel_event = cancel_event
+        self.manifest_queue = manifest_queue
+        super().__init__()
+    
+    def on_any_event(self,event):
         """Event handler for any file system event. When an event of the type file created happens, if a CR2 file is created, the files will be processed and converted to TIF
         if a manifest file is created, a model will be built based on the manifest's files.
         Parameters:
@@ -105,62 +115,67 @@ class WatcherSenderHandler(FileSystemEventHandler):
         event: a watchdog.event from the watchdog library.
         """
 
-        ext = os.path.splitext(event.src_path)[1].upper()
-        if event.event_type=="created" and ext in[".CR2",".JPG",".TIF"]:
-            fn = os.path.splitext(event.src_path)[0]
+        eventpath = Path(event.src_path)
+        allowableextensions = Configurator.getConfig().getProperty("processing","Source_Type")
+        if event.event_type=="created" and eventpath.suffix in allowableextensions:
+            fn = eventpath.name
             if not fn.endswith('rj'):#Ortery makes two files, one ending in rj, when it imports to the temp folder.
-                if not should_prune(event.src_path):
+                if not should_prune(eventpath):
                     last_size = -1
-                    current_size = os.path.getsize(event.src_path)
+                    current_size = eventpath.stat().st_size
                     while True:
                         time.sleep(1)
                         last_size = current_size
-                        current_size = os.path.getsize(event.src_path)
+                        current_size = eventpath.stat().st_size
                         get_logger().debug("%s :%s for %s",last_size,current_size,event.src_path)
                         if current_size==last_size:
                             break
-                    if current_size >0:    
+                    if current_size >0:   
                         netdrive = Configurator.getConfig().getProperty("watcher","networkdrive")
                         transferscripts.transferToNetworkDirectory(netdrive, [event.src_path])
                         fn = Path(event.src_path).name
-                        global MANIFEST
-                        MANIFEST.addFile(fn)
-                        get_logger().info("Added file to manifest: %s",fn)
+                        self.manifest_queue.put(fn)
 
 
-class WatcherRecipientHandler(FileSystemEventHandler):
-    """This is the handler class for the watcher. It handles any filesystem event that happens while the watcher is running.
-    It extends Watchdog.FilesystemEventHandler."""
-    @staticmethod
-    def process_incomming_file(eventpath):
+class FSWatcherHandler(FileSystemEventHandler):
+    def __init__(self, eventqueue: Queue, cancel_event):
+        self._event_queue = eventqueue
+        self.cancel_event = cancel_event
+        super().__init__()
+
+   
+    def process_incomming_file(self,eventpath):
+        
         config = Configurator.getConfig()
-        if eventpath.endswith("_manifest.txt"):
-            build_model_from_manifest(eventpath)
+        scratchdir = config.getProperty("watcher","temp_scratch")
+        desttype =config.getProperty("processing","Destination_Type")
+        defmask = config.getProperty("processing","ListenerDefaultMasking")
+        buildtype = config.getProperty("processing","Build_From_Format")
+        mode = MaskingOptions.friendlyToEnum(defmask)
+        if str(eventpath).endswith("_manifest.json"):
+            buildModelFromManifest(self._event_queue,eventpath,mode)
         else:
-            scratchdir = config.getProperty("watcher","temp_scratch")
-            maskpath = os.path.join(scratchdir,config.getProperty("photogrammetry","mask_path"))
-            desttype =config.getProperty("processing","Destination_Type")
-            imagetypes = [".CR2",".JPG",".TIF"]
-            eventpathext = os.path.splitext(eventpath)[1].upper()
-            processedpath = os.path.join(scratchdir,"processed")
-            basename_with_ext = os.path.split(eventpath)[1]
-            basename = os.path.splitext(basename_with_ext)[0]
-            
-            if eventpathext in imagetypes and eventpathext != desttype.upper():
-                image_processing.process_image(eventpath,processedpath,desttype)
-            elif eventpathext ==desttype.upper():
-                copy_file_to_dest([eventpath],processedpath, False)
+            e = Path(eventpath)
+            eventpathext = Path(eventpath).suffix.lower()
+            processedpath = Path(scratchdir,"processed")
+            predictedfinal = Path(processedpath,buildtype[1:],f"{e.stem}{buildtype}")
+            filedest = Path(processedpath,eventpath.suffix[1:])
+            if eventpathext.lower() not in desttype or len(desttype)>0: 
+                #basically run this if there are multiple conversion types and the input is one of them or if the input is not in the list of output types.
+                setupConversionTasks(self._event_queue,[e],processedpath, False)
+                if eventpathext.lower() in desttype:
+                    copy_file_to_dest([eventpath],filedest, False)
+                
             else:
-                print("Unrecognized filetype: {eventpathext}")
-                return
-            defmask = config.getProperty("processing","ListenerDefaultMasking")
-            mode = MaskingOptions.friendlyToEnum(defmask)
+                copy_file_to_dest([eventpath],filedest, False)
+            
             if mode !=  MaskingOptions.NOMASKS.value:
-                image_processing.build_masks(os.path.join(processedpath,f"{basename}{desttype}"),maskpath,mode)
+               setupMaskingTasks(self._event_queue,[predictedfinal],processedpath,mode)
+                    
+            executeTaskQueue(self._event_queue,True,False,self.cancel_event)
 
-
-    @staticmethod
-    def on_any_event(event):
+   
+    def on_any_event(self,event):
         """Event handler for any file system event. When an event of the type file created happens, if a CR2 file is created, the files will be processed and converted to TIF
         if a manifest file is created, a model will be built based on the manifest's files.
         Parameters:
@@ -168,214 +183,401 @@ class WatcherRecipientHandler(FileSystemEventHandler):
         event: a watchdog.event from the watchdog library.
         """
         if event.event_type=="created":
-            ext = os.path.splitext(event.src_path)
-            if len(ext) <2:
-                return
-            extlist = [".jpg",".cr2",".tif",".txt",".json"]
-            if ext[1].lower() in extlist:
+            newpath = Path(event.src_path)
+            ext = newpath.suffix
+            if ext.upper() in [".JPG",".CR2",".TIF",".NEF",".JSON"]:
                 last_size = -1
-                current_size = os.path.getsize(event.src_path)
-                while True:
-                    time.sleep(1)
+                current_size = newpath.stat().st_size
+                while True and not self.cancel_event.is_set():
+                    time.sleep(3)
                     last_size = current_size
-                    current_size = os.path.getsize(event.src_path)
-                    print(f"{last_size} :{current_size} for {event.src_path}")
-                    
+                    current_size = newpath.stat().st_size
+                    print(f"{last_size} :{current_size} for {newpath}")
                     if current_size==last_size:
                         break
                 if current_size != 0:
-                    WatcherRecipientHandler.process_incomming_file(event.src_path)
+                    self.process_incomming_file(newpath)
 
-class Watcher:
-    """These classes are part of a filesystem watcher which watches for the 
-    appearance of a manifest file in the desired directory, then builds a model with the pictures
-    
+
+
+def startWatcher(watchdir:Path, cancelevent:threading.Event = None):
+    """startWatcher: This is the function that the UI calls when the user wants to listen for incomming files on a network directory to build a model.
+    I'm debating whether to just wrap it in a class like I did with Photosender.
+
+        Parameters:
+        ------------
+        watchdir: A path to watch for incoming files.
+        cancelevent: A threading.event that gets set when the user presses a cancel button.
+        
+    """
+    eq = Queue()
+    fshandler = FSWatcherHandler(eq, cancelevent)
+    fsobserver = Observer()
+    fsobserver.schedule(fshandler,watchdir,recursive=True)
+    fsobserver.start()
+    while not cancelevent.is_set():
+        time.sleep(3)
+    fsobserver.stop()
+    fsobserver.join()
+
+
+class PhotoSender:
+    """This class waits for files to appear in a specified directory, and if they are image files, it sends them to a network drive, based on whether
+    they should be pruned based on the pruning algorithm and whether they are files that can be processed by the system. It adds files that arrive
+    to a manfest which is set to the network drive when the photography is done or the user cancels via the UI.
+    It acts as a wrapper for a Watchdog:Observer class.
+
     Methods:
     ------------------------
     __init__(self,directory):initializes the class to watch a particular directory, configurabe in config.json.
     run(): makes a watcherHandler object and waits for it to intercept filesystem events.
     """
-    def __init__(self,  watchdir:str, isSender = False, projectname=""):
+
+    def __init__(self,  watchdir:Path, cancelevent:threading.Event, projectname:str="",  shouldPrune:bool=False):
+        """Photosender::__init__ initializes a Photosender object. This acts as a wrapper class for Watchdog:Observer. It has the logic which launches threads to watch for incomming calls on the filesystem
+        and it also checks the manifest queue to see if there are any new files in the manifest queue to add to the manifest. It sends the manifest when finished.
+        It should be run on the ortery computer or a computer attached to a camera taking pictures.
+
+        Parameters:
+        ------------
+        watchdir: A path to watch for incoming files.
+        cancelevent: A threading.event that gets set when the user presses a cancel button or anything else.
+        shouldPrune: should not transfer every xth picture according to the pruning tuning in config.json
+        
+        """
         self.observer = Observer()
         self.watched_dir = watchdir
-        self.isSender = isSender
         self.projectname = projectname
-        self.maskmode = 0
+        self.shouldPrune = shouldPrune
         self.stoprequest = False
+        self.cancelEvent = cancelevent
+        self.finished = False
+
+    def setCancelled(self,isFinished:bool=False):
+        """Photosender::setCancelled. sets the cancel threading event, signalling for all threads to halt and for the for loop in run to stop looping. It has a isFinished value
+        which should be set if the desired result is that the threads halt AND the manifest get sent to the network drive.
+        
+        Parameters:
+        --------------
+        isFinished: Set this boolean to true if the user is done photographing and would like to send the manifest to the processing computer. 
+        """
+        self.cancelEvent.set()
+        self.finished = isFinished
 
     def run(self):
-        """Manages the threads for the watcher scripts. Basically schedules threads to listen for changes to a folder on the filesystem
-        and sleeps until there is either an exception or the user presses the F key. Note that this non-blocking user input check is 
-        Windows Only and will have to be fixed to make this script mac/linux compatible. When the user hits the F key, if they are running
-        the listen_and_send scripts, it will send a manifest of the files that were transfered."""
+        """Photosender::Run Manages the threads for the watcher scripts. Basically schedules threads to listen for changes to a folder on the filesystem
+        and sleeps until there is either an exception or the user sets the cancel event using the cancel button in the ui. While waiting for new files, it adds
+        the previously added files to the manifest. When a cancel event comes through, and if self.finished is True, it sends the manifest, otherwise, the manifest remains unsent
+        this is to allow for both a stop and cancel button."""
 
-        if not self.isSender:
-            handler = WatcherRecipientHandler()
-            
-        else:
-            global MANIFEST
-            MANIFEST = Manifest(self.projectname, self.maskmode)
-            handler = WatcherSenderHandler()
+        manifest = Manifest(self.projectname)
+        manifestqueue=Queue()
+        handler = FSSenderHandler(self.cancelEvent,manifestqueue,self.shouldPrune)
 
         self.observer.schedule(handler,self.watched_dir,recursive=True)
         self.observer.start()
         try:
             get_logger().info("Waiting for pictures to process.")
-            listening=True
-            print("Type F to Finish.")           
-            while listening :
+            while not self.cancelEvent.is_set():
                 time.sleep(1)
-                if self.stoprequest:
-                    listening=False
-                    self.observer.stop()
-                    self.stoprequest=False
+                while not manifestqueue.empty():
+                    manifest.addFile(manifestqueue.get())
+            self.observer.stop()
+            if self.finished:
+                manifestpath=manifest.finalize(".").resolve()
+                get_logger().info("Sending manifest %s",manifestpath)
+                netdrive = Configurator.getConfig().getProperty("watcher","networkdrive")
+                transferscripts.transferToNetworkDirectory(netdrive,[manifestpath])
         except Exception as e:
             get_logger().error("Halting threads due to exception %s",e)
             self.observer.stop()
+            raise(e)
         finally:
             get_logger().info("Watcher stopping.")
             self.observer.join()
-        if  self.isSender and MANIFEST:
-           
-            manifestpath=MANIFEST.finalize(".").resolve()
-            get_logger().info("Sending manifest %s",manifestpath)
-            netdrive = Configurator.getConfig().getProperty("watcher","networkdrive")
-            transferscripts.transferToNetworkDirectory(netdrive,[manifestpath])
+            self.cancelEvent.clear()
+            self.finished=False
 
-def listen_and_send(args):
-    """Listens for incoming cr2 files and sends them to the network drive to be converted to tifs and then processed"
 
-    Parameters:
-    --------------------------
-    args:Argument object from the command line with the following attributes: inputdir: a directory to listen on, in this case, the palce where
-    pics will be created by the photography software . 
-    Projectname: a projectname to be written to the manifest which will be sent when pics are finalized.
-    """
-    inputdir =  Configurator.getConfig().getProperty("watcher","listen_and_send")
-    global PRUNE
-    PRUNE = args.prune
-    masktype = int(args.maskoption) if args.maskoption else 0
-    if not os.path.exists(inputdir):
-        print(f"Cannot listen on a directory that does not exist: {inputdir}")
-    watcher = Watcher(inputdir,isSender=True, projectname = args.projectname)
-    watcher.maskmode = masktype
-
-    watcher.run()
-        
-def watch_and_process_cmd(args):
-    """function that controls the watcher script which initializes a build when pictures and a manifest are added to a specified directory.
-    Parameters:
-    ---------------
-    args: Argument object handed from the command line which has the following attributes:
-    inputdir: a directory to listen on. If this is not specified in the command line, the watcher->listen directory 
-    will be used from config.json.
-    """
-    inputdir = args.inputdir if args.inputdir else Configurator.getConfig().getProperty("watcher","listen_directory")
-    scratchdir = Configurator.getConfig().getProperty("watcher","temp_scratch")
-    if not os.path.exists(scratchdir):
-        os.mkdir(scratchdir)
-    if not inputdir:
-        print("Input Directory needed if not provided in config.json. (Check Watcher:Listen_Directory)")
-        return
-    watcher = Watcher(inputdir,isSender=False)
-    watcher.run()
-
-def build_snapshot(projname,basefolder):
-    cfg=Configurator.getConfig()
-    fn  = get_export_filename(projname,"obj")
-    objpath = Path(basefolder,"output",f"{fn}.obj")
-    if objpath.exists():
-        MeshlabHelpers.snapshot(objpath,
-                                cfg.getProperty("postprocessing","rot_x"),
-                                cfg.getProperty("postprocessing","rot_y"),
-                                cfg.getProperty("postprocessing","rot_z"),True)
-
-#This script contains the full automation flow and is triggered by the watcher
-def build_model_from_manifest(manifestfile:str):
-    """Builds a model from the files listed in a text file manifest.
+def buildModelFromManifest(tq:Queue,manifestfile:Path, maskmode:MaskingOptions):
+    """buildModelFromManifest: Builds a model from unconverted raw files (if necessary) using the source files found in a json manifest. 
+    This gets called by the watcher handler from the ortery and is meant to be used when the masking tasks or conversion tasks are partly done but the model has not
+    yet been built because the photography is still underway. When the photography is finished, a manifest is sent inventorying the original files. This builds
+    a model from that list.
 
     Parameters:
     -----------
-    manifest: A path to a text file manifest with a comma seperated list of paths to image files.
+    tq: a Queue of tasks--this can be partially filled or not filled at all. Needed tasks will be added by the verify manifest function.
+    manifest: A pathlib:Path to a text file manifest with a comma seperated list of paths to image files.
+    maskmode: An instance of maskingOptions corresponding to the type of masks that ought to be made for each picture in the manifest Pass MaskingOptions:None for none.
+
+    It uses the following config values:
+    watcher:project_base -- the user configures a place to store the model and its intermediary files including masks.
+    photogrammetry:mask_path -- the subdirectory in which masks will be stored ( or moved from the temp directory where they are placed when they are being made on the fly.)
+    processing:Destination_type -- a list of the types of image files that the incoming raw files will be converted to, ie ["jpg","tif"]
+    processing:Build_From_Format -- the image format which will be used to build the model. If you don't want a crash, it should be in the list processing:Destination_type.
+        
     """
-    config = Configurator.getConfig()
-    filestoprocess=[]
-    parentdir= os.path.abspath(os.path.join(manifestfile,os.pardir))
     manifest = {}
+    parentdir= Path(manifestfile).parent
+    config = Configurator.getConfig()
     with open(manifestfile,"r",encoding="utf-8") as f:
         manifest = json.load(f)
-    projname = next(iter(manifest))
-    masktype = manifest[projname]["maskmode"] = MaskingOptions(manifest[projname]["maskmode"]) or MaskingOptions.friendlyToEnum(config.getProperty("processing","ListenerDefaultMasking"))
-    sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_TAKE_PHOTO,
-                                                        manifest[projname]["photo_start_time"])
-    statistics.getStatistics().timeEventEnd(sid,
-                                             manifest[projname]["photo_end_time"])
-    succeeded, filestoprocess = verifyManifest(manifest, parentdir)
+    sid = statistics.getStatistics().timeEventStart(Statistic_Event_Types.EVENT_TAKE_PHOTO, manifest["photo_start_time"])
+    statistics.getStatistics().timeEventEnd(sid, manifest["photo_end_time"])
+    projname = manifest["projectname"]
+    #the following makes sure all conversions are done and all masks are built.
+    succeeded, filestoprocess, tq = verifyManifest(tq,manifest, parentdir,maskmode,True)
 
     if succeeded:
         #if the configured project directory doesn't exist, make it.
-        project_base =os.path.join(config.getProperty("watcher","project_base"))
-        if not os.path.exists(project_base):
-            os.mkdir(project_base)
+        project_base =Path(config.getProperty("watcher","project_base"))
         #setup project directories.
-        project_folder = os.path.join(project_base,projname)
-        if not os.path.exists(project_folder):
-            os.mkdir(project_folder)
-        masks = os.path.join(project_folder,config.getProperty("photogrammetry","mask_path"))
+        project_folder = Path(project_base,projname)
+        if not project_folder.exists() or not project_folder.is_dir():
+            os.makedirs(project_folder)
+        masks = Path(project_folder,config.getProperty("photogrammetry","mask_path"))
         copy_file_to_dest(filestoprocess["masks"],masks, True)
-        processed= os.path.join(project_folder,"processed")
-        copy_file_to_dest(filestoprocess["processed"],processed, True)
-        source = os.path.join(project_folder,"source")
+        source = Path(project_folder,"source")
         copy_file_to_dest(filestoprocess["source"],source, True)
-        build_model(projname,processed,project_folder,masktype,snapshot=True)
+        for t in config.getProperty("processing","Destination_Type"):
+            subfolder = t[1:]
+            processed =Path(project_folder,subfolder)
+            copy_file_to_dest(filestoprocess[subfolder],processed, True)
+        bformat = config.getProperty("processing","Build_From_Format")[1:]
+        buildModel(projname,Path(project_folder,bformat),project_folder,maskmode,snapshot=True,tasks=tq)
 
-                    
-def build_model(jobname,inputdir,outputdir,mask_option=MaskingOptions.NOMASKS,snapshot=False):
-    """Given a folder full of pictures, this function builds a 3D Model.
+def executeTaskQueue(taskqueue:Queue,stop_on_empty:bool=True, report_statistics:bool=True, cancelthreadevent:threading.Event = None):
+    """executeTaskQueue: Given a task queue, this executes tasks until the queue is empty, running the setup, execute, and exit method on each task. 
+    The function returns if an error is encountered on any of these phases. It will also return if the cancelthreadedevent threading event is set--this is set by the 
+    cancel button in the UI.
+
+    Parameters:
+    ------------------
+    task_queue: A queue filled with tasks to execute in the order in which they ought to be executed
+    filestoconvert: stop_on_empty--whether the function should return when the queue is empty or continue executing in hopes that more tasks will be added.
+    This will be useful if the function is ever multithreaded.
+    report_statistics: Reports the time taken for each class of tasks on the end of the run.
+    cancelthreadedevent: an event which can be set by another thread. When the event is set, the queue stops being processed. Now, it gets set by the UI.
+
+    """
+    get_logger().info("Executing Tasklist.")
+    succeeded = True
+    global FINISHED
+    FINISHED = False
+    phase = "setup"
+    while(not FINISHED):
+        if not taskqueue.empty():
+            task = taskqueue.get()
+            succeeded,code = task.setup()
+            if succeeded:
+                phase = "execute"
+                succeeded, code =task.execute()
+                if succeeded:
+                    phase = "exit"
+                    succeeded,code = task.exit()
+            if not succeeded:
+                get_logger().error("Phase %s for Task %s failed with error %s",phase, str(task),ErrorCodes.numToFriendlyString(code))
+                FINISHED=True
+                break
+        
+        if stop_on_empty and taskqueue.empty() or (cancelthreadevent and cancelthreadevent.is_set()):
+            FINISHED = True
+            get_logger().info("Finished the tasklist, ending.")
+        
+    if report_statistics:
+        statistics.getStatistics().logReport()
+        statistics.destroyStatistics()
+        MetashapeFileHandleSingleton.MetashapeFileSingleton.destroyDoc() #gets created by metashape tasks "align photos."
+
+
+def setupConversionTasks(task_queue:Queue,filestoconvert:list,basedir:Path,profile_correction:bool=False)->Queue:
+    """setupConversionTasks: Given a queue, add tasks needed to convert the specified files to a format that can be used to build a 3d model.
+
+    Parameters:
+    ------------------
+    task_queue: A queue, populated with tasks that ought to be performed before this one. It can be empty.
+    filestoconvert: a list of pathutil:Paths of images.
+    basedir: The directory where the model, and psx file, and all intermediary files will be placed.
+    profile_correction: whether profile correction ought to be used on these pictures. Only pass True if you used a DSLR camera with a detachable lens.
+    This function can be useful if you are using this function to set up a workflow which converts RAW files to TIFs, but do not plan to build a model from the results, 
+    Otherwise,the user should exercise caution because attempting to programmatically correct lens
+    distortion at conversion time may cause unintended consequences in the final model.
+
+    Additionally, this function relies on the following values in config.json, which can be changed via the UI or via editing the json file.
+    Processing:Destination_Type: list of all image  formats that the program should output. Recommended: ["jpg"]. However, some uses may want to convert to jpg and tif for archiving.
+    Processing:Source_Type: a list of allowable picture formats that the program can process: currently cr2 (cannon RAW), nef (Nikon RAW), tif, and jpg.
+    Processing:Build_From_Format: extension for the format of images the model will be built from. Supported are jpg and tif.
+    Returns: the task queue with the new tasks.
+    """
+    config = Configurator.getConfig()
+    conversiontypes = config.getProperty("processing","Destination_Type")
+    sourcetypes = config.getProperty("processing","Source_Type")
+    desttype = config.getProperty("processing","Build_From_Format")
+
+    if desttype not in conversiontypes:
+       get_logger().error(" %s is not in list of conversion formats. Defaulting to JPG.",desttype)
+       desttype = ".jpg" #if we misconfigured this, default to jpg.
+
+    for filepath in filestoconvert:
+        if filepath.is_file() and filepath.suffix.lower() in sourcetypes: #should we bother converting this at all?
+            for c in conversiontypes:
+                if filepath.suffix.lower() != c:
+                    destpath = (Path(basedir,c[1:]))
+                    if not Path(destpath).exists():
+                        os.makedirs(destpath)
+                    if  c == ".jpg":
+                        task_queue.put( ConversionTasks.ConvertToJPG({"input":Path(filepath),"output":Path(destpath),"profile_correction":profile_correction}))
+                    if c==".tif":
+                        task_queue.put( ConversionTasks.ConvertToTIF({"input":Path(filepath),"output":Path(destpath),"profile_correction":profile_correction}))
+    return task_queue
+
+def setupMaskingTasks(task_queue:Queue, pathlist:list, basedir:Path, mask_option=MaskingOptions.NOMASKS)->Queue:
+    """setupMaskingTasks: Given a queue, add tasks needed to build masks for the images in the passed-in list, using the task corresponding for the
+    algorithm specified in mask_optiopns.
+
+    Parameters:
+    ------------------
+    task_queue: A queue, populated with tasks that ought to be performed before this one. If the model is finished, it can be empty.
+    pathlist: a list of pathutil:Paths of images.
+    basedir: The directory where the model, and psx file, and all intermediary files will be placed.
+    mask_option: the algorithm to use for masking, in the form of a MaskingOptions enumeration.
+    
+    Additionally, this function relies on the following values in config.json, which can be changed via the UI or via editing the json file.
+    photogrammetry:mask_path: this is the subdirectory where the created masks will be stored.
+
+    Returns: the task queue with the new tasks.
+    """
+    config = Configurator.getConfig()
+    if mask_option != MaskingOptions.NOMASKS:
+        maskpath = Path(basedir,config.getProperty("photogrammetry","mask_path"))
+        if not maskpath.exists():
+            os.makedirs(maskpath)
+        for f in pathlist:
+            if mask_option == MaskingOptions.MASK_CONTEXT_AWARE_DROPLET:
+                task_queue.put(MaskingTasks.MaskDroplet({"input":f,"output":maskpath}))
+            elif mask_option == MaskingOptions.MASK_AI:
+                task_queue.put(MaskingTasks.MaskAI({"input":f,"output":maskpath}))
+            else: #use thresholding. 
+                task_queue.put(MaskingTasks.MaskThreshold({"input":f,"output":maskpath}))
+    return task_queue
+
+def setupPostTasks(task_queue:Queue,jobname:str,basedir:Path, snapshot:bool = True)->Queue:
+    """setupPostTasks: Given a queue, add tasks need to process a finished 3d model to that queue, including automated manipulation in blender or meshlab.
+    Currently, the only thing this function does is setup the blender snapshot task. This function can be disabled by passing false in the snapshot param.
+
+    Parameters:
+    ------------------
+    task_queue: A queue, populated with tasks that ought to be performed before this one. If the model is finished, it can be empty.
+    jobname: The name of the model (and of the chunk and metashape file)
+    basedir: The directory where the model, and psx file, and all intermediary files will be placed.
+    snapshot: should this function set up the tasks to make a blender snapshot?
+
+    
+    Additionally, this function relies on the following values in config.json, which can be changed via the UI or via editing the json file.
+    photogrammetry: output_path: The subdirectory of basedir where the model and its associated files will be stored.
+    photogrammetry: export_as: The format of 3d model to export: Supported options are currently  ply and obj
+
+    Returns: the task queue with the new tasks.
+    """
+    config = Configurator.getConfig()
+    outputpath = Path(basedir,config.getProperty("photogrammetry","output_path"))
+    objname =  Path(outputpath,get_export_filename(jobname,config.getProperty("photogrammetry","export_as")))
+    objfullname = f"{objname}{config.getProperty("photogrammetry","export_as")}"
+
+    if snapshot and config.getProperty("postprocessing","script_directory") != "" and \
+    config.getProperty("postprocessing","blender_exec")!="":
+        task_queue.put(BlenderTasks.BlenderSnapshotTask({"inputobj":objfullname,"output":outputpath,"scale":True}))
+    return task_queue
+
+def setupModelTasks(task_queue:Queue,pathlist:list,jobname:str,inputdir:Path,basedir:Path,mask_option=MaskingOptions.NOMASKS)->Queue:
+    """setupModelTasks: Given a queue,add tasks neede to build a model to that queue.
+
+    Parameters:
+    ------------------
+    task_queue: a queue, populated with tasks needed to build masks if desired and to convert any raw or tif files into jpgs, from which a model will be built.
+    pathlist: a list of pathutil:Paths to jpg files which will be used in the model. These need not exist yet, but it is assumed that they will exist by the time model tasks get
+    executed.
+    jobname: The name of the model (and of the chunk and metashape file)
+    inputdir: The directory containing the JPG or TIF files that will be used to build the model.
+    basedir: The directory where the model, and psx file, and all intermediary files will be placed.
+    mask_option: the method for building the mask as represented in the MaskingOption enumeration class.
+
+    Returns: the task queue with the new tasks.
+    """
+     
+    config = Configurator.getConfig()
+    maskpath = Path(basedir,config.getProperty("photogrammetry","mask_path"))
+    outputextn = config.getProperty("photogrammetry","export_as")
+    paramsfortasks = {"input":inputdir,
+                        "output":basedir,
+                        "usemasks":mask_option != MaskingOptions.NOMASKS,
+                        "maskpath":maskpath,
+                        "projectname":jobname,
+                        "chunkname":jobname,
+                        "photos":pathlist,
+                        "extension":outputextn,
+                        "conform_to_shape": False
+                        }
+    task_queue.put(MetashapeTasks.MetashapeTask_AlignPhotos(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_ErrorReduction(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_DetectMarkers(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_AddScales(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_BuildModel(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_Reorient(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_BuildTextures(paramsfortasks))
+    task_queue.put(MetashapeTasks.MetashapeTask_ExportModel(paramsfortasks))
+    return task_queue
+
+def buildModel(jobname:str,
+                inputdir:str,
+                basedir:str,
+                mask_option=MaskingOptions.NOMASKS,
+                snapshot:bool=False,
+                tasks:Queue=None, 
+                report_statistics:bool=True,
+                cancelthreadevent:threading.Event = None):
+    """buildModel: Given a folder full of pictures, this function builds a 3D Model.
 
     Parameters:
     ------------------
     jobname: the name of the model to be built.
     inputdir: a folder full of pictures in either CR2 or TIF format.
-    outputdir: The folder in which the model will be placed along with its intermediary files.
-    config: the full contents of config.json.
-    nomasks: boolean value determining whether to build masks or not.
+    basedir: The folder in which the model will be placed along with its intermediary files.
+    mask_option: the type of mask to build for each image
+    snapshot: whether to take a blender snapshot or not.
+    tasks: a queue with taks--None if you wish this function to build the queue. Useful if you want to build a custom task queue for image conversion and masking. 
+    This function will add tasks for model building.
+    report_statistics: should this report the time taken for things to build at the end? Default True.
+    canceltreadedevent: an event to signal to all threads launched here that the job has been cancelled. Sent from the UI and hooked up to the cancel button.
     """
     config = Configurator.getConfig()
-    try:
-        from photogrammetry import MetashapeTools
-        if not os.path.exists(outputdir):
-            os.mkdir(outputdir)
-
-        processedpath = inputdir 
-              
-        with os.scandir(inputdir) as it:
-            for f in it:
-                if os.path.isfile(f):
-                    if f.name.upper().endswith(config.getProperty("processing","Source_Type")):
-                        tifpath = os.path.join(outputdir,config.getProperty("processing","Destination_Type")[1:])
-                        if not os.path.exists(tifpath):
-                            os.mkdir(tifpath)
-                        image_processing.process_image(f.path,tifpath,config.getProperty("processing","Destination_Type"))
-                        processedpath = tifpath       
-        if mask_option != MaskingOptions.NOMASKS:
-            maskpath = os.path.join(outputdir,config.getProperty("photogrammetry","mask_path"))
-            if not os.path.exists(maskpath):
-                os.mkdir(maskpath)
-                image_processing.build_masks(processedpath,maskpath,mask_option)
-        MetashapeTools.build_basic_model(photodir=processedpath,
-                                         projectname=jobname,
-                                         projectdir=outputdir,
-                                         maskoption=mask_option)
-        if snapshot:
-            build_snapshot(jobname,outputdir)
-        statistics.getStatistics().logReport()
-        statistics.destroyStatistics()
-    except ImportError as e:
-        print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
-        raise e
     
-def build_model_cmd(args):
+    buildfromformat = config.getProperty("processing","Build_From_Format")
+    buildfromdir= Path(basedir,str(buildfromformat[1:]))
+    if not tasks or tasks.empty():
+        tq = Queue()
+        convertfiles = []
+        for fl in os.listdir(inputdir):
+            f = Path(fl)
+            if f.suffix in config.getProperty("processing","Source_Type"):
+                convertfiles.append(f)
+        tq= setupConversionTasks(tq,
+                                convertfiles,
+                                basedir,False)
+        filestouse = []
+        for images in os.listdir(inputdir):
+            filestouse.append(Path(buildfromdir,f"{Path(images).stem}{buildfromformat}"))
+        tq= setupMaskingTasks(tq,filestouse,basedir,mask_option)
+    else:
+        tq = tasks
+    tq = setupModelTasks(tq,filestouse,jobname,buildfromdir,basedir,mask_option)
+    tq = setupPostTasks(tq,jobname,basedir,snapshot)
+    executeTaskQueue(tq,True,report_statistics, cancelthreadevent)           
+
+
+    
+def buildModelCommand(args):
     """The wrapper function that extracts arguments from the command line and runs the build model function with the correct params based on them.
     Parameters:
     -------------------
@@ -386,165 +588,38 @@ def build_model_cmd(args):
     photoinput = args.photos
     outputdir = args.outputdirectory
     maskoption = int(args.maskoption)
-    build_model(job,photoinput,outputdir, MaskingOptions(maskoption))
+    buildModel(job,photoinput,outputdir, MaskingOptions(maskoption))
     
 
 
-def transfer_to_network_folder(args):
-    """This script is for transfering files from the ortery computer to the network drive. 
-    
-    It copies the files to the drive specified in config.json under watcher->networkdrive. 
-    Then, as a final step, it leaves a manifest of the files it copied as a comma seperated list entitled "Files_To_Process.txt." 
-    This file will be used as a signal that the sending is complete by any machine listening for changes on the folder.
-
+def watchAndProcess(args):
+    """WatchAndProcess: This function is a hook called by the UI to start the observer that grabs and converts files and manifests that get placed in a particular folder.
+    It gets called from the Watch tab of the UI when "Watch" is pressed.
     Parameters:
-    ------------
-    args: an arguments object with the following attributes: imagedirectory (a directory of images to transfer), 
-    jobname (the name of the job associated with these)
-    p: a flag that is true or false, which determines whether these pictures need to be pruned. The ortery takes too many pictures for 
-    some views. THis makes the process take longer than needed and adds sources of error at certain angles. To fix it, we can delete a fraction
-    of the pictures from each photography angle. The configuration for this is located under config.json->transfer->ortery
-."""
-    inputdir = args.imagedirectory
-    jobname = args.jobname
-    def getFileCreationTime(item):
-        return os.path.getctime(item)
-    fs=[os.path.join(inputdir,f) for f in os.listdir(inputdir) if f.endswith("cr2")]
-    filestocopy = sorted(fs,key=getFileCreationTime)
-    if args.p: #if the pics need to be pruned...
-       filestocopy= transferscripts.pruneOrteryPics(filestocopy,_CONFIG["ortery"])
-    transferto=os.path.join(_CONFIG["watcher"]["networkdrive"],jobname)
-    transferscripts.transferToNetworkDirectory(transferto, filestocopy,)
-    manifest  = os.path.join(transferto,"Files_to_Process.txt")
-    with open(manifest,"w") as f:
-        f.write(",".join(filestocopy))
-
-def split_shapes_cmd(args):
-
-    """Wrapper script for taking a psx file and splitting the model inside into multiple cubic components which are exported as named obj files."""
-    print("Got there.")
-    inputdir = Path(args.inputdir)
-    project = args.projectname
-    projdir = Path(inputdir,f"{project}.psx")
-    shapes = args.shapenames.split(",")
-    print(f"{projdir}")
-    if projdir.exists():
-
-        try:
-            from photogrammetry import MetashapeTools
-            MetashapeTools.splitModelIntoShapes(projdir)
-        except ImportError as e:
-            print(f"{e.msg}: You should try downloading the metashape python module from Agisoft and installing it. See Readme for more details.")
-            raise e
-
-
-
-
-def build_masks_cmd(args):
-    """Wrapper script for building masks from contents of a folder using a photoshop droplet.
-    Parameters:
-    -----------
-    args: an object containing attributes which get passed in from the command line.  These are:
-    inputdir: the directory of pictures that need to be masked in TIF format.
-    output: the directory where the masks need to get copied when the masking is done.
+    --------------------------------------------------------------
+      args--an object with an attribute "inputdir". 
     """
-    input = args.inputdir
-    output = args.outputdir
-    image_processing.build_masks(input,output,int(args.maskoption))
-
-def convert_raw_to_format_cmd(args):
-    """wrapper script for using the RAW image conversion fucntions via the command line.
-    Parameters:
-    ---------
-    args: an object containing atributes passed in from the command line. These are: 
-    inputdir (a directory of images to convert)
-    outputdir (a place to put the converted images.)
-    """
-    inputdir = args.imagedirectory
-    outputdir = args.outputdirectory
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
-    with os.scandir(inputdir) as it: #scans through a given directory, returning an interator.
-        print(inputdir)
-        for f in it:
-            if os.path.isfile(f):
-                if f.name.upper().endswith(".CR2"): #CANON CAMERA!
-                    if args.dng:
-                        image_processing.convert_CR2_to_DNG(os.path.join(f),outputdir)
-                    if args.tif:
-                        image_processing.convert_CR2_to_TIF(os.path.join(f),outputdir)
-                    if args.jpg:
-                        image_processing.convertToJPG(os.path.join(f),outputdir)
-                elif f.name.upper().endswith("TIF") and args.jpg:
-                    image_processing.convertToJPG(os.path.join(f),outputdir)
-
-def load_config():
-    """Loads the configuration values in config.json and stores them in a dictionary.
-    returns: a dictionary containing configuration values.
-    """
-    with open('config.json') as f:
-        return json.load(f)["config"]
-
+    startWatcher(args.inputdir,None)
 
 if __name__=="__main__":
-    _CONFIG = load_config()
     parser = argparse.ArgumentParser(prog="photogrammetryScripts")
     subparsers = parser.add_subparsers(help="Sub-command help")
-    convertprocessor = subparsers.add_parser("convert", help=" Convert a Raw file to another format ")
-    convertprocessor.add_argument("--dng",help="Converts RAW to dng type", action="store_true")
-    convertprocessor.add_argument("--tif", help = "Convert RAW to tif type", action="store_true")
-    convertprocessor.add_argument("--jpg", help="Converts TIF to jpg.", action="store_true")
-    convertprocessor.add_argument("imagedirectory", help="Directory of raw files to operate on.", type=str)
-    convertprocessor.add_argument("outputdirectory", help="Directory to put the output processed files.", type=str)
-    convertprocessor.set_defaults(func=convert_raw_to_format_cmd)
-
-    transferparser = subparsers.add_parser("transfer", help="transfers files to a network drive from the specified folder.")
-    transferparser.add_argument("--p", help="Prunes every Nth file from Camera X, as specified in the config.json.",action="store_true")
-    transferparser.add_argument("jobname", help="The name of this job. This translates into a subfolder on the network drive.")
-    transferparser.add_argument("imagedirectory", help="Copies images from this directory to the shared network folder as specified in config.json")
-    transferparser.set_defaults(func=transfer_to_network_folder)
-
-    imageprocessing  = subparsers.add_parser("process", help="Color Processing Functions")
-    imageprocessing.add_argument("inputimage", help="image to process")
-    imageprocessing.add_argument("outputdir", help="Directory where the final processed image will be stored.")
-    imageprocessing.set_defaults(func=process_images)
 
     photogrammetryparser = subparsers.add_parser("photogrammetry", help="scripts for turning photographs into 3d models")
     photogrammetryparser.add_argument("jobname", help="The name of the project")
     photogrammetryparser.add_argument("photos", help="Place where the photos in tiff or jpeg format are stored.")
     photogrammetryparser.add_argument("outputdirectory", help="Where the intermediary files for building the model and the ultimate model will be stored.")
-    photogrammetryparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], help = "How do you want to build masks:0 = no masks,\
+    photogrammetryparser.add_argument("--maskoption", type = str, choices=["0","1","2","3"], help = "How do you want to build masks:0 = no masks,\
                                     1 = Photoshop droplet(context aware select), \
-                                    2 = Photoshop droplet (magic wand), \
-                                    3 = Canny Edge detection algorithm \
-                                    4 = Grayscale Thresholding",
+                                    2 = Grayscale Thresholding, \
+                                    3 = AI Inference Engine", 
                                     default=0)
 
-    photogrammetryparser.set_defaults(func=build_model_cmd)
+    photogrammetryparser.set_defaults(func=buildModelCommand)
 
     watcherparser = subparsers.add_parser("watch", help="Watch for incoming files in the directory configured in JSON and build a model out of them.")
     watcherparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    watcherparser.set_defaults(func=watch_and_process_cmd)      
-
-    listensendparser = subparsers.add_parser("listenandsend", help="listen for new cr2 files in the specified subdirectory and send them to the network drive, recording them in a manifest.")
-    listensendparser.add_argument("projectname", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    listensendparser.add_argument("--inputdir", help="Optional input directory to watch. The watcher will watch config:watcher:listen_directory by default.", default="")
-    listensendparser.add_argument("--maskoption", type = str, choices=["0","1","2","3","4"], 
-                            help = "How do you want to build masks:0 = no masks,\
-                                    1 = Photoshop droplet(context aware select), \
-                                    2 = Photoshop droplet (magic wand), \
-                                    3 = Canny Edge detection algorithm \
-                                    4 = Grayscale Thresholding",
-                            default=0)
-    listensendparser.add_argument("--prune", action="store_true", help="If this was taken on the ortery, and you would like to prune certain rounds down to a desired # of pics, pass in this flag and configure the 'pics_per_cam' under ortery in config.json.")
-    listensendparser.set_defaults(func=listen_and_send)    
-
-   
-    modelbyshapeparser = subparsers.add_parser("splitshapes", help="Splits a finished model into cube-shaped sub-components based on shapes pre-drawn by the user in metashape.")
-    modelbyshapeparser.add_argument("inputdir",help="Directory of project")
-    modelbyshapeparser.add_argument("projectname", type=str, help="Name of the psx file.")
-    modelbyshapeparser.add_argument("shapenames", type=str, help="Comma-separated list of names for the individual shapes.")
-    modelbyshapeparser.set_defaults(func = split_shapes_cmd)
+    watcherparser.set_defaults(func=watchAndProcess)      
 
     args = parser.parse_args()
     if hasattr(args,"func"):

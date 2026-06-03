@@ -177,6 +177,16 @@
                 "points":[15,16],
                 "distance":249.89,
                 "units":"mm"
+                },
+                {
+                "points":[9,10],
+                "distance":500.08,
+                "units":"mm"
+                },
+                {
+                "points":[10,11],
+                "distance":500.08,
+                "units":"mm"
                 }
             ]
             },
@@ -186,8 +196,8 @@
                 "zpos":[],
                 "zneg":[]
             },
-            "xaxis":[4,6],
-            "plane":[4,6,16]
+            "xaxis":[9,11],
+            "plane":[9,11,7]
             
         }
     }

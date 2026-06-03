@@ -1,5 +1,6 @@
 from tkinter import *
 from tkinter import ttk
+import threading
 import shutil
 from tkinter import messagebox, filedialog
 from pathlib import Path
@@ -29,20 +30,35 @@ class WatchFormItems(FormItemsInterface):
         return {"valid":valid,"message":msg}
     
 class WatchFrame(PipelineFrameBase):
-    def update_buttons(self):
-        if self.watcher:
-            if not self.watcher.stoprequest:
-                self.disable_enable_all(False)
-                self.watcher = None
-            else:
-                self.after(5,self.update_buttons)
+    def execute(self,args:FormItemsInterface):
+        validate = args.validate()
+        if not validate["valid"]:
+            messagebox.showerror("Validation Error", validate["message"])
+            return
+        maskoption = args.masking_option.get()
+        mask_option = UIConsts.MASKOPTIONS.get(maskoption,MaskingOptions.NOMASKS)
+        Configurator.getConfig().setProperty("processing","ListenerDefaultMasking", MaskingOptions.numToFriendlyString(mask_option))
+            #phscripts.Watcher(args.input_dir.get(), False) 
+        self.stopbutton.configure(state="normal")
+        self.cancel_event.clear()
+        try:
+            thr = threading.Thread(target=phscripts.startWatcher,args=(args.input_dir.get(),self.cancel_event),daemon=False)
+            self.threads.append(thr)
+            thr.start()
+            self.disable_enable_all(True)
+        except Exception as e:
+            messagebox.showerror("Build Exception",e)
+            self.disable_enable_all(False)
+            raise e
+
 
     def stop_watching(self):
-        if not self.state=="stopped":
-            self.state = "stopped"
-            if self.watcher:
-                self.watcher.stoprequest=True
-                self.after(5,self.update_buttons)
+        self.cancel_event.set()
+        while len(self.threads)>0:
+            th = self.threads.pop()
+            th.join()
+        self.disable_enable_all(False)
+
 
     def clear_directories(self):
         temp = Configurator.getConfig().getProperty("watcher","temp_scratch")
@@ -55,13 +71,14 @@ class WatchFrame(PipelineFrameBase):
         
     def task(self,args:WatchFormItems):
         try:
-            self.disable_enable_all(True)
-            self.state = "running"
-            mask_option = UIConsts.MASKOPTIONS[args.masking_option.get()]
+            self.cancel_event.clear()
+            maskoption = args.masking_option.get()
+            mask_option = UIConsts.MASKOPTIONS[maskoption]
             Configurator.getConfig().setProperty("processing","ListenerDefaultMasking", MaskingOptions.numToFriendlyString(mask_option))
-            self.watcher = phscripts.Watcher(args.input_dir.get(), False) 
+            #phscripts.Watcher(args.input_dir.get(), False) 
             self.stopbutton.configure(state="normal")
-            self.watcher.run()
+            phscripts.startWatcher(args.input_dir.get(),self.cancel_event) 
+
         except Exception as e:
             messagebox.showerror("Build Exception",e)
             raise e
@@ -74,8 +91,9 @@ class WatchFrame(PipelineFrameBase):
         maskoptionvals = [*UIConsts.MASKOPTIONS.keys()]
         self.watcher = None
         self.svars = WatchFormItems()
-        ttk.Label(self,text="Listen Directory").grid(column=0,row=1)
+        self.cancel_event = threading.Event()
 
+        ttk.Label(self,text="Listen Directory").grid(column=0,row=1)
         self.svars.input_dir.set(Configurator.getConfig().getProperty("watcher","listen_directory"))
         directory = ttk.Entry(self, width=25, textvariable=self.svars.input_dir)
         directory.grid(column=0,row=2,sticky=("WE"))
@@ -86,9 +104,9 @@ class WatchFrame(PipelineFrameBase):
         maskoption.grid(column=0,row=4)
         self.watchbutton = ttk.Button(self,text="Watch",command=lambda:self.execute(self.svars))
         self.watchbutton.grid(column=0, row=5)
-        self.stopbutton = ttk.Button(self,text="Stop",state = "disabled",command=lambda:self.stop_watching())
+        self.stopbutton = ttk.Button(self,text="Cancel",state = "disabled",command=self.stop_watching)
         self.stopbutton.grid(column=1,row=5)
-        self.clearbutton = ttk.Button(self,text="Purge Temp Directories",command=lambda:self.clear_directories())
+        self.clearbutton = ttk.Button(self,text="Purge Temp Directories",command=self.clear_directories)
         self.clearbutton.grid(column=3,row=5)
         self.state  = "stopped"
     

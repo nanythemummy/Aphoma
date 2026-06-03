@@ -7,7 +7,10 @@ import shutil
 import os
 import re
 import argparse
-from enum import Enum
+import subprocess
+from enum import Enum, IntEnum
+
+from PIL import ExifTags, Image as PILImage
 from util.Configurator import Configurator
 
 class ColorChannelConstants(Enum):
@@ -50,14 +53,15 @@ class MaskingOptions(Enum):
     """Class containing constants for masking options."""
     NOMASKS = 0
     MASK_CONTEXT_AWARE_DROPLET = 1
-    MASK_MAGIC_WAND_DROPLET =2
-    MASK_CANNY = 3
-    MASK_THRESHOLDING = 4
-    MASK_AI = 5
+    MASK_THRESHOLDING = 2
+    MASK_AI = 3
      
+    def __str__(self):
+        return str(self.name)
+    
     @classmethod 
     def getFriendlyStrings(cls):
-        return ["None", "SmartSelectDroplet","FuzzySelectDroplet","EdgeDetection","Thresholding", "AI"]
+        return ["None", "SmartSelectDroplet","Thresholding", "AI"]
     @classmethod
     def numToFriendlyString(cls, num): 
         if isinstance(num, MaskingOptions):
@@ -67,19 +71,19 @@ class MaskingOptions(Enum):
     def friendlyToEnum(cls, searchstring:str):
         friendly = MaskingOptions.getFriendlyStrings()
         for i,fr in enumerate(friendly):
-            if fr is searchstring:
+            if fr == searchstring:
                 return MaskingOptions(i)
-        return 0
+        return MaskingOptions.NOMASKS
 
         
 def delete_manifests_images(directory):
-    dir = Path(directory)
+    delman = Path(directory)
     imtypes = ["cr2","jpg","tif","nef"]
-    if dir.exists():
-        files = [f for f in os.listdir(dir) if Path(dir,f).is_file()]
+    if delman.exists():
+        files = [f for f in os.listdir(delman) if Path(delman,f).is_file()]
         for fl in files:
             if Path(fl).suffix in imtypes or Path(fl).stem.endswith("_manifest"):
-                os.remove(Path(dir,fl))
+                os.remove(Path(delman,fl))
 
            
 
@@ -93,7 +97,7 @@ def copy_file_to_dest(sourcefiles:list,destpath:str, deleteoriginal=False):
     * destpath: a string path to move them to.
     """
     if not os.path.exists(destpath):
-         os.makedirs(destpath)
+        os.makedirs(destpath)
     for f in sourcefiles:
         try:
             if deleteoriginal:
@@ -230,3 +234,39 @@ def get_export_filename(chunkname:str, type:str):
     exporttype = type.upper()
     exportname=f"{chunkname}_PhotogrammetryScaledIn{scaleunit}{exporttype}"
     return exportname
+
+def copy_exif_data(filea:Path,fileb:Path):
+    exiftool = Path(Configurator.getConfig().getProperty("processing","ExifTool"))
+    cmd = f"\"{str(exiftool)}\" -TagsFromFile \"{str(filea)}\" \"{str(fileb)}\""
+    print(cmd)
+
+    subprocess.run(cmd,shell=True,check = True)
+def get_exif_data(filename: str) -> dict:
+    """ Gets the Exif data from an image file if it exists, and returns a dictionary of key value pairs.
+
+        Data nested under IFD Codes will be flattened out and will be on the same level as the
+        rest of the exif data in the returned dictionary.
+
+        Parameters:
+        ------------------
+        filename: The path to the image file whose exif data needs to be retreived.
+
+        Returns: A dictionary of key value pairs.
+    """
+    exif = {}
+    skiplist=["MakerNote","UserComment"] #These are not needed and are encoded anyway.
+    with PILImage.open(filename,'r') as pi:
+        exif = pi.getexif()
+        IFD_CODES = {i.value: i.name for i in ExifTags.IFD}
+        for code, val in exif.items():
+            if code in IFD_CODES:
+                ifd_data = exif.get_ifd(code)
+                for nk,nv in ifd_data.items():
+                    nested_tag = ExifTags.GPSTAGS.get(nk,None) or ExifTags.TAGS.get(nk,None) or nk
+                    if nested_tag in skiplist:
+                        continue
+                    exif[nested_tag]=nv
+            else:
+                tagname = ExifTags.TAGS.get(code,code)
+                exif[tagname]=val
+    return exif

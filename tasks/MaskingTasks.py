@@ -1,66 +1,71 @@
-from os import environ, mkdir,listdir
+from os import mkdir
 from pathlib import Path
-import requests
 import shutil
 import subprocess
-
+import cv2
+import requests
+from inference_sdk import InferenceHTTPClient
 from PIL import Image,ImageDraw
 from util.InstrumentationStatistics import *
 from util.PipelineLogging import getLogger
 from util.Configurator import Configurator
-from tasks.BaseTask import *
-import cv2
-from inference_sdk import InferenceHTTPClient
+from util.ErrorCodeConsts import ErrorCodes
+from tasks.BaseTask import BaseTask,TaskStatus
+
 
 class MaskImages(BaseTask):
     def __init__(self, argdict:dict):
         super().__init__()
-        self.maskingmode = argdict["maskoption"]
         self.input = Path(argdict["input"])
         self.output = Path(argdict["output"])
 
-    def setup(self):
-        success = super().setup()
+    def setup(self)->tuple[bool,ErrorCodes]:
+        success,code = super().setup()
         if success:
             success= (Path(self.input).exists())
             if not success:
                 getLogger(__name__).error("Input Path %s does not exist.",self.input)
+                success = False
+                code = ErrorCodes.INVALID_FILE
             else:
                 outputpath = Path(self.output)
                 if not outputpath.exists():
                     mkdir(outputpath)
-        return success
+        return success,code
     
-    def build_mask(self,fn:Path):
-        pass
-
-    def execute(self):
-        success = super().execute()
-        if not success:
-            return False
-        extns = [".JPG",".TIF"]
-        if self.input.is_file and self.input.suffix.upper in extns:
-            if not Path(self.output,f"{self.input.stem}.png").exists():
-                self.build_mask(self.input)
-        return True
+    def build_mask(self,fn:Path)->tuple[bool,ErrorCodes]:
+        return True,ErrorCodes.NONE
+    
+    @timed(Statistic_Event_Types.EVENT_BUILD_MASK)
+    def execute(self)->tuple[bool,ErrorCodes]:
+        success,code = super().execute()
+        if success:
+            extns = [".JPG",".TIF"]
+            if self.input.is_file() and self.input.suffix.upper() in extns:
+                if not Path(self.output,f"{self.input.stem}.png").exists():
+                    success, code = self.build_mask(self.input)
+            else:
+                success = False
+                code = ErrorCodes.INVALID_FILE
+        return success,code
         
-    def exit(self):
-        success = True
-        extns = [".JPG",".TIF"] 
-        getLogger(__name__).info("Verifying masks were created")
-        if self.input.is_file and self.input.suffix.upper in extns:
+    def exit(self)->tuple[bool,ErrorCodes]:
+        success, code = super().exit()
+        if success:
+            getLogger(__name__).info("Verifying masks were created")
             maskname = Path(self.output,f"{self.input.stem}.png")
             if not maskname.exists():
                 success = False
+                code = ErrorCodes.MASK_CREATION_FAILURE
                 getLogger(__name__).info("Could not find mask for %s as %s", self.input,maskname)
-        return success
+        return success,code
 class MaskIntersection(MaskImages):
-    """Builds a mask that is the intersection of two other masks."""
-    def __init(self,argdict:dict):
+    """Builds a mask that is the intersection of two other masks. FINISH IMPLEMENTING THIS"""
+    def __init__(self,argdict:dict):
         super().__init__(argdict)
         self.mask1 = argdict["mask1"]
         self.mask2 = argdict["mask2"]
-    def __repr(self):
+    def __repr__(self):
         return "Masking: Two Mask Intersection"
 
     
@@ -78,23 +83,28 @@ class MaskThreshold(MaskImages):
         return "Masking: MaskThreshold"
     
     def setup(self):
-        success = super().setup()
-        if not success:
-            return False
-        self.greythreshold = max(0,min(self.greythreshold,255)) #clamp this value between 0 and 255
-        return True
+        success,code = super().setup()
+        if  success:
+            self.greythreshold = max(0,min(self.greythreshold,255)) #clamp this value between 0 and 255
+        return success,code
     
-    @timed(Statistic_Event_Types.EVENT_BUILD_MASK)
-    def build_mask(self,fn:Path):
-        picpath = Path(self.input,fn)
-        maskout = Path(self.output,f"{fn.stem}.png")
-        img = cv2.imread(str(picpath))
-        #threshold image
-        grayscale = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-        mask = cv2.threshold(grayscale,self.greythreshold,255,cv2.THRESH_BINARY)[1]
-        mask = 255-mask #invert the colors
-        cv2.imwrite(str(maskout),mask)
 
+    def build_mask(self,fn:Path):
+        success,code = super().build_mask(fn)
+        try:
+            picpath = Path(self.input,fn)
+            maskout = Path(self.output,f"{fn.stem}.png")
+            img = cv2.imread(str(picpath))
+            #threshold image
+            grayscale = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+            mask = cv2.threshold(grayscale,self.greythreshold,255,cv2.THRESH_BINARY)[1]
+            mask = 255-mask #invert the colors
+            cv2.imwrite(str(maskout),mask)
+        except cv2.error as e:
+            getLogger(__name__).error(e)
+            success = False
+            code = ErrorCodes.MASK_CREATION_FAILURE
+        return success,code
 
         
 class MaskDroplet(MaskImages):
@@ -113,38 +123,31 @@ class MaskDroplet(MaskImages):
         return "Masking: MaskDroplet"
     
     def setup(self):
-        success = super().setup()
-        if not success:
-            return False
-        if not self.dropletpath.exists():
-            getLogger(__name__).error("Invalid droplet path, %s", self.dropletpath)
-            return False
-        getLogger(__name__).info("Using Droplet at %s to process photos in %s", self.dropletpath,self.input)
+        success,code = super().setup()
+        if success:
+            if not self.dropletpath.exists():
+                getLogger(__name__).error("Invalid droplet path, %s", self.dropletpath)
+                return False,ErrorCodes.CONFIGURATION_ERROR
+            getLogger(__name__).info("Using Droplet at %s to process photos in %s", self.dropletpath,self.input)
+            if not self.dropletoutput.exists():
+                mkdir(self.dropletoutput)
+        return success,code
 
-        maskdir = self.output
-        if not maskdir.exists():
-            mkdir(maskdir)
-        if not self.dropletoutput.exists():
-            mkdir(self.dropletoutput)
-        return True
-    
-    @timed(Statistic_Event_Types.EVENT_BUILD_MASK)
     def build_mask(self, fn:Path):
-        subprocess.run([str(self.dropletpath),Path(self.input,fn)],check = False)
-        newmask = Path(self.dropletoutput,f"{fn.stem}.png")
-        maskpath = Path(self.output,f"{fn.stem}.png")
-        if newmask.exists():
-            shutil.move(newmask,maskpath)
-        else:
-            return False
-        return True
+        success,code = super().build_mask(fn)
+        if success:
+            subprocess.run([str(self.dropletpath),Path(self.input,fn)],check = False)
+            newmask = Path(self.dropletoutput,f"{fn.stem}.png")
+            maskpath = Path(self.output,f"{fn.stem}.png")
+            if newmask.exists():
+                shutil.move(newmask,maskpath)
+            else:
+                success = False
+                code = ErrorCodes.MASK_CREATION_FAILURE
+            shutil.rmtree(self.dropletoutput)
+        return success,code
     
-    def exit(self):
-        success = super().execute()
-        if not success:
-            return False
-        shutil.rmtree(self.dropletoutput)
-        return True
+
     
 class MaskAI(MaskImages):
 
@@ -167,24 +170,28 @@ class MaskAI(MaskImages):
     
     def setup(self):
         #check to see if server is up and responsive.
-        ret = super().setup()
-        if ret:
+        success,code = super().setup()
+        if success:
             url = ("http://localhost:9001")
             try:
                 response = requests.get(url,timeout=2)
-                ret = response.status_code == 200
+                ret = (response.status_code == 200)
             except requests.exceptions.RequestException as e:
-                ret = False
+                success = False
                 getLogger(__name__).error(e)
-            if not ret:
+            if not success:
                 getLogger(__name__).error("Could not connect to the roboflow docker container on localhost port 9001. Please set up or start the server.")
+                code = ErrorCodes.INFERENCE_ENGINE_FAILURE
             if self.apikey is None or self.apikey == "":
                 getLogger(__name__).error("Invalid API key. Please set an environment variable ROBOFLOW_KEY in the shell.")
                 ret = False
-        return ret
+                code = ErrorCodes.CONFIGURATION_ERROR
+        return success,code
     
-    @timed(Statistic_Event_Types.EVENT_BUILD_MASK)
-    def build_mask(self,fn:Path, inferenceclient:InferenceHTTPClient):
+
+    def infer_and_snip(self,fn:Path, inferenceclient:InferenceHTTPClient):
+        success = True
+        code = ErrorCodes.NONE
         potprediction = {}             
         picpath = Path(self.input,fn)
         potprediction = inferenceclient.infer(str(picpath))
@@ -196,6 +203,7 @@ class MaskAI(MaskImages):
                 pots.append(shape)
             elif prediction["class"]=="hole":
                 holes.append(shape)
+
         with Image.open(picpath).convert('RGB') as pmask:
             draw = ImageDraw.Draw(pmask)
             draw.rectangle([(0,0),pmask.size],fill=(0,0,0))
@@ -206,8 +214,11 @@ class MaskAI(MaskImages):
             outpicpath = Path(self.output,f"{fn.stem}.png")
             pmask.save(outpicpath)
 
+        return success,code
+    
     def execute(self):
-        "Need to do this because I'm fully overriding baseclass functionality here."
+        success = True
+        code = ErrorCodes.NONE
         self._status = TaskStatus.RUNNING
         getLogger(__name__).info("Executing %s",self._statename)
         success = True
@@ -216,11 +227,9 @@ class MaskAI(MaskImages):
         client.load_model(self.model,set_as_default=True)
         getLogger(__name__).info("Building masks for files in %s and leaving the results in %s", self.input, self.output)
         extns = [".JPG",".TIF"]
-        t = self.input.is_file()
-        ex = self.input.suffix.upper() in extns
         if self.input.is_file() and self.input.suffix.upper() in extns:
             maskname =  Path(self.output,f"{self.input.stem}.png")
             if not maskname.exists():
-                self.build_mask(self.input,client)
-        return success
+                self.infer_and_snip(self.input,client)
+        return success,code
 
