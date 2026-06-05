@@ -420,6 +420,7 @@ def setupConversionTasks(task_queue:Queue,filestoconvert:list,basedir:Path,profi
        desttype = ".jpg" #if we misconfigured this, default to jpg.
 
     for filepath in filestoconvert:
+        
         if filepath.is_file() and filepath.suffix.lower() in sourcetypes: #should we bother converting this at all?
             for c in conversiontypes:
                 if filepath.suffix.lower() != c:
@@ -559,8 +560,8 @@ def buildModel(jobname:str,
         tq = Queue()
         convertfiles = []
         for fl in os.listdir(inputdir):
-            f = Path(fl)
-            if f.suffix in config.getProperty("processing","Source_Type"):
+            f = Path(Path(inputdir,fl))
+            if f.suffix.lower() in config.getProperty("processing","Source_Type"):
                 convertfiles.append(f)
         tq= setupConversionTasks(tq,
                                 convertfiles,
