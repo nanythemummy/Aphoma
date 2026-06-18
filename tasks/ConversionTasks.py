@@ -176,7 +176,7 @@ class ConvertToJPG(ConvertToTask):
                     rgb = raw.postprocess(use_camera_wb=True)
                     corrected = self.profileCorrection(rgb)
                     im = PILImage.fromarray(corrected)
-                    im.save(outputname)
+                    im.save(outputname, quality=95)
             else:
                 print("Converting from TIF")
                 f=PILImage.open(ipname)

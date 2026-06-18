@@ -20,6 +20,7 @@ class BuildFormItems(FormItemsInterface):
         self.mask_option = StringVar()
         self.proj_name= StringVar()
         self.pal_name = StringVar()
+        self.fail_on_unaligned = StringVar()
       
 
     def validate(self)->dict:
@@ -46,6 +47,7 @@ class BuildFrame(PipelineFrameBase):
         try:
             self.disable_enable_all(True)
             Configurator.getConfig().setProperty("photogrammetry","palette", args.pal_name.get())
+            Configurator.getConfig().setProperty("photogrammetry","fail_on_unaligned",bool(args.fail_on_unaligned.get()))
             phscripts.buildModel(jobname = args.proj_name.get(),
                                 inputdir = args.image_path.get(),
                                 basedir = args.proj_base.get(),
@@ -78,13 +80,15 @@ class BuildFrame(PipelineFrameBase):
         ttk.Label(self,textvariable = self.svars.proj_base,borderwidth=1, relief="solid").grid(column=0,row=7)
         ttk.Button(self,text="Browse",command = lambda:self.svars.proj_base.set(filedialog.askdirectory())).grid(column=1,row=7)
         ttk.Label(self,text="Masking Technique").grid(column=0,row=8)
-        ttk.Label(self,text="Palette").grid(column=0,row=10)
+        ttk.Label(self,text="Palette").grid(column=0,row=9)
         maskoption = ttk.Combobox(self,textvariable=self.svars.mask_option, values=maskoptionvals,state='readonly')
         maskoption.current(0)
-        maskoption.grid(column=0,row=9)
+        maskoption.grid(column=1,row=8)
         paletteoption = ttk.Combobox(self,textvariable=self.svars.pal_name,values =palettevals,state='readonly')
         paletteoption.current(0)
-        paletteoption.grid(column=0,row=11)
+        paletteoption.grid(column=1,row=9)
+        failunalignedcheck = ttk.Checkbutton(self,text="Fail on Unaligned Photos?",variable=self.svars.fail_on_unaligned)
+        failunalignedcheck.grid(column=0, row=10)
         ttk.Button(self,text="Build",command=lambda:self.execute(self.svars)).grid(column=0, row=12)
         ttk.Button(self, name="cancelbutton",text="Cancel", command=self.cancel).grid(column=1, row=12)
 

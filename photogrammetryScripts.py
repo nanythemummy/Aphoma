@@ -559,20 +559,20 @@ def buildModel(jobname:str,
     if not tasks or tasks.empty():
         tq = Queue()
         convertfiles = []
+        filestomask = []
         for fl in os.listdir(inputdir):
             f = Path(Path(inputdir,fl))
-            if f.suffix.lower() in config.getProperty("processing","Source_Type"):
-                convertfiles.append(f)
+            if f.is_file():
+                if f.suffix.lower() in config.getProperty("processing","Source_Type"):
+                    convertfiles.append(f)
+                filestomask.append(Path(buildfromdir,f"{f.stem}{buildfromformat}"))
         tq= setupConversionTasks(tq,
                                 convertfiles,
                                 basedir,False)
-        filestouse = []
-        for images in os.listdir(inputdir):
-            filestouse.append(Path(buildfromdir,f"{Path(images).stem}{buildfromformat}"))
-        tq= setupMaskingTasks(tq,filestouse,basedir,mask_option)
+        tq= setupMaskingTasks(tq,filestomask,basedir,mask_option)
     else:
         tq = tasks
-    tq = setupModelTasks(tq,filestouse,jobname,buildfromdir,basedir,mask_option)
+    tq = setupModelTasks(tq,filestomask,jobname,buildfromdir,basedir,mask_option)
     tq = setupPostTasks(tq,jobname,basedir,snapshot)
     executeTaskQueue(tq,True,report_statistics, cancelthreadevent)           
 

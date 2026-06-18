@@ -166,10 +166,13 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
                 return success, code
             unaligned = self.checkAlignment()
             if len(unaligned)>0:
-                success = False
-                code = ErrorCodes.UNALIGNED_CAMERAS
-                getLogger(__name__).error("failing execution due to unaligned cameras %s on chunk %s", self.chunk.label, unaligned)
-                return success, code
+                failonunaligned= Configurator.getConfig().getProperty("photogrammetry","fail_on_unaligned")
+                if failonunaligned:
+                    success = False
+                    code = ErrorCodes.UNALIGNED_CAMERAS
+                    getLogger(__name__).error("failing execution due to unaligned cameras %s on chunk %s", self.chunk.label, unaligned)
+                else:
+                    getLogger(__name__).warning("There are unaligned cameras %s on chunk %s", self.chunk.label, unaligned)
         return success, code
 
 class MetashapeTask_AddScales(MetashapeTask):
