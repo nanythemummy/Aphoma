@@ -28,6 +28,10 @@ class PipelineFrameBase(ttk.Frame):
         #subclasses need to implement this.
         pass
 
+    def schedule_on_main_thread(self, func, *args, **kwargs):
+        """Schedule a UI operation to run on the main Tkinter thread."""
+        self.after(0, lambda: func(*args, **kwargs))
+
     def __init__(self,container):
         super().__init__(container)
         self.threads = []

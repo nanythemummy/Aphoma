@@ -72,7 +72,8 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
             code = ErrorCodes.NONE
         if self.usemasks and not self.maskpath.exists():
             return False, ErrorCodes.NO_MASKS_AVAILABLE
-        if len(self.photos)==0 or len([i for i in self.photos if Path(i).is_file() and Path(i).suffix.upper()==".JPG"])==0:
+        pics = [i for i in self.photos if Path(i).is_file() and Path(i).suffix.upper()==".JPG"]
+        if len(self.photos)==0 or len(pics)==0:
             return False, ErrorCodes.INVALID_FILE
         if not self.input.exists():
             return False, ErrorCodes.INVALID_FILE

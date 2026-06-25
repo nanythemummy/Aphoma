@@ -45,7 +45,7 @@ class BuildFrame(PipelineFrameBase):
     
     def task(self,args:BuildFormItems):
         try:
-            self.disable_enable_all(True)
+            self.schedule_on_main_thread(self.disable_enable_all, True)
             Configurator.getConfig().setProperty("photogrammetry","palette", args.pal_name.get())
             Configurator.getConfig().setProperty("photogrammetry","fail_on_unaligned",bool(args.fail_on_unaligned.get()))
             phscripts.buildModel(jobname = args.proj_name.get(),
@@ -55,11 +55,11 @@ class BuildFrame(PipelineFrameBase):
                                 snapshot=True)
 
         except Exception as e:
-            messagebox.showerror("Build Exception",e)
+            self.schedule_on_main_thread(messagebox.showerror, "Build Exception", str(e))
             util.PipelineLogging.getLogger(__name__).error(e)
             raise e
         finally:
-            self.disable_enable_all(False)
+            self.schedule_on_main_thread(self.disable_enable_all, False)
 
     def cancel(self):
         self.disable_enable_all(False)

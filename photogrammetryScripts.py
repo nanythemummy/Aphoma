@@ -555,7 +555,7 @@ def buildModel(jobname:str,
     config = Configurator.getConfig()
     
     buildfromformat = config.getProperty("processing","Build_From_Format")
-    buildfromdir= Path(basedir,str(buildfromformat[1:]))
+    buildfromdir=inputdir 
     if not tasks or tasks.empty():
         tq = Queue()
         convertfiles = []
@@ -565,7 +565,12 @@ def buildModel(jobname:str,
             if f.is_file():
                 if f.suffix.lower() in config.getProperty("processing","Source_Type"):
                     convertfiles.append(f)
-                filestomask.append(Path(buildfromdir,f"{f.stem}{buildfromformat}"))
+                if f.suffix == buildfromformat:
+                    filestomask.append(f)   
+                else:
+                    buildfromdir = Path(basedir,str(buildfromformat[1:]))
+                    filestomask.append(Path(buildfromdir,f"{f.stem}{buildfromformat}"))
+                    
         tq= setupConversionTasks(tq,
                                 convertfiles,
                                 basedir,False)

@@ -4,7 +4,7 @@ from util import util
 from UI.BuildFrame import BuildFrame
 from UI.WatchFrame import WatchFrame
 from UI.SendFrame import SendFrame
-from UI.BuildConsole import BuildConsole, TextHandler
+from UI.BuildConsole import BuildConsole, TextHandler, install_console_streams
 from UI.PipelineConfigFrame import ConfigWindow
 import util.PipelineLogging as PipelineLogging
 
@@ -54,8 +54,9 @@ class MainApp(tk.Tk):
 
         #setup logging console
         self.console = BuildConsole(self)
-        textHandler =  TextHandler(self.console)
         self.console.grid(column=0,row=1,padx=3, pady=3, sticky="NSEW")
+        install_console_streams(self.console)
+        textHandler =  TextHandler(self.console)
         PipelineLogging.addLogHandler(textHandler)
 
         #setup config panel
