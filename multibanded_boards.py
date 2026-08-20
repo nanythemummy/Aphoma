@@ -208,7 +208,7 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
         visvis = chunks.get("visvis",None)
         if visvis and fb in visvis.keys():
 
-            chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys() if fb in chunks[band].keys()]
+            chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys() if fb in chunks[band].keys() and band != "visvis"]
             tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,
@@ -234,12 +234,19 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                                 "output":projectdir,
                                 "projectname":projectname,
                                 "chunkname":f"{projectname}_{fb}{k}"}))
-            tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
-                                "output":projectdir,
-                                "projectname":projectname,
-                                "chunkname":f"{projectname}_{fb}visvis",
-                                "chunklist":[f"{projectname}_{fb}{band}" for band in chunks.keys()],
-                                "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS}))
+    for fb in ["front","back"]:
+        chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys() if fb in chunks[band].keys() and band != "visvis"]
+        tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
+                                    "output":projectdir,
+                                    "projectname":projectname,
+                                    "chunkname":f"{projectname}_{fb}visvis",
+                                    "chunklist":chunklist,
+                                    "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS}))
+    for k, item in chunks.items():
+        for fb in ["front","back"]:
+            if  item.get(fb,None) is None:
+                continue
+           
             tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
                                         "output":projectdir,
                                         "projectname":projectname,

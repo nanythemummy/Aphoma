@@ -279,13 +279,15 @@ class MetashapeTask_AlignChunks(MetashapeTask):
         for chunk in self.doc.chunks:
             if len(names)==0 or chunk.label in names:
                 chunklist.append(chunk.key)
+        if self.chunk.key not in chunklist:
+            chunklist.append(self.chunk.key) #the referrence chunk must be in the list. This code should only be run with self.chunk=reference.
         return chunklist
 
     @timed(Statistic_Event_Types.EVENT_ALIGN_CHUNKS)
     def execute(self):
         if self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
             chunkstoalign = self.buildChunklist()
-            markerlist = [marker.key for marker in self.chunk.markers]
+            markerlist =list(range(len(self.chunk.markers))) #this may be version dependent. The code I'm running on the mac may have used keys instead of indices.
             self.doc.alignChunks(chunkstoalign,self.chunk.key,method=1,markers=markerlist)
             self.doc.save()
         return True, ErrorCodes.NONE
