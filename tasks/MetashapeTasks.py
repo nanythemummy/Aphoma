@@ -288,7 +288,7 @@ class MetashapeTask_AlignChunks(MetashapeTask):
         if self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
             chunkstoalign = self.buildChunklist()
             markerlist =list(range(len(self.chunk.markers))) #this may be version dependent. The code I'm running on the mac may have used keys instead of indices.
-            self.doc.alignChunks(chunkstoalign,self.chunk.key,method=1,markers=markerlist)
+            self.doc.alignChunks(chunkstoalign,self.chunk.key,method=1,fit_scale=True,markers=markerlist)
             self.doc.save()
         return True, ErrorCodes.NONE
     
@@ -497,7 +497,6 @@ class MetashapeTask_BuildTextures(MetashapeTask):
 
 
 class MetashapeTask_Reorient(MetashapeTask):
-
     """
     Task object for reorienting a model in space based on a pre-defined x and y axis. It requires:
         input:str a directory of pictures to operate on.
@@ -615,8 +614,7 @@ class MetashapeTask_ExportOrthomosaic(MetashapeTask):
                                     format = Metashape.RasterFormat.RasterFormatTiles,
                                     image_format=Metashape.ImageFormat.ImageFormatTIFF,
                                     raster_transform = Metashape.RasterTransformType.RasterTransformNone,
-                                    resolution_x=resolutionx,
-                                    resolution_y = resolutiony)
+                                    resolution=resolutionx)
         return success, code
     
     def exit(self):
