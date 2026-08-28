@@ -27,7 +27,7 @@
             "request": "launch",
             "program": "multibanded_boards.py",
             "console": "integratedTerminal",
-            "args":["E:/automation/Deck Plank Clean/_input","E:/automation/Deck Plank Clean","Deck_plank"]
+            "args":["/Users/sydneycarton/Documents/Multibanded/SG3/_input","/Users/sydneycarton/Documents/Multibanded/SG3/","Deck_plank"]
         },
                 {
             "name": "test_multibanded_part_2",

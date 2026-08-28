@@ -86,14 +86,20 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
         brightness = float(multibanded_types[k].get("brightness",1.0))
         for fbk, fbv in v.items():
             #key will be front or back.
-            refs = chunks[referencefiles][fbk]["files"]
+            #refs = chunks[referencefiles][fbk]["files"]
             fbv["references"]=[]
-            for reference in refs:
-                referenceimage = Path(reference)
-                output = Path(referencepath,f"{k}_{fbk}_ref_{referenceimage.stem}{referenceimage.suffix}")
-                if not output.exists():
-                    convertToGrayscaleAdjustBrightness(referenceimage,output,gray,channel,False,brightness)
-                fbv["references"].append(output)
+            for im in fbv["files"]:
+                expectedname = re.sub(re.escape(k), referencefiles, str(im), flags=re.IGNORECASE)
+                expectedpath = Path(expectedname)
+                if not expectedpath.exists():
+                    getGlobalLogger(__name__).error("Reference channel images %s do not have identical numbers to current band %s",referencefiles,k)
+                    return None
+                else:
+                    tempname = Path(referencepath,f"{im.stem}_ref_{expectedpath.stem}{expectedpath.suffix}")
+                    if not tempname.exists():
+                        convertToGrayscaleAdjustBrightness(expectedpath,tempname,gray,channel,False,brightness)
+                    fbv["references"].append(tempname)
+
     return chunks
 
 
@@ -322,9 +328,10 @@ def build_multibanded_cmd(args):
     Configurator.getConfig().setProperty("photogrammetry","palette","Multibanded")
     chunks = sortFilesIntoBandsByName(Path(sourcedir))
     chunks = setupReferences(chunks, Path(projdir))
-    tasks = setupTasksPhaseOne(chunks, Path(sourcedir),projectname,Path(projdir))
-    executeTasklist(tasks)
-    convertOrthomosaicsToGray(projectname,chunks,Path(projdir,"output"))
+    if chunks != None:
+        tasks = setupTasksPhaseOne(chunks, Path(sourcedir),projectname,Path(projdir))
+        executeTasklist(tasks)
+        convertOrthomosaicsToGray(projectname,chunks,Path(projdir,"output"))
        
 if __name__=="__main__":
     multibandparser = argparse.ArgumentParser()

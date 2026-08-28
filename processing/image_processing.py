@@ -23,6 +23,8 @@ from util.PipelineLogging import getLogger
 from processing import maskingAlgorithms
 from tasks import MaskingTasks
 
+PILImage.MAX_IMAGE_PIXELS = None
+
 
 def build_masks(imagepath,outputdir,mode):
     
