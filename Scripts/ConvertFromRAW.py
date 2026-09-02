@@ -9,6 +9,7 @@ from tasks.ConversionTasks import ConvertToJPG,ConvertToTIF
 from util.InstrumentationStatistics import InstrumentationStatistics
 from util.PipelineLogging import getLogger as getGlobalLogger
 from util.ErrorCodeConsts import ErrorCodes
+from util.Configurator import Configurator
 
 
 def buildQueue(inputdir:str, outputdir:str, tp:int)->Queue:
@@ -20,7 +21,9 @@ def buildQueue(inputdir:str, outputdir:str, tp:int)->Queue:
     """
     q = Queue()
     if Path(inputdir).exists() and Path(outputdir).exists:
-        paths = Path(inputdir).glob("*.NEF")
+        source_exts = Configurator.getConfig().getProperty("processing","Source_Type") or [".cr2",".nef"]
+        source_exts = {ext.lower() for ext in source_exts}
+        paths = [p for p in Path(inputdir).iterdir() if p.is_file() and p.suffix.lower() in source_exts]
         for path in paths:
             if int(tp) == 0:
                 q.put(ConvertToTIF({"input":path,"output":outputdir,"profile_correction":True}))

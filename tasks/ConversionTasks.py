@@ -36,6 +36,9 @@ class ConvertToTask(BaseTask):
             #do lens profile correction This code was borrowed from here: https://pypi.org/project/lensfunpy/
             exif = util.get_exif_data(self.input)
             clprofile = util.get_camera_lens_profile(cam,lens)
+            if not clprofile.get("camera") or not clprofile.get("lens"):
+                getLogger(__name__).error("WARNING: No camera/lens profile configured (processing.Camera=%s, processing.Lens=%s in config.json); skipping lens profile correction.",cam,lens)
+                return tifhandle
             cam_make = exif.get("Make",clprofile["camera"]["maker"])
             cam_model = exif.get("Model",clprofile["camera"]["model"])
             lens_model = exif.get("Lens",clprofile["lens"]["model"])
@@ -46,14 +49,18 @@ class ConvertToTask(BaseTask):
             if len(cams)>0:
                 caminfo = cams[0]
                 lenses = lensdb.find_lenses(caminfo,lens_make,lens_model)
+                if len(lenses)==0 and lens_model != clprofile["lens"]["model"]:
+                    #Exif "Lens" text (eg. just a focal length range, common on fixed-lens compacts) often doesn't
+                    #match lensfun's naming. Fall back to the model configured in CameraProfiles.json.
+                    lenses = lensdb.find_lenses(caminfo,lens_make,clprofile["lens"]["model"])
                 if len(lenses)>0:
                     lensinfo = lenses[0]
-               
+
             #get data needed for calc from exif data
-            
+
                     focal_length = exif["FocalLength"] if "FocalLength" in exif.keys() else 0
                     aperture = exif["FNumber"] if "FNumber" in exif.keys() else 0
-            
+
 
                     if focal_length ==0 or aperture ==0:
                         getLogger(__name__).error("WARNING: Can't do profile corrections, because there is no value for aperture or f-number in the exif data of the photo.")
@@ -65,9 +72,16 @@ class ConvertToTask(BaseTask):
                     modifier.initialize(focal_length,aperture,distance,pixel_format = tifhandle.dtype.type ) #demo code has this as just dtype, but it has a keyerror exception.
                     undist_coords = modifier.apply_geometry_distortion()
                     newimg = cv2.remap(tifhandle,undist_coords, None, cv2.INTER_LANCZOS4)
-                    if not modifier.apply_color_modification(newimg):
-                        getLogger(__name__).error("WARNING: Failed to remove vignetting.")
+                    if newimg.dtype == numpy.uint8:
+                        #lensfunpy's vignetting/color correction only supports 8-bit images; skip it for
+                        #16-bit output rather than letting it raise (TypeError: No matching signature found).
+                        if not modifier.apply_color_modification(newimg):
+                            getLogger(__name__).error("WARNING: Failed to remove vignetting.")
                     return newimg
+                else:
+                    getLogger(__name__).error("WARNING: No lens profile found in lensfun database for maker=%s model=%s; skipping lens profile correction.",lens_make,lens_model)
+            else:
+                getLogger(__name__).error("WARNING: No camera profile found in lensfun database for maker=%s model=%s; skipping lens profile correction.",cam_make,cam_model)
 
         return tifhandle
 class ConvertToTIF(ConvertToTask):
@@ -107,8 +121,8 @@ class ConvertToTIF(ConvertToTask):
                                               user_flip=0,
                                               user_black=None,
                                               user_sat = None)
-                    #corrected = self.profileCorrection(rgb)
-                imageio.imwrite(outputname,rgb)
+                    corrected = self.profileCorrection(rgb)
+                imageio.imwrite(outputname,corrected)
 
             else:
                 print("Converting from JPG")

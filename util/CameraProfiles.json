@@ -10,6 +10,11 @@
         {
             "maker":"Canon",
             "model":"Canon EOS 7D"
+        },
+        "PowerShot_S120":
+        {
+            "maker":"Canon",
+            "model":"Canon PowerShot S120"
         }
     },
     "lenses":
@@ -27,7 +32,7 @@
         "Canon_1":
         {
             "maker":"Canon",
-            "model":"5.2-26.0mm"
+            "model":"Canon PowerShot S120 & compatibles"
         }
     }
 
