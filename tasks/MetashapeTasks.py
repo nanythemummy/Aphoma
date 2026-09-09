@@ -634,36 +634,63 @@ class MetashapeTask_BuildOrthomosaic(MetashapeTask):
         input: str - a directory of pictures to operate on.
         output: str - a place to put the results (parent folder of the picture folder, usually).
         chunkname: str - label of the chunk to operate on.
+        referencechunk: str, optional - label of another chunk whose already-built orthomosaic's
+            projection and footprint should be reused, so the two orthomosaics come out with matching
+            pixel dimensions. Without this, buildOrthomosaic() ignores chunk.region entirely and
+            auto-flattens/auto-crops to that chunk's own reconstructed geometry, which is why chunks
+            that should represent the same physical extent (e.g. different bands of the same board
+            face) can otherwise come out different sizes even after their regions are unified with
+            MetashapeTask_CopyBoundingBoxToChunks.
     For it to run successfully, the chunk must have a model and no orthomosaic.
     """
     def __init__(self, argdict: dict):
         super().__init__(argdict)
+        self.referencechunkname = argdict.get("referencechunk", None)
+        self.referencechunk = None
 
     def __repr__(self):
         return "Metashape Task: Build Orthomosaic"
-    
+
     def setup(self):
         success,code = super().setup()
         if not self.chunk.model:
             success = False
             code = ErrorCodes.NO_MODEL_FOUND
+        if success and self.referencechunkname:
+            for c in self.doc.chunks:
+                if c.label == self.referencechunkname:
+                    self.referencechunk = c
+                    break
+            if self.referencechunk is None:
+                getLogger(__name__).warning("Reference chunk %s for orthomosaic framing not found; %s will get its own auto-computed extent instead.",self.referencechunkname,self.chunkname)
         return success,code
-    
+
     @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)
     def execute(self):
         success, code = super().execute()
-        if success: 
+        if success:
             # Only build orthomosaic if there is a model and no orthomosaic yet
             if self.chunk.model and not self.chunk.orthomosaic:
                 getLogger(__name__).info("Building Orthomosaic.")
                 scalex = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x")
                 scaley = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y")
-                self.chunk.buildOrthomosaic(
-                    surface_data=Metashape.DataSource.ModelData,
-                    blending_mode=Metashape.BlendingMode.MosaicBlending,
-                    resolution_x=scalex,
-                    resolution_y=scaley
-                )
+                buildargs = {
+                    "surface_data":Metashape.DataSource.ModelData,
+                    "blending_mode":Metashape.BlendingMode.MosaicBlending,
+                    "resolution_x":scalex,
+                    "resolution_y":scaley,
+                }
+                if self.referencechunk is not None and self.referencechunk.orthomosaic is not None:
+                    #Reuse the reference chunk's exact projection/footprint so this orthomosaic comes out
+                    #with the same pixel dimensions instead of auto-cropping to this chunk's own geometry.
+                    refortho = self.referencechunk.orthomosaic
+                    region = Metashape.BBox()
+                    region.min = Metashape.Vector([refortho.left,refortho.bottom])
+                    region.max = Metashape.Vector([refortho.right,refortho.top])
+                    buildargs["projection"] = refortho.projection
+                    buildargs["region"] = region
+                    getLogger(__name__).info("Framing orthomosaic for %s to match reference chunk %s.",self.chunkname,self.referencechunkname)
+                self.chunk.buildOrthomosaic(**buildargs)
             try:
                 self.doc.save()
             except OSError as e:

@@ -84,9 +84,7 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
         channel = chans.get(c,util.ColorChannelConstants.NUMPY_BLUE)
         gray = True if str(multibanded_types[k].get("grayscale_ortho","True")).upper() == "TRUE" else False
         brightness = float(multibanded_types[k].get("brightness",1.0))
-        for fbk, fbv in v.items():
-            #key will be front or back.
-            #refs = chunks[referencefiles][fbk]["files"]
+        for _, fbv in v.items():
             fbv["references"]=[]
             for im in fbv["files"]:
                 expectedname = re.sub(re.escape(k), referencefiles, str(im), flags=re.IGNORECASE)
@@ -242,6 +240,11 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                                 "chunkname":f"{projectname}_{fb}{k}"}))
     for fb in ["front","back"]:
         chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys() if fb in chunks[band].keys() and band != "visvis"]
+
+        tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
+                                    "output":projectdir,
+                                    "projectname":projectname,
+                                    "chunkname":f"{projectname}_{fb}visvis"}))
         tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
                                     "output":projectdir,
                                     "projectname":projectname,
@@ -252,11 +255,7 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
         for fb in ["front","back"]:
             if  item.get(fb,None) is None:
                 continue
-           
-            tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
-                                        "output":projectdir,
-                                        "projectname":projectname,
-                                        "chunkname":f"{projectname}_{fb}{k}"}))
+                
             tasks.put(MetashapeTask_ChangeImagePathsPerChunk({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,
@@ -264,33 +263,37 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                             "replace_these":chunks[k][fb]["references"],
                             "to_replace_with":chunks[k][fb]["files"]}))
            
-    doc = MetashapeFileSingleton.getMetashapeDoc(projectname,Path(projectdir))
     for i in ["front","back"]:
-        chunklist = []
-        for otherchunk in doc.chunks:
-            if otherchunk.label.startswith(f"{projectname}_{i}"):
-                chunklist.append(otherchunk)
-        
-        tasks.put(MetashapeTask_ResizeBoundingBoxFromMarkers({"input":sourcedir,
-                                                        "output":projectdir,
-                                                        "projectname":projectname,
-                                                        "chunkname":f"{projectname}_{i}visvis",
-                                                        "dimensionmarkers":[7,15,7,8]}
-                                                        ))         
-        tasks.put(MetashapeTask_CopyBoundingBoxToChunks({ "input":sourcedir,
-                                                            "output":projectdir,
-                                                            "projectname":projectname,
-                                                            "chunkname":f"{projectname}_{i}visvis",
-                                                            "chunklist":chunklist}))
-    for k, item in chunks.items():
-        for i in ["front","back"]:
-                          
-            if  item.get(fb,None) is None:
+        #Build the visvis reference orthomosaic first so its projection/footprint can be reused below to
+        #frame the other bands' orthomosaics to matching pixel dimensions.
+        visvis = chunks.get("visvis",None)
+        if visvis and i in visvis.keys():
+            tasks.put(MetashapeTask_ResizeBoundingBoxFromMarkers({"input":sourcedir,
+                                                "output":projectdir,
+                                                "projectname":projectname,
+                                                "chunkname":f"{projectname}_{i}visvis",
+                                                "dimensionmarkers":[7,15,7,8]}
+                                                ))    
+            tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{i}visvis"}))
+
+            tasks.put(MetashapeTask_ExportOrthomosaic({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{i}visvis"}))
+
+        for k, item in chunks.items():
+            if k == "visvis":
+                continue
+            if  item.get(i,None) is None:
                 continue
             tasks.put(MetashapeTask_BuildOrthomosaic({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,
-                            "chunkname":f"{projectname}_{i}{k}"}))
+                            "chunkname":f"{projectname}_{i}{k}",
+                            "referencechunk":f"{projectname}_{i}visvis"}))
 
             tasks.put(MetashapeTask_ExportOrthomosaic({"input":sourcedir,
                             "output":projectdir,

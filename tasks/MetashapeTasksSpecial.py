@@ -226,12 +226,10 @@ class MetashapeTask_CopyBoundingBoxToChunks(MetashapeTask):
         rcent = region.center
         rsize = region.size
         mctransform = self.chunk.transform.matrix
-        for c in self.chunklist:
+        chunks = [x for x in self.doc.chunks if x.label in self.chunklist]
+        for c in chunks:
             cregion = c.region
             print(c.label)
-            if c == self.chunk:
-                print("continuing")
-                continue
             T = c.transform.matrix.inv()*mctransform #map the current chunk's space to the main chunk's space and put that transform in t.
             R  = Metashape.Matrix([[T[0,0],T[0,1],T[0,2]],
                                 [T[1,0],T[1,1],T[1,2]],
