@@ -364,23 +364,26 @@ class MetashapeTask_ErrorReduction(MetashapeTask):
         input:str a directory of pictures to operate on.
         output:str a place to put the results--this is the parent folder of the picture folder, usually.
         chunkname:str label of the chunk to operate on.
+        calibration_mode:str optional, one of "full" (default), "reduced", or "fixed"--see
+            ModelHelpers.optimize_cameras() for what each does. Defaults to "full", i.e. today's behavior.
         For it to run successfully, it the chunk it is operating on must have tie points but no model.
 
     """
     def __init__(self,argdict:dict):
         super().__init__(argdict)
-        
+        self.calibration_mode = argdict.get("calibration_mode","full")
+
     def __repr__(self):
         return "Metashape Task: Error Reduction Workflow"
-    
+
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success,code = super().execute()
         if success:
-            try:     
-                if self.chunk.tie_points and not self.chunk.model:  
+            try:
+                if self.chunk.tie_points and not self.chunk.model:
                     thresholds = Configurator.getConfig().getProperty("photogrammetry","error_thresholds")
-                    ModelHelpers.refine_sparse_cloud(self.doc, self.chunk,thresholds)
+                    ModelHelpers.refine_sparse_cloud(self.doc, self.chunk,thresholds,self.calibration_mode)
             except Exception as e:
                 getLogger(__name__).error(e)
                 code = ErrorCodes.UNKNOWN

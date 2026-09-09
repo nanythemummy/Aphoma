@@ -288,62 +288,95 @@ def detect_markers(chunk, markertype:str):
     # update markers
     chunk.refineMarkers()
 
-def optimize_cameras(chunk, final_optimization=False):
+def optimize_cameras(chunk, final_optimization=False, calibration_mode="full"):
     """Runs the optimize cameras function in metashape.
-    
+
     Parameters:
     ----------------
     chunk: the chunk with the cameras to optimize.
-    final_optimization: A different set of camera parameters are used the final time this is called in the error reduction cycle. 
-    Pass in true if you would like that.
+    final_optimization: A different set of camera parameters are used the final time this is called in the error reduction cycle.
+    Pass in true if you would like that. Ignored unless calibration_mode is "full".
+    calibration_mode: one of:
+        "full" (default) - self-calibrate every intrinsic parameter
+        "reduced" - self-calibrate only f/cx/cy/k1/k2, skipping the higher-order distortion terms
+            (k3, p1, p2, and the final_optimization-only b1/b2/k4/p3) that are most prone to trading off
+            against depth on a near-planar subject and producing "doming".
+        "fixed" - fit no intrinsic parameters at all; use for a chunk whose sensor already has a
+            calibration copied in from another chunk via copy_calibration(), so only camera positions
+            are solved.
     """
-    
+    fit_core = calibration_mode != "fixed"
+    fit_full_only = fit_core and calibration_mode == "full"
+    fit_extended = fit_full_only and final_optimization
     #runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
     #which ought to occur on the final iteration of a process.
-    chunk.optimizeCameras(fit_f=True,
-                          fit_cx=True,
-                          fit_cy=True,
-                          fit_b1=final_optimization,
-                          fit_b2=final_optimization,
-                          fit_k1=True,
-                          fit_k2=True,
-                          fit_k3=True,
-                          fit_k4=final_optimization,
-                          fit_p1 = True,
-                          fit_p2=True,
-                          fit_p3=final_optimization,
+    chunk.optimizeCameras(fit_f=fit_core,
+                          fit_cx=fit_core,
+                          fit_cy=fit_core,
+                          fit_b1=fit_extended,
+                          fit_b2=fit_extended,
+                          fit_k1=fit_core,
+                          fit_k2=fit_core,
+                          fit_k3=fit_full_only,
+                          fit_k4=fit_extended,
+                          fit_p1 = fit_full_only,
+                          fit_p2=fit_full_only,
+                          fit_p3=fit_extended,
                           adaptive_fitting=False,
                           tiepoint_covariance=False)
 
-def refine_sparse_cloud(doc,chunk,error_thresholds:dict):
-    """Performs the error reduction/optimization algorithm as described by Neffra Matthews and Noble,Tommy. "In the Round Tutorial", 2018. 
-    
+def copy_calibration(source_chunk, dest_chunk):
+    """Copies the (self-calibrated) sensor calibration from source_chunk onto dest_chunk's matching
+    sensor(s) and marks them fixed there, so a subsequent optimize_cameras(calibration_mode="fixed") call
+    on dest_chunk only solves camera positions instead of re-deriving its own lens model.
+
+    Intended for cases where multiple chunks were shot with the same physical camera/lens (e.g. the
+    different bands of a multibanded board) and should share one calibration instead of each
+    independently self-calibrating--and independently doming--on its own.
+
+    Parameters:
+    -----------------
+    source_chunk: the chunk whose sensor calibration(s) should be copied.
+    dest_chunk: the chunk to copy the calibration onto.
+    """
+    if len(source_chunk.sensors) != len(dest_chunk.sensors):
+        LOGGER.warning("Sensor count mismatch copying calibration from %s (%s sensors) to %s (%s sensors); copying by position anyway.",
+                       source_chunk.label, len(source_chunk.sensors), dest_chunk.label, len(dest_chunk.sensors))
+    for source_sensor, dest_sensor in zip(source_chunk.sensors, dest_chunk.sensors):
+        dest_sensor.user_calib = source_sensor.calibration.copy()
+        dest_sensor.fixed_calibration = True
+
+def refine_sparse_cloud(doc,chunk,error_thresholds:dict,calibration_mode="full"):
+    """Performs the error reduction/optimization algorithm as described by Neffra Matthews and Noble,Tommy. "In the Round Tutorial", 2018.
+
     Parameters:
     ---------------
     doc: The metashape document...this is so we can save between various stages.
     chunk: the chunk on which we are currently operating.
     config: the config.json subdictionary under the key "photogrammetry"
+    calibration_mode: passed through to optimize_cameras()--see its docstring. Defaults to "full",
+        i.e. unchanged behavior.
 
     """
     LOGGER.info("Refining sparse cloud on chunk %s", chunk)
-    #copied from the script RefineSparseCloud.py     
-    optimize_cameras(chunk,False)
+    #copied from the script RefineSparseCloud.py
+    optimize_cameras(chunk,False,calibration_mode)
     doc.save()
     #get number of points before refinement:
-    
+
     #Remove points with reconstruction uncertainty error above threshold.
     remove_above_error_threshold(chunk,
                               Metashape.TiePoints.Filter.ReconstructionUncertainty,
                               error_thresholds["reconstruction_uncertainty"],
                               error_thresholds["reconstruction_uncertainty_max_selection"])
-    optimize_cameras(chunk,False)
+    optimize_cameras(chunk,False,calibration_mode)
     doc.save()
     #Remove points with a projection accuracy error aabove threshold.
     remove_above_error_threshold(chunk,
                             Metashape.TiePoints.Filter.ProjectionAccuracy,
                             error_thresholds["projection_accuracy"],
                             error_thresholds["projection_accuracy_max_selection"])
-    optimize_cameras(chunk,False)
+    optimize_cameras(chunk,False,calibration_mode)
     doc.save()
     #remove points with a reprojection error of above threshold, only removing a set percentage of overall points at a time.
     num_points = len(chunk.tie_points.points)
@@ -354,9 +387,9 @@ def refine_sparse_cloud(doc,chunk,error_thresholds:dict):
                                     Metashape.TiePoints.Filter.ReprojectionError,
                                     error_thresholds["reprojection_error"],
                                     error_thresholds["reprojection_max_selection_per_iteration"])
-        optimize_cameras(chunk,False)
+        optimize_cameras(chunk,False,calibration_mode)
         num_points = len(chunk.tie_points.points)
-    optimize_cameras(chunk,True)
+    optimize_cameras(chunk,True,calibration_mode)
     doc.save()
 
 def remove_above_error_threshold(chunk, filtertype,max_error,max_points):

@@ -165,6 +165,54 @@ class MetashapeTask_CopyMarkersFromChunk(MetashapeTask):
             success = False
             code = ErrorCodes.MISSING_MARKER
         return success, code
+class MetashapeTask_CopyCalibration(MetashapeTask):
+    """
+    Task object for copying a chunk's self-calibrated sensor calibration onto another chunk's matching
+    sensor(s), marking them fixed there. Pair this with a MetashapeTask_ErrorReduction on the destination
+    chunk using calibration_mode="fixed", so that chunk solves camera positions only, instead of
+    independently self-calibrating its own lens model. Use when several chunks were shot with the same
+    physical camera/lens (e.g. the different bands of a multibanded board) and should share one
+    calibration instead of each independently self-calibrating--and independently doming--on its own.
+    -This expects an argdict on init with: {"sourcechunk": the name of the chunk to copy calibration from.
+                                            "chunkname": the name of the chunk you are operating on (destination).
+                                            "projectname": the name of the psz file without the extension.
+                                            "input": The directory you put the source images in.
+                                            "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
+    """
+    def __init__(self, argdict:dict):
+        super().__init__(argdict)
+        self.sourcechunkname = argdict["sourcechunk"]
+        self.sourcechunk = None
+
+    def __repr__(self):
+        return "Metashape Task: Copy Calibration From Chunk"
+
+    def setup(self):
+        success, code = super().setup()
+        if success and self.chunk:
+            for c in self.doc.chunks:
+                if c.label == self.sourcechunkname:
+                    self.sourcechunk = c
+                    break
+            if self.sourcechunk is None:
+                success = False
+                code = ErrorCodes.MISSING_TARGET_CHUNK
+        return success, code
+
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
+    def execute(self):
+        success, code = super().execute()
+        if not success:
+            return success, code
+        getGlobalLogger(__name__).info("Copying calibration from %s to %s.", self.sourcechunk.label, self.chunk.label)
+        ModelHelpers.copy_calibration(self.sourcechunk, self.chunk)
+        self.doc.save()
+        return success, code
+
+    def exit(self):
+        success, code = super().exit()
+        return success, code
+
 class MetashapeTask_ResizeBoundingBox(MetashapeTask):
     """
     -This is a task for resizing a bounding box given a centerpoint and a Metashape vector of width,depth,height

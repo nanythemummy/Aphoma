@@ -176,38 +176,60 @@ def executeTasklist(taskqueue:Queue):
 
 def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
     tasks = Queue()
-    getGlobalLogger(__name__).info("Building Tasklist, including aligning, error reduction, and marker detection.")  
-    for k,item in chunks.items():
-            for fb in ["front","back"]:
-                if  item.get(fb,None) is None:
-                    continue
-                if len(item[fb]["references"]) == 0 or len(item[fb]["files"]) == 0:
-                    chunks[k].pop(fb)
-                    continue
-                tasks.put(MetashapeTask_AlignPhotos({"input":sourcedir,
-                                                            "output":projectdir,
-                                                            "usemasks":False,
-                                                            "maskpath": Path(projectdir,"masks"),
-                                                            "projectname":projectname,
-                                                            "chunkname":f"{projectname}_{fb}{k}",
-                                                            "photos":item[fb]["references"]
-                                                            }))
-                tasks.put(MetashapeTask_ErrorReduction({"input":sourcedir,
-                                                            "output":projectdir,
-                                                            "projectname":projectname,
-                                                            "chunkname":f"{projectname}_{fb}{k}"
+    getGlobalLogger(__name__).info("Building Tasklist, including aligning, error reduction, and marker detection.")
+    calibration_mode = None
+    for fb in ["front","back"]:
+        #All bands of a multibanded board are shot with the same physical camera/lens, and the board is
+        #close to flat, which is exactly the geometry that makes independent per-band self-calibration
+        #prone to "doming"--each band converging on a slightly different systematic curvature that a
+        #marker-only chunk alignment can't undo. So the visvis band (already the anchor band used for
+        #cross-band alignment below) self-calibrates with a reduced parameter set, and every other band
+        #reuses its calibration instead of independently self-calibrating.
+        masterinfo = chunks.get("visvis",{}).get(fb)
+        masterband = "visvis" if masterinfo and len(masterinfo["references"])>0 and len(masterinfo["files"])>0 else None
+        orderedbands = ([masterband] + [k for k in chunks.keys() if k != masterband]) if masterband else list(chunks.keys())
+        for k in orderedbands:
+            item = chunks[k]
+            if  item.get(fb,None) is None:
+                continue
+            if len(item[fb]["references"]) == 0 or len(item[fb]["files"]) == 0:
+                chunks[k].pop(fb)
+                continue
+            tasks.put(MetashapeTask_AlignPhotos({"input":sourcedir,
+                                                        "output":projectdir,
+                                                        "usemasks":False,
+                                                        "maskpath": Path(projectdir,"masks"),
+                                                        "projectname":projectname,
+                                                        "chunkname":f"{projectname}_{fb}{k}",
+                                                        "photos":item[fb]["references"]
+                                                        }))
+            if masterband and k != masterband:
+                tasks.put(MetashapeTask_CopyCalibration({"input":sourcedir,
+                                                        "output":projectdir,
+                                                        "projectname":projectname,
+                                                        "chunkname":f"{projectname}_{fb}{k}",
+                                                        "sourcechunk":f"{projectname}_{fb}{masterband}"}))
+                calibration_mode = "fixed"
+            elif masterband and k == masterband:
+                calibration_mode = "reduced"
+            else:
+                calibration_mode = "full"
+            tasks.put(MetashapeTask_ErrorReduction({"input":sourcedir,
+                                                        "output":projectdir,
+                                                        "projectname":projectname,
+                                                        "chunkname":f"{projectname}_{fb}{k}",
+                                                        "calibration_mode":calibration_mode
+            }))
+            tasks.put(MetashapeTask_DetectMarkers({"input":sourcedir,
+                            "output":projectdir,
+                            "projectname":projectname,
+                            "chunkname":f"{projectname}_{fb}{k}"}))
+            tasks.put(MetashapeTask_AddScales({"input":sourcedir,
+                                    "output":projectdir,
+                                    "projectname":projectname,
+                                    "chunkname":f"{projectname}_{fb}{k}"}))
 
-                }))
-                tasks.put(MetashapeTask_DetectMarkers({"input":sourcedir,
-                                "output":projectdir,
-                                "projectname":projectname,
-                                "chunkname":f"{projectname}_{fb}{k}"}))
-                tasks.put(MetashapeTask_AddScales({"input":sourcedir,
-                                        "output":projectdir,
-                                        "projectname":projectname,
-                                        "chunkname":f"{projectname}_{fb}{k}"}))
 
-    
     for fb in ["front","back"]:  
         visvis = chunks.get("visvis",None)
         if visvis and fb in visvis.keys():
