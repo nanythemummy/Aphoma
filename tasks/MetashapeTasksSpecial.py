@@ -213,6 +213,72 @@ class MetashapeTask_CopyCalibration(MetashapeTask):
         success, code = super().exit()
         return success, code
 
+class MetashapeTask_CloneChunk(MetashapeTask):
+    """
+    Task object for duplicating an already-finished chunk (cameras with their solved transforms,
+    tie points, calibration, markers, and model) onto a new chunk, instead of independently
+    reconstructing from a re-encoded copy of the same photos. Use for a multibanded band whose
+    pointcloud_reference points at another band: setupReferences() in multibanded_boards.py has that
+    band reuse the reference band's own converted photos for tie-point matching, so independently
+    running alignment/error-reduction/model-building on it is redundant work that can also let the two
+    bands' solved geometry (camera poses, and especially the reconstructed mesh used to orthorectify)
+    diverge by a small amount--which then shows up as marker misalignment between the two bands'
+    orthomosaics. Cloning instead guarantees identical geometry; only the photos get swapped out
+    afterward (see MetashapeTask_ChangeImagePathsPerChunk) so the orthomosaic still gets this band's
+    own color data.
+    -This expects an argdict on init with: {"sourcechunk": the name of the already-finished chunk to clone.
+                                            "chunkname": the name of the chunk you want to end up with (destination).
+                                            "projectname": the name of the psz file without the extension.
+                                            "input": The directory you put the source images in.
+                                            "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
+    """
+    def __init__(self, argdict:dict):
+        super().__init__(argdict)
+        self.sourcechunkname = argdict["sourcechunk"]
+        self.sourcechunk = None
+
+    def __repr__(self):
+        return "Metashape Task: Clone Chunk"
+
+    def setup(self):
+        success, code = super().setup()
+        if success is False and code is ErrorCodes.NO_CHUNK:
+            #expected the first time this runs--the destination chunk doesn't exist yet.
+            success = True
+            code = ErrorCodes.NONE
+        for c in self.doc.chunks:
+            if c.label == self.sourcechunkname:
+                self.sourcechunk = c
+                break
+        if self.sourcechunk is None:
+            success = False
+            code = ErrorCodes.MISSING_TARGET_CHUNK
+        return success, code
+
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
+    def execute(self):
+        success, code = super().execute()
+        if not success:
+            return success, code
+        if self.chunk is None:
+            getGlobalLogger(__name__).info("Cloning chunk %s as %s.", self.sourcechunk.label, self.chunkname)
+            self.chunk = self.sourcechunk.copy()
+            self.chunk.label = self.chunkname
+            try:
+                self.doc.save()
+            except OSError as e:
+                getGlobalLogger(__name__).error(e)
+                success = False
+                code = ErrorCodes.METASHAPE_FILE_LOCKED
+        return success, code
+
+    def exit(self):
+        success, code = super().exit()
+        if success and not self.chunk.model:
+            success = False
+            code = ErrorCodes.NO_MODEL_FOUND
+        return success, code
+
 class MetashapeTask_ResizeBoundingBox(MetashapeTask):
     """
     -This is a task for resizing a bounding box given a centerpoint and a Metashape vector of width,depth,height

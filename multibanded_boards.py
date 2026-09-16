@@ -49,6 +49,19 @@ def convertOrthomosaicsToGray(projname,chunks,inputdirectory:Path):
                 convertToGrayscaleAdjustBrightness(orthopath,orthopath,gray,channel,eightbit,brightness)
 
 
+def isCloneBand(band:str, multibanded_types:dict)->bool:
+    """
+    True if `band`'s pointcloud_reference points at another band that itself self-references (i.e. `band`
+    doesn't need its own independent alignment/reconstruction--its chunk gets cloned wholesale from that
+    other band's finished chunk instead, see MetashapeTask_CloneChunk).
+    """
+    ref = multibanded_types.get(band,{}).get("pointcloud_reference",band)
+    return ref != band and multibanded_types.get(ref,{}).get("pointcloud_reference",ref) == ref
+
+def cloneSourceBand(band:str, multibanded_types:dict)->str:
+    """The band whose finished chunk `band` should be cloned from. Only meaningful when isCloneBand(band) is True."""
+    return multibanded_types.get(band,{}).get("pointcloud_reference",band)
+
 def setupReferences(chunks:dict,basedir:Path)->dict:
     """
         Some bands of photos do not capture enough information to build a sparse cloud with. In this case, photos from another band will be 
@@ -79,12 +92,17 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
         os.mkdir(referencepath)
     for k,v in chunks.items():
         referencefiles = multibanded_types[k].get("pointcloud_reference",k)
-        c = multibanded_types[k].get("graychannel","b")
+        clone = isCloneBand(k,multibanded_types)
+        #For a clone band, the images that will actually drive alignment are the ones generated below
+        #for its pointcloud_reference band, not a fresh copy of them--so use that band's own settings,
+        #and don't waste time re-encoding a redundant near-duplicate image here (see MetashapeTask_CloneChunk).
+        settingsband = referencefiles if clone else k
+        c = multibanded_types[settingsband].get("graychannel","b")
         chans={"r":util.ColorChannelConstants.NUMPY_RED,"g":util.ColorChannelConstants.NUMPY_GREEN,"b":util.ColorChannelConstants.NUMPY_BLUE}
         channel = chans.get(c,util.ColorChannelConstants.NUMPY_BLUE)
-        gray = True if str(multibanded_types[k].get("grayscale_ortho","True")).upper() == "TRUE" else False
-        brightness = float(multibanded_types[k].get("brightness",1.0))
-        for _, fbv in v.items():
+        gray = True if str(multibanded_types[settingsband].get("grayscale_ortho","True")).upper() == "TRUE" else False
+        brightness = float(multibanded_types[settingsband].get("brightness",1.0))
+        for fb, fbv in v.items():
             fbv["references"]=[]
             for im in fbv["files"]:
                 expectedname = re.sub(re.escape(k), referencefiles, str(im), flags=re.IGNORECASE)
@@ -92,6 +110,16 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
                 if not expectedpath.exists():
                     getGlobalLogger(__name__).error("Reference channel images %s do not have identical numbers to current band %s",referencefiles,k)
                     return None
+                elif clone:
+                    #expectedpath.exists() above resolves case-insensitively (macOS), but the filesystem
+                    #being case-insensitive doesn't make expectedpath's *string* match referencefiles' own
+                    #on-disk filename case--and referencefiles' own pass through this loop (the "else"
+                    #branch below, on its own self-referencing iteration) names its reference file using
+                    #that real on-disk name verbatim. So look up referencefiles' actual (correctly-cased)
+                    #file for this same photo rather than re-deriving it via string substitution, or the
+                    #path built here can silently name a file referencefiles never actually creates.
+                    realfile = next((f for f in chunks[referencefiles][fb]["files"] if f.name.lower()==expectedpath.name.lower()), expectedpath)
+                    fbv["references"].append(Path(referencepath,f"{realfile.stem}_ref_{expectedpath.stem}{expectedpath.suffix}"))
                 else:
                     tempname = Path(referencepath,f"{im.stem}_ref_{expectedpath.stem}{expectedpath.suffix}")
                     if not tempname.exists():
@@ -177,6 +205,7 @@ def executeTasklist(taskqueue:Queue):
 def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
     tasks = Queue()
     getGlobalLogger(__name__).info("Building Tasklist, including aligning, error reduction, and marker detection.")
+    multibanded_types = Configurator.getConfig().getProperty("photogrammetry","multibanded")
     calibration_mode = None
     for fb in ["front","back"]:
         #All bands of a multibanded board are shot with the same physical camera/lens, and the board is
@@ -194,6 +223,11 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                 continue
             if len(item[fb]["references"]) == 0 or len(item[fb]["files"]) == 0:
                 chunks[k].pop(fb)
+                continue
+            if isCloneBand(k, multibanded_types):
+                #This band's chunk is cloned wholesale from its pointcloud_reference band's finished
+                #chunk in phase two (see MetashapeTask_CloneChunk) instead of independently aligning
+                #and reconstructing from a re-encoded copy of that band's photos.
                 continue
             tasks.put(MetashapeTask_AlignPhotos({"input":sourcedir,
                                                         "output":projectdir,
@@ -230,11 +264,12 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                                     "chunkname":f"{projectname}_{fb}{k}"}))
 
 
-    for fb in ["front","back"]:  
+    for fb in ["front","back"]:
         visvis = chunks.get("visvis",None)
         if visvis and fb in visvis.keys():
 
-            chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys() if fb in chunks[band].keys() and band != "visvis"]
+            chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys()
+                         if fb in chunks[band].keys() and band != "visvis" and not isCloneBand(band, multibanded_types)]
             tasks.put(MetashapeTask_AlignChunks({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,
@@ -251,7 +286,12 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
 def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = None):
     tasks = Queue() if tasklist is None else tasklist
     getGlobalLogger(__name__).info("Building Tasklist, including selective scales, orientation, alignment, model, and orthophoto")
+    multibanded_types = Configurator.getConfig().getProperty("photogrammetry","multibanded")
     for k, item in chunks.items():
+        if isCloneBand(k, multibanded_types):
+            #No independent reconstruction for this band--its chunk is cloned (model included) from
+            #its pointcloud_reference band below, once that band's own chunk is finished.
+            continue
         for fb in ["front","back"]:
             if  item.get(fb,None) is None:
                 continue
@@ -261,7 +301,8 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                                 "projectname":projectname,
                                 "chunkname":f"{projectname}_{fb}{k}"}))
     for fb in ["front","back"]:
-        chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys() if fb in chunks[band].keys() and band != "visvis"]
+        chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys()
+                     if fb in chunks[band].keys() and band != "visvis" and not isCloneBand(band, multibanded_types)]
 
         tasks.put(MetashapeTask_ReorientSpecial({"input":sourcedir,
                                     "output":projectdir,
@@ -274,10 +315,25 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                                     "chunklist":chunklist,
                                     "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS}))
     for k, item in chunks.items():
+        if not isCloneBand(k, multibanded_types):
+            continue
+        sourceband = cloneSourceBand(k, multibanded_types)
+        for fb in ["front","back"]:
+            if item.get(fb,None) is None:
+                continue
+            if chunks.get(sourceband,{}).get(fb) is None:
+                getGlobalLogger(__name__).warning("Can't clone %s%s from %s%s because the source band has no chunk for that side; skipping.",fb,k,fb,sourceband)
+                continue
+            tasks.put(MetashapeTask_CloneChunk({"input":sourcedir,
+                                    "output":projectdir,
+                                    "projectname":projectname,
+                                    "chunkname":f"{projectname}_{fb}{k}",
+                                    "sourcechunk":f"{projectname}_{fb}{sourceband}"}))
+    for k, item in chunks.items():
         for fb in ["front","back"]:
             if  item.get(fb,None) is None:
                 continue
-                
+
             tasks.put(MetashapeTask_ChangeImagePathsPerChunk({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,
