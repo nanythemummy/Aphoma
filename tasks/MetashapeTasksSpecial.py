@@ -1,6 +1,7 @@
 
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import math
+import itertools
 from os import mkdir
 import shutil
 import re
@@ -107,12 +108,21 @@ class MetashapeTask_ReorientSpecial(MetashapeTask):
     def execute(self):
         success, code = super().execute()
         if success:
-            if len(self.axes)==0:
+            if self.chunk.orthomosaic:
+                #An orthomosaic already existing on this chunk means its whole downstream pipeline
+                #(this reorientation, the cross-chunk AlignChunks pass, model, and orthomosaic) already
+                #completed successfully on some earlier run. Re-running reorientation here recomputes
+                #axes from the chunk's *current* marker positions and replaces the whole transform from
+                #scratch, which isn't perfectly numerically idempotent--repeated re-runs against an
+                #already-finished project were observed to measurably degrade previously-good
+                #cross-band marker alignment over several passes. Skip it once there's nothing left to do.
+                getGlobalLogger(__name__).info("Chunk %s already has an orthomosaic; skipping re-orientation.",self.chunkname)
+            elif len(self.axes)==0:
                 getGlobalLogger(__name__).warning("No axes on which to orient chunk %s",self.chunkname)
             else:
                 getGlobalLogger(__name__).info("Reorienting chunk %s according to markers on palette.",self.chunkname)
                 ModelHelpers.align_markers_to_axes(self.chunk,self.axes,1.0)
-                ModelHelpers.move_model_to_world_origin(self.chunk) 
+                ModelHelpers.move_model_to_world_origin(self.chunk)
         return success, code
     
 class MetashapeTask_CopyMarkersFromChunk(MetashapeTask):
@@ -277,6 +287,151 @@ class MetashapeTask_CloneChunk(MetashapeTask):
         if success and not self.chunk.model:
             success = False
             code = ErrorCodes.NO_MODEL_FOUND
+        return success, code
+
+class MetashapeTask_CheckTiePointCount(MetashapeTask):
+    """
+    Task object for comparing a band's tie point count against an anchor band's, as an early, soft
+    warning signal that a band's own reconstruction may be weak. A low tie point count alone doesn't
+    reliably predict a broken reconstruction--some bands align fine despite having far fewer points
+    than the anchor--so this only logs a warning and never fails the build. It's meant to run right
+    after error reduction, before the far more expensive BuildModel/BuildOrthomosaic/BuildTexture
+    stages, alongside MetashapeTask_CheckMarkerConsistency, which is the check that actually catches a
+    broken reconstruction.
+    -This expects an argdict on init with: {"anchorchunk": the name of the chunk to compare tie point
+                                            count against.
+                                            "threshold": ratio (0-1) below which to warn--e.g. 0.5 warns
+                                            when this band has under half the anchor's tie points. Defaults
+                                            to 0.5.
+                                            "chunkname": the name of the chunk you are operating on.
+                                            "projectname": the name of the psz file without the extension.
+                                            "input": The directory you put the source images in.
+                                            "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
+    """
+    def __init__(self, argdict:dict):
+        super().__init__(argdict)
+        self.anchorchunkname = argdict["anchorchunk"]
+        self.anchorchunk = None
+        self.threshold = argdict.get("threshold", 0.5)
+
+    def __repr__(self):
+        return "Metashape Task: Check Tie Point Count Against Anchor Band"
+
+    def setup(self):
+        success, code = super().setup()
+        if success:
+            for c in self.doc.chunks:
+                if c.label == self.anchorchunkname:
+                    self.anchorchunk = c
+                    break
+            if self.anchorchunk is None:
+                success = False
+                code = ErrorCodes.MISSING_TARGET_CHUNK
+        return success, code
+
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
+    def execute(self):
+        success, code = super().execute()
+        if success:
+            mine = len(self.chunk.tie_points.points) if self.chunk.tie_points else 0
+            anchors = len(self.anchorchunk.tie_points.points) if self.anchorchunk.tie_points else 0
+            ratio = (mine / anchors) if anchors > 0 else 1.0
+            if ratio < self.threshold:
+                getGlobalLogger(__name__).warning(
+                    "Chunk %s has only %s tie points vs anchor chunk %s's %s (%.0f%% of anchor, below the %.0f%% warning threshold). "
+                    "This band's reconstruction may be weak--worth double-checking its alignment once the build finishes.",
+                    self.chunk.label, mine, self.anchorchunk.label, anchors, ratio*100, self.threshold*100)
+        return success, code
+
+class MetashapeTask_CheckMarkerConsistency(MetashapeTask):
+    """
+    Task object for catching a broken per-band reconstruction early, before the expensive BuildModel/
+    BuildOrthomosaic/BuildTexture stages run. Compares this chunk's own marker-to-marker distances
+    (each chunk's own marker.position run through that chunk's own chunk.transform.matrix, to put both
+    in real-world meters--marker.position alone is in the chunk's raw, arbitrary-scale bundle-adjustment
+    units, not real-world units; only chunk.transform carries the scale bars' calibration) against an
+    anchor band's--a band's own reconstruction can silently fold or collapse in weak-texture imagery (e.g. UV)
+    while still producing plausible-looking camera positions, so a legitimate reconstruction should
+    reproduce the anchor's marker-to-marker distances closely. Any pair that's off by more than
+    `threshold` fails the build here instead of quietly propagating into a distorted, mis-oriented
+    orthomosaic several build stages later.
+    -This expects an argdict on init with: {"anchorchunk": the name of the chunk to compare marker
+                                            distances against.
+                                            "threshold": maximum allowed fractional deviation from the
+                                            anchor's distance for any marker pair before failing, e.g. 0.2
+                                            allows up to 20% off. Defaults to 0.2.
+                                            "chunkname": the name of the chunk you are operating on.
+                                            "projectname": the name of the psz file without the extension.
+                                            "input": The directory you put the source images in.
+                                            "output": usually, this is the base directory of the project where you want the psz file and all the output images to be saved.}
+    """
+    def __init__(self, argdict:dict):
+        super().__init__(argdict)
+        self.anchorchunkname = argdict["anchorchunk"]
+        self.anchorchunk = None
+        self.threshold = argdict.get("threshold", 0.2)
+        self.badpairs = []
+
+    def __repr__(self):
+        #BaseTask.__init__ calls __repr__ to set _statename before MetashapeTask.__init__ has set
+        #self.chunkname (it's assigned after the super().__init__() call that reaches BaseTask), so
+        #this needs a safe fallback for that one bootstrap call--chunkname is set by the time __repr__
+        #is called again for real, e.g. in executeTasklist's failure log line.
+        return f"Metashape Task: Check Marker Consistency Against Anchor Band ({getattr(self, 'chunkname', '?')})"
+
+    def setup(self):
+        success, code = super().setup()
+        if success:
+            for c in self.doc.chunks:
+                if c.label == self.anchorchunkname:
+                    self.anchorchunk = c
+                    break
+            if self.anchorchunk is None:
+                success = False
+                code = ErrorCodes.MISSING_TARGET_CHUNK
+        return success, code
+
+    @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
+    def execute(self):
+        success, code = super().execute()
+        if success:
+            minetransform = self.chunk.transform.matrix
+            anchortransform = self.anchorchunk.transform.matrix
+            mine = {m.label: minetransform.mulp(m.position) for m in self.chunk.markers if m.position is not None}
+            anchor = {m.label: anchortransform.mulp(m.position) for m in self.anchorchunk.markers if m.position is not None}
+            shared = sorted(mine.keys() & anchor.keys())
+            self.badpairs = []
+            for a, b in itertools.combinations(shared, 2):
+                anchordist = (anchor[a]-anchor[b]).norm()
+                if anchordist < 1e-6:
+                    continue
+                minedist = (mine[a]-mine[b]).norm()
+                deviation = abs(minedist-anchordist)/anchordist
+                if deviation > self.threshold:
+                    self.badpairs.append((a, b, minedist, anchordist, deviation))
+            if self.badpairs:
+                success = False
+                code = ErrorCodes.MARKER_CONSISTENCY_FAILURE
+                #Map each flagged marker back to the photos it was actually detected in, so the failure
+                #message can point at specific pictures to add bridging markers to/between, instead of
+                #just naming the abstract marker pair.
+                markersbylabel = {m.label: m for m in self.chunk.markers}
+                allphotos = set()
+                for a, b, minedist, anchordist, deviation in self.badpairs:
+                    photosa = sorted(cam.label for cam in markersbylabel[a].projections.keys())
+                    photosb = sorted(cam.label for cam in markersbylabel[b].projections.keys())
+                    allphotos.update(photosa)
+                    allphotos.update(photosb)
+                    getGlobalLogger(__name__).error(
+                        "Chunk %s: distance between %s and %s is %.4f, but anchor chunk %s has %.4f (%.0f%% off, threshold %.0f%%). "
+                        "%s appears in photos %s; %s appears in photos %s. "
+                        "This band's own reconstruction looks broken (e.g. folded/collapsed in weak-texture imagery)--"
+                        "consider adding manual tie points/markers bridging the photos between these two groups before re-aligning.",
+                        self.chunk.label, a, b, minedist, self.anchorchunk.label, anchordist, deviation*100, self.threshold*100,
+                        a, photosa, b, photosb)
+                getGlobalLogger(__name__).error(
+                    "Chunk %s: photos involved in the flagged marker pairs above (start here when placing manual bridging markers): %s",
+                    self.chunk.label, sorted(allphotos))
         return success, code
 
 class MetashapeTask_ResizeBoundingBox(MetashapeTask):
@@ -456,7 +611,7 @@ class MetashapeTask_ChangeImagePathsPerChunk(MetashapeTask):
         success,code = super().setup()
         if success:
             for image in self.imagestoreplace:
-                if not Path(image).exists:
+                if not Path(image).exists():
                     success = False
                     code = ErrorCodes.INVALID_FILE
                     break
@@ -472,12 +627,18 @@ class MetashapeTask_ChangeImagePathsPerChunk(MetashapeTask):
             for c in self.chunk.cameras:
                 if c.type == Metashape.Camera.Type.Regular:
                     for i,cams in enumerate(self.imagestoreplace):
-                        temp = PurePosixPath(cams)
-                        metashapepath = str(c.photo.path)
-                        if str(temp)==metashapepath:
-                            newpath = str(PurePosixPath(self.replacenames[i]))
+                        #Resolve to absolute before comparing/storing: camera.photo.path is whatever
+                        #was absolute (or resolved to absolute) when its chunk was first built, while
+                        #self.imagestoreplace is recomputed fresh on every run from this run's own
+                        #sourcedir/projectdir CLI args--if those happen to be given as relative paths
+                        #on a later run against an already-built project, a raw string compare here
+                        #would never match even though both sides name the same real file.
+                        temp = Path(cams).resolve()
+                        metashapepath = Path(c.photo.path).resolve()
+                        if temp==metashapepath:
+                            newpath = str(Path(self.replacenames[i]).resolve())
                             photocopy = c.photo.copy()
-                            photocopy.path  = str(PurePosixPath(newpath))
+                            photocopy.path  = newpath
                             c.photo = photocopy
                             getGlobalLogger(__name__).info("replacing %s with %s",metashapepath,newpath)
                             break

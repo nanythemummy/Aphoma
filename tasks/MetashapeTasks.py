@@ -82,8 +82,12 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
     def loadPhotos(self):
         if len(self.photos)>0:
             for i in self.photos:
+                #self.photos entries are already complete paths (e.g. references built under the
+                #project dir's references/ folder, not under self.input)--joining against self.input
+                #here only ever "worked" because Path(a, b) discards a once b is absolute, which broke
+                #as soon as a caller passed relative sourcedir/projectdir arguments.
                 if Path(i).suffix.upper() ==".JPG":
-                    self.chunk.addPhotos(str(Path(self.input,i)))
+                    self.chunk.addPhotos(str(Path(i)))
         else:
             subdirs = [p for p in self.input.iterdir() if p.is_dir()]
             if len(subdirs)==0:
@@ -285,6 +289,15 @@ class MetashapeTask_AlignChunks(MetashapeTask):
 
     @timed(Statistic_Event_Types.EVENT_ALIGN_CHUNKS)
     def execute(self):
+        if self.chunk.orthomosaic:
+            #self.chunk is the reference/anchor chunk for this alignment (e.g. visvis for a given
+            #side). An orthomosaic already existing on it means this side's pipeline already finished
+            #on an earlier run, including whatever alignment was needed. Re-solving alignChunks() again
+            #here re-fits every other band against the anchor's *current* markers, which isn't perfectly
+            #numerically idempotent--repeated re-runs against an already-finished project were observed
+            #to measurably degrade previously-good cross-band marker alignment over several passes.
+            getLogger(__name__).info("Chunk %s already has an orthomosaic; skipping re-alignment.",self.chunkname)
+            return True, ErrorCodes.NONE
         if self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
             chunkstoalign = self.buildChunklist()
             markerlist =list(range(len(self.chunk.markers))) #this may be version dependent. The code I'm running on the mac may have used keys instead of indices.

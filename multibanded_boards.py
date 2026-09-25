@@ -206,6 +206,7 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
     tasks = Queue()
     getGlobalLogger(__name__).info("Building Tasklist, including aligning, error reduction, and marker detection.")
     multibanded_types = Configurator.getConfig().getProperty("photogrammetry","multibanded")
+    error_thresholds = Configurator.getConfig().getProperty("photogrammetry","error_thresholds")
     calibration_mode = None
     for fb in ["front","back"]:
         #All bands of a multibanded board are shot with the same physical camera/lens, and the board is
@@ -262,6 +263,24 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                                     "output":projectdir,
                                     "projectname":projectname,
                                     "chunkname":f"{projectname}_{fb}{k}"}))
+            if masterband and k != masterband:
+                #This band independently aligned and reconstructed on its own photos (it isn't a clone
+                #band), so it can silently produce a weak or outright broken reconstruction (e.g. folding
+                #back on itself across a long, low-texture capture) while still looking superficially
+                #fine. Catch that here, before the far more expensive BuildModel/BuildOrthomosaic/
+                #BuildTexture stages run on it.
+                tasks.put(MetashapeTask_CheckTiePointCount({"input":sourcedir,
+                                        "output":projectdir,
+                                        "projectname":projectname,
+                                        "chunkname":f"{projectname}_{fb}{k}",
+                                        "anchorchunk":f"{projectname}_{fb}{masterband}",
+                                        "threshold":float(error_thresholds.get("tiepoint_count_warning_ratio",0.5))}))
+                tasks.put(MetashapeTask_CheckMarkerConsistency({"input":sourcedir,
+                                        "output":projectdir,
+                                        "projectname":projectname,
+                                        "chunkname":f"{projectname}_{fb}{k}",
+                                        "anchorchunk":f"{projectname}_{fb}{masterband}",
+                                        "threshold":float(error_thresholds.get("marker_consistency_threshold",0.2))}))
 
 
     for fb in ["front","back"]:

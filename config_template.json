@@ -68,7 +68,9 @@
                 "reprojection_max_selection_per_iteration":0.1,
                 "reprojection_max_selection":0.5,
                 "projection_accuracy_max_selection":0.5,
-                "reconstruction_uncertainty_max_selection":0.5
+                "reconstruction_uncertainty_max_selection":0.5,
+                "tiepoint_count_warning_ratio":0.5,
+                "marker_consistency_threshold":0.2
             },
             "multibanded":{
                 "irir":{
