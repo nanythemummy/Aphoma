@@ -606,6 +606,25 @@ class MetashapeTask_ExportModel(MetashapeTask):
         return success, code  
     
 class MetashapeTask_ExportOrthomosaic(MetashapeTask):
+    """
+    Task object for exporting a chunk's orthomosaic. It requires:
+        input: str - a directory of pictures to operate on.
+        output: str - a place to put the results (parent folder of the picture folder, usually).
+        chunkname: str - label of the chunk to operate on.
+        referencechunk: str, optional - label of another chunk (already exported) whose exact pixel
+            region/dimensions this export should be forced to match, so pixel-for-pixel overlay between
+            bands is guaranteed rather than assumed. buildOrthomosaic()'s region-to-pixel-grid rounding
+            doesn't always land on the same width/height twice even when given the same real-world
+            region (observed a consistent 1px discrepancy between a reference chunk's own build and a
+            chunk built by copying that reference's region)--this sidesteps that entirely by passing an
+            explicit region/width/height straight to exportRaster() instead of trusting it to
+            re-derive the same pixel grid from the region alone.
+    For it to run successfully, the chunk must have an orthomosaic.
+    """
+    def __init__(self, argdict: dict):
+        super().__init__(argdict)
+        self.referencechunkname = argdict.get("referencechunk", None)
+        self.referencechunk = None
 
     def __repr__(self):
         return "Metashape Task: Export Orthomosaic"
@@ -618,19 +637,49 @@ class MetashapeTask_ExportOrthomosaic(MetashapeTask):
                 getLogger(__name__).warning("Failing the orthomosaic export because there's no orthomosaic for chunk %s",self.chunkname)
                 success = False
                 code = ErrorCodes.NO_ORTHOMOSAIC
+            if success and self.referencechunkname:
+                for c in self.doc.chunks:
+                    if c.label == self.referencechunkname:
+                        self.referencechunk = c
+                        break
+                if self.referencechunk is None:
+                    getLogger(__name__).warning("Reference chunk %s for orthomosaic export sizing not found; %s will export at its own dimensions instead.",self.referencechunkname,self.chunkname)
         return success,code
-    
-    @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)      
+
+    @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)
     def execute(self):
         success, code = super().execute()
         if success:
             resolutionx = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x"))
             resolutiony = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y"))
+            #Always pin the export to an explicit region/width/height taken from a chunk.orthomosaic's
+            #own already-built properties, rather than letting exportRaster() derive pixel dimensions
+            #from "resolution" alone--that derivation doesn't reliably reproduce chunk.orthomosaic's own
+            #declared width/height (observed a real, reproducible 1px mismatch between an orthomosaic's
+            #declared dimensions and what a resolution-only export actually wrote to disk, even for a
+            #chunk exporting its own orthomosaic with no reference chunk involved). Source chunk is the
+            #reference chunk if one was given (so sibling bands land on its exact pixel grid), else the
+            #chunk's own orthomosaic (so even a self-exporting chunk like visvis is pinned consistently).
+            if self.referencechunk is not None and self.referencechunk.orthomosaic is not None:
+                sourceortho = self.referencechunk.orthomosaic
+                getLogger(__name__).info("Forcing orthomosaic export for %s to match reference chunk %s's exact pixel grid (%sx%s).",
+                                          self.chunkname, self.referencechunkname, sourceortho.width, sourceortho.height)
+            else:
+                sourceortho = self.chunk.orthomosaic
+            region = Metashape.BBox()
+            region.min = Metashape.Vector([sourceortho.left, sourceortho.bottom])
+            region.max = Metashape.Vector([sourceortho.right, sourceortho.top])
+            exportargs = {
+                "format": Metashape.RasterFormat.RasterFormatTiles,
+                "image_format": Metashape.ImageFormat.ImageFormatTIFF,
+                "raster_transform": Metashape.RasterTransformType.RasterTransformNone,
+                "resolution": resolutionx,
+                "region": region,
+                "width": sourceortho.width,
+                "height": sourceortho.height,
+            }
             self.chunk.exportRaster(str(Path(self.output,self.outputfolder,f"{self.chunkname}_Orthomosaic.tif")),
-                                    format = Metashape.RasterFormat.RasterFormatTiles,
-                                    image_format=Metashape.ImageFormat.ImageFormatTIFF,
-                                    raster_transform = Metashape.RasterTransformType.RasterTransformNone,
-                                    resolution=resolutionx)
+                                    **exportargs)
         return success, code
     
     def exit(self):

@@ -395,7 +395,8 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
             tasks.put(MetashapeTask_ExportOrthomosaic({"input":sourcedir,
                             "output":projectdir,
                             "projectname":projectname,
-                            "chunkname":f"{projectname}_{i}{k}"}))
+                            "chunkname":f"{projectname}_{i}{k}",
+                            "referencechunk":f"{projectname}_{i}visvis"}))
     for fb in ["front","back"]:
         tasks.put(MetashapeTask_BuildTextures({"input":sourcedir,
             "output":projectdir,

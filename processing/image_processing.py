@@ -253,11 +253,20 @@ def convertToGrayscaleAdjustBrightness(inputpath:Path, outputpath:Path, togray=T
         #uses CV2, and I think that might be easy to just write by hand. To do later.
 
         imarr = np.array(im)
+        alpha = None
+        if imarr.ndim == 3 and imarr.shape[2] == 4:
+            #Keep alpha out of all the color/brightness processing below--cv2's *2BGR/*2RGB conversion
+            #codes aren't meant for a 4th channel, and letting cv2.multiply(brightness) scale alpha
+            #(e.g. uvuv/uvvis's 1.9x) would corrupt transparency instead of just adjusting visible
+            #brightness. Orthomosaic exports can carry alpha now (transparent padding where an export
+            #was pinned to a wider reference chunk's pixel grid than its own reconstructed extent).
+            alpha = imarr[:,:,3]
+            imarr = imarr[:,:,:3]
         imarr = cv2.cvtColor(imarr,cv2.COLOR_RGB2BGR)
         output_image = imarr
         if togray:
             if not eightbit: #ie, if we want to keep the rgb channels, and just set them to the same thing,
-                output_image = np.zeros_like(imarr) 
+                output_image = np.zeros_like(imarr)
                 sourcechannel = imarr[:,:,util.ColorChannelConstants(channeltouse).value]
                 output_image[:,:,0]=sourcechannel
                 output_image[:,:,1]=sourcechannel
@@ -267,6 +276,8 @@ def convertToGrayscaleAdjustBrightness(inputpath:Path, outputpath:Path, togray=T
         output_image=cv2.multiply(output_image,brightness)
         if not togray or not eightbit:
            output_image= cv2.cvtColor(output_image,cv2.COLOR_BGR2RGB)
+           if alpha is not None:
+               output_image = np.dstack([output_image, alpha])
         #copy exif data to img_out
 
         out = PILImage.fromarray(output_image)
