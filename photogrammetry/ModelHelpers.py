@@ -48,7 +48,7 @@ def convert_unit_to_meters(unit:str,val:float)->float:
     else:
         return val*1.0
     
-def getNumberedTarget(targetnumber:int, chunk):
+def get_numbered_target(targetnumber:int, chunk):
     name = f"target {targetnumber}"
     desiredmarker = None
     for marker in chunk.markers:
@@ -160,8 +160,8 @@ def build_scalebars_from_list(chunk,scalebardefinitions):
     """
     set_chunk_accuracy(chunk)
     for definition in scalebardefinitions:
-        marker1 = getNumberedTarget(definition['points'][0], chunk)
-        marker2 = getNumberedTarget(definition['points'][1], chunk)
+        marker1 = get_numbered_target(definition['points'][0], chunk)
+        marker2 = get_numbered_target(definition['points'][1], chunk)
         if marker1 and marker2:
             #either make a new scalebar or find one that already exists between the two markers and reset the distance between them.
             scalebar = None
@@ -263,7 +263,7 @@ def removeComponentsUnderFaceThreshold(chunk,threshold):
     chunk.model.removeComponents(threshold)
     return chunk.model.statistics()
     
-def detect_markers(chunk, markertype:str):
+def detect_markers(chunk, palette:dict):
     """Given a metashape chunk, detect the markers that occur in that chunk. These will be stored by metashape under chunk->markers
     Parameters:
     --------------
@@ -273,12 +273,17 @@ def detect_markers(chunk, markertype:str):
 
     set_chunk_accuracy(chunk)
     # remove any existing markers from this chunk
-    if len(chunk.markers):
-        chunk.remove(chunk.markers)
+
+    templist = [p['points'] for p in palette["scalebars"]["bars"]]
+    expectedmarkers = list(set(f"target {pt}" for sublist in templist for pt in sublist))
+    if len(chunk.markers)>0:
+        for m in chunk.markers.copy():
+            if m.label in expectedmarkers:
+                 chunk.remove(m)
 
     print("Detecting and assigning 12-bit targets")
     # detect markers using defaults (12-bit markers, tolerance: 50, filter_mask: False, etc.)
-    chunk.detectMarkers(target_type=targetTypes[markertype], filter_mask=False) 
+    chunk.detectMarkers(target_type=targetTypes[palette["type"]], filter_mask=False) 
 
     # bail if we have no markers
     if len(chunk.markers) ==  0:
@@ -425,6 +430,7 @@ def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
     return removed_above_threshold
 
 def find_axes_from_markers_in_plane(chunk,palette:dict):
+
     if not chunk.markers:
         LOGGER.info("No markers to align on chunk %s.",chunk.label)
         return [],[],[]
@@ -434,16 +440,17 @@ def find_axes_from_markers_in_plane(chunk,palette:dict):
     plane,xaxispts = [[] for _ in range(2)]
     markers = chunk.markers
 
-    for m in markers:
-        print(f"markername = {m.label}")
-        if not m.position is None:
-            lookfor = (int)(m.label.split()[1])
-            if lookfor in palette["plane"]:
-                print(f"Plane: Appending marker {m.label} id: {m.key} with position: {m.position}")
-                plane.append({"name":m.label, "id":m.key,"pos":m.position})
-            if lookfor in palette["xaxis"]:
-                print(f"X-Axis: Appending marker {m.label} id: {m.key} with position: {m.position}")
-                xaxispts.append({"name":m.label,"id":m.key,"pos":m.position})
+    for m in palette["plane"]:
+        pt = get_numbered_target(m, chunk)
+        if pt is not None and pt.position is not None:
+            print(f"Plane: Appending marker {pt.label} id: {pt.key} with position: {pt.position}")
+            plane.append({"name":pt.label, "id":pt.key,"pos":pt.position})
+    for m in palette["xaxis"]:
+        pt = get_numbered_target(m, chunk)
+        if pt is not None and pt.position is not None:
+            print(f"X-Axis: Appending marker {pt.label} id: {pt.key} with position: {pt.position}")
+            xaxispts.append({"name":pt.label,"id":pt.key,"pos":pt.position})
+
     if len(xaxispts)>=1 and len(plane)>2:
         #Wooooo we can calculate this.
         LOGGER.info("Calculating plane from %s, %s, %s",plane[0]["name"],plane[1]["name"],plane[2]["name"])
@@ -458,7 +465,8 @@ def find_axes_from_markers_in_plane(chunk,palette:dict):
         y_axis  = Metashape.Vector.cross(z_axis,x_axis)
         y_axis.normalize()
         LOGGER.info("Y-axis is %s."%z_axis)
-        return[x_axis,y_axis,z_axis],plane,xaxispts
+        axes = find_axes_check_y_direction(palette,[x_axis,y_axis,z_axis],xaxispts[0]["pos"],chunk)
+        return axes,plane,xaxispts
 
     else:
         LOGGER.error("Not enough markers to orient model." )
@@ -486,7 +494,34 @@ def rotate_boundingbox(chunk,xyz_degrees:list):
         region.rot = region.rot*rotmat
         chunk.region = region
 
-def find_axes_from_markers(chunk,palette:str):
+def find_axes_check_y_direction(palette:dict, axes:list, origin, chunk)->list:
+    #assuming axes is a list of normalized vectors, x,y,z. origin is the 3d position of any one marker on
+    #the plane the axes were derived from--used below as a reference point the cameras should be looking
+    #back toward. It doesn't need to be a vertex shared by the x and z axis definitions; any point
+    #(approximately) on the plane works equally well here.
+    # Cross product only guarantees a y-axis perpendicular to the marker plane--which can be either straight "up" from the plane or straight "down" from the plane.
+    # assuming that your triangle is on a flat surface with your object, it ought to be "up", but is dependendt on the order in which
+    # the markers are configured above. This double checks the axis and flips it if it is facing away from the average position vector of cameras which can "see"
+    # the markers.
+    markernumbers = set(pt for bar in palette["scalebars"]["bars"] for pt in bar["points"])
+    observing_cameras = set()
+    for markernum in markernumbers:
+        tm = get_numbered_target(markernum, chunk)
+        if tm is not None:
+            observing_cameras.update(tm.projections.keys())
+    cam_positions = [cam.center for cam in observing_cameras if cam.center]
+    if cam_positions:
+        avg_cam = sum(cam_positions, Metashape.Vector([0,0,0])) * (1.0/len(cam_positions))
+        toward_cameras = avg_cam - origin
+        toward_cameras.normalize()
+        if axes[1] * toward_cameras < 0:
+            print("y-axis pointed away from the cameras (i.e. into the table)--flipping it.")
+            axes[1] = -1.0*axes[1]
+    else:
+        print("WARNING: no aligned cameras to check y-axis direction against--sign is not verified.")
+    return axes
+
+def find_axes_from_markers(chunk,palette:dict):
     """Given a chunk with a model on it, and detected markers, use the palette definiton to try to figure out the x, y and z axes.
     
     Parameters:
@@ -501,17 +536,15 @@ def find_axes_from_markers(chunk,palette:str):
         return []
     xaxis = []
     zaxis = []
-    markers = chunk.markers
-    markers.reverse() #generally higher numbers are on the inside, so search from inside out.
-    for m in markers:
-        if not m.position==None:
-            lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
-            if lookforlabel in palette["axes"]["xpos"] or lookforlabel in palette["axes"]["xneg"]:
-                xaxis.append(m.position)
-            if lookforlabel in palette["axes"]["zpos"] or lookforlabel in palette["axes"]["zneg"]:
-                zaxis.append(m.position)
-            if len(xaxis)>=2 and len(zaxis)>=2:
-                break
+    expectedaxes =palette["axes"]
+    for m in expectedaxes["xpos"]+expectedaxes["xneg"]:
+        pt = get_numbered_target(m, chunk)
+        if pt is not None and pt.position is not None:
+            xaxis.append(pt.position)
+    for z in expectedaxes["zpos"]+expectedaxes["zneg"]:
+        pt = get_numbered_target(z, chunk)
+        if pt is not None and pt.position is not None:
+            zaxis.append(pt.position)
     if len(xaxis)<2 or len(zaxis) <2:
         print("Not enough data to determine x and z axes.")
         return []
@@ -521,7 +554,10 @@ def find_axes_from_markers(chunk,palette:str):
     ux.normalize()
     uz.normalize()
     yaxis.normalize()
-    return [ux,yaxis,uz]
+    axes = find_axes_check_y_direction(palette,[ux,yaxis,uz],xaxis[0],chunk)
+    print(f"returning axes {axes}")
+    return axes
+
 def move_model_to_world_origin(chunk):
     
     """Uses the center of the bounding box as a substitute for the center of the model, and translates the model to world zero based

@@ -107,7 +107,7 @@ def build_basic_model(photodir:str, projectname:str, projectdir:str,maskoption =
         if palette:
             get_logger().info("Finding markers as defined in %s.", config.getProperty("photogrammetry","palette"))
             if not current_chunk.markers:
-                ModelHelpers.detect_markers(current_chunk,palette["type"])
+                ModelHelpers.detect_markers(current_chunk,palette)
                 doc.save()
         if current_chunk.tie_points and not current_chunk.model:
             thresholds = config.getProperty("photogrammetry","error_thresholds")

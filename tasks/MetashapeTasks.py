@@ -347,7 +347,7 @@ class MetashapeTask_DetectMarkers(MetashapeTask):
                 if self.palette_name:
                     getLogger(__name__).info("Finding markers as defined in %s.", self.palette_name)
                     if not self.chunk.markers:
-                        ModelHelpers.detect_markers(self.chunk,self.palette_info["type"])
+                        ModelHelpers.detect_markers(self.chunk,self.palette_info)
                         self.doc.save()
             except Exception as e:
                 getLogger(__name__).error(e)
