@@ -391,6 +391,15 @@ class MetashapeTask_CheckMarkerConsistency(MetashapeTask):
                 code = ErrorCodes.MISSING_TARGET_CHUNK
         return success, code
 
+    #Camera labels are full reference-image filenames (e.g. "..._FrontUvVis0008_ref_..._Frontuvvis0008")--
+    #not something a person wants to read repeatedly in a failure message. This pulls out just the
+    #trailing photo number (e.g. "8") so the message can name image numbers instead of full filenames.
+    _photonumberpattern = re.compile(r"0*([0-9]+)(?:_ref_.*)?$")
+
+    def _photonumber(self, cam):
+        m = self._photonumberpattern.search(cam.label)
+        return int(m.group(1)) if m else cam.label
+
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success, code = super().execute()
@@ -412,26 +421,26 @@ class MetashapeTask_CheckMarkerConsistency(MetashapeTask):
             if self.badpairs:
                 success = False
                 code = ErrorCodes.MARKER_CONSISTENCY_FAILURE
-                #Map each flagged marker back to the photos it was actually detected in, so the failure
-                #message can point at specific pictures to add bridging markers to/between, instead of
-                #just naming the abstract marker pair.
+                #Map each flagged marker back to the image numbers it was actually detected in, so the
+                #failure message can point at specific pictures to add bridging markers to/between,
+                #instead of just naming the abstract marker pair.
                 markersbylabel = {m.label: m for m in self.chunk.markers}
-                allphotos = set()
+                allnumbers = set()
                 for a, b, minedist, anchordist, deviation in self.badpairs:
-                    photosa = sorted(cam.label for cam in markersbylabel[a].projections.keys())
-                    photosb = sorted(cam.label for cam in markersbylabel[b].projections.keys())
-                    allphotos.update(photosa)
-                    allphotos.update(photosb)
+                    numbersa = sorted(self._photonumber(cam) for cam in markersbylabel[a].projections.keys())
+                    numbersb = sorted(self._photonumber(cam) for cam in markersbylabel[b].projections.keys())
+                    allnumbers.update(numbersa)
+                    allnumbers.update(numbersb)
                     getGlobalLogger(__name__).error(
                         "Chunk %s: distance between %s and %s is %.4f, but anchor chunk %s has %.4f (%.0f%% off, threshold %.0f%%). "
-                        "%s appears in photos %s; %s appears in photos %s. "
-                        "This band's own reconstruction looks broken (e.g. folded/collapsed in weak-texture imagery)--"
-                        "consider adding manual tie points/markers bridging the photos between these two groups before re-aligning.",
+                        "%s appears in image numbers %s; %s appears in image numbers %s.",
                         self.chunk.label, a, b, minedist, self.anchorchunk.label, anchordist, deviation*100, self.threshold*100,
-                        a, photosa, b, photosb)
+                        a, numbersa, b, numbersb)
                 getGlobalLogger(__name__).error(
-                    "Chunk %s: photos involved in the flagged marker pairs above (start here when placing manual bridging markers): %s",
-                    self.chunk.label, sorted(allphotos))
+                    "Chunk %s: this band's own reconstruction looks broken (e.g. folded/collapsed in weak-texture "
+                    "imagery). Please add manual markers to image numbers %s on chunk %s, realign photos with "
+                    "\"Reset current alignment\" checked, and then rerun this program.",
+                    self.chunk.label, sorted(allnumbers), self.chunk.label)
         return success, code
 
 class MetashapeTask_ResizeBoundingBox(MetashapeTask):

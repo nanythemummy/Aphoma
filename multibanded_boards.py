@@ -130,16 +130,37 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
 
 
 
-def sortFilesIntoBandsByName(filepath:Path)->dict:
+def determineSides(filepath:Path)->list:
     """
-    Function sortFilesIntoBandsByName: Takes the files in a provided folder and stores them in a local datastructure based on 
+    Decides once, for the whole shoot, whether photos are split into "front"/"back" or not. If any
+    filename anywhere carries a "Front" or "Back" tag, the shoot is treated as sided--every band is
+    matched per-side (a band with no tagged photos for a given side just ends up empty for it, same as
+    before). Otherwise nothing is tagged, and the whole shoot is treated as a single sideless set, so an
+    object photographed from only one side (or with no front/back concept at all) still builds instead of
+    silently queuing work for a side that doesn't exist.
+    Parameters:
+        filepath: The folder containing images to check. Not recursive.
+    Returns:
+        A list of side keys to use as chunk-name prefixes: some non-empty subset of ["front","back"], or
+        [""] (a single sideless "side") if nothing in the folder is front/back tagged.
+    """
+    names = [f.name for f in filepath.glob("*")]
+    sides = [s for s in ("front","back") if any(re.search(r"_"+s, n, re.IGNORECASE) for n in names)]
+    return sides if sides else [""]
+
+def sortFilesIntoBandsByName(filepath:Path, sides:list=None)->dict:
+    """
+    Function sortFilesIntoBandsByName: Takes the files in a provided folder and stores them in a local datastructure based on
     their filenames. This function breaks out whether this is the front or back of an object and the "bands" of the photo.
     The information for each band gets set in config.json.
     Parameters:
         filepath: The folder containing images to process. The images must be stored in this folder as this function is not recursive.
+        sides: the side keys to sort into, from determineSides()--some subset of ["front","back"], or [""]
+            for a shoot with no front/back distinction. Computed from filepath if not given.
     Returns:
         A dictionary with the following format {irir:{front:[],back:[]},uvuv:{front:[],back:[] ...etc}}
-        where the elements in the lists are filenames. This dictionary is used to track which pictures correspond to the others in different
+        (or, for a sideless shoot, {irir:{"":[]},uvuv:{"":[]} ...etc}) where the elements in the lists are
+        filenames. This dictionary is used to track which pictures correspond to the others in different
         bands. Again, there is an assumption that photo 1 of each band will be in the same physical location.
 
     Additionally, this function uses the config values specified in config.json photogrammetry:multibanded. These can be finetuned to affect
@@ -147,32 +168,36 @@ def sortFilesIntoBandsByName(filepath:Path)->dict:
     """
     multibanded_types= Configurator.getConfig().getProperty("photogrammetry","multibanded")
     getGlobalLogger(__name__).info("Loading multibanded info from config. Now sorting files.")
+    if sides is None:
+        sides = determineSides(filepath)
     files = filepath.glob("*")
     chunks = {}
     for k,v in multibanded_types.items():
-       
+
         if not k in chunks.keys():
-    
+
             chunks[k]={}
-            chunks[k]["front"]={"regex":re.compile(r"\S+_Front"+re.escape(v["path"])+r"_*[0-9]*.jpg",re.IGNORECASE),
+            for side in sides:
+                #A sideless shoot (side=="") matches "..._IrIr0001.jpg" directly; a sided shoot matches
+                #"..._FrontIrIr0001.jpg"/"..._BackIrIr0001.jpg". Front/Back are concatenated directly onto
+                #the band path with no separating underscore, so the sideless pattern (which requires an
+                #underscore right before the band path) never accidentally matches a sided filename.
+                sideexpr = side.capitalize() if side else ""
+                chunks[k][side]={"regex":re.compile(r"\S+_"+sideexpr+re.escape(v["path"])+r"_*[0-9]*.jpg",re.IGNORECASE),
                                   "files":[]
                                   }
-            chunks[k]["back"]={"regex":re.compile(r"\S+_Back"+re.escape(v["path"])+r"_*[0-9]*.jpg",re.IGNORECASE),
-                                "files":[]
-                                }
     for file in files:
         for _, info in chunks.items():
-            mf = info["front"]["regex"].match(file.name)
-            mb = info["back"]["regex"].match(file.name)
-            if mf:
-                info["front"]["files"].append(file)
-                break
-            elif mb:
-                info["back"]["files"].append(file)
-                break
+            for side in sides:
+                if info[side]["regex"].match(file.name):
+                    info[side]["files"].append(file)
+                    break
+            else:
+                continue
+            break
     getGlobalLogger(__name__).info("The following bands exist with the following number of pics, respectively. %s",
-                                  [(a,b,len(chunks[a][b]["files"])) for a in chunks.keys() for b in chunks[a].keys() ] )
-   
+                                  [(a,b if b else "(no side)",len(chunks[a][b]["files"])) for a in chunks.keys() for b in chunks[a].keys() ] )
+
     return chunks
 
 def executeTasklist(taskqueue:Queue):
@@ -202,13 +227,15 @@ def executeTasklist(taskqueue:Queue):
     InstrumentationStatistics.destroyStatistics()
     MetashapeFileSingleton.destroyDoc() #gets created by metashape tasks "align photos."
 
-def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
+def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir,sides:list=None):
     tasks = Queue()
     getGlobalLogger(__name__).info("Building Tasklist, including aligning, error reduction, and marker detection.")
     multibanded_types = Configurator.getConfig().getProperty("photogrammetry","multibanded")
     error_thresholds = Configurator.getConfig().getProperty("photogrammetry","error_thresholds")
+    if sides is None:
+        sides = list(next(iter(chunks.values())).keys()) if chunks else [""]
     calibration_mode = None
-    for fb in ["front","back"]:
+    for fb in sides:
         #All bands of a multibanded board are shot with the same physical camera/lens, and the board is
         #close to flat, which is exactly the geometry that makes independent per-band self-calibration
         #prone to "doming"--each band converging on a slightly different systematic curvature that a
@@ -283,7 +310,7 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                                         "threshold":float(error_thresholds.get("marker_consistency_threshold",0.2))}))
 
 
-    for fb in ["front","back"]:
+    for fb in sides:
         visvis = chunks.get("visvis",None)
         if visvis and fb in visvis.keys():
 
@@ -297,21 +324,23 @@ def setupTasksPhaseOne(chunks:dict,sourcedir,projectname,projectdir):
                             "alignType":util.AlignmentTypes.ALIGN_BY_MARKERS
         }
         ))
-       
-        
-    tasks = setupTasksPhaseTwo(chunks,sourcedir,projectname,projectdir, tasks)  
+
+
+    tasks = setupTasksPhaseTwo(chunks,sourcedir,projectname,projectdir, tasks, sides)
     return tasks
 
-def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = None):
+def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = None,sides:list=None):
     tasks = Queue() if tasklist is None else tasklist
     getGlobalLogger(__name__).info("Building Tasklist, including selective scales, orientation, alignment, model, and orthophoto")
     multibanded_types = Configurator.getConfig().getProperty("photogrammetry","multibanded")
+    if sides is None:
+        sides = list(next(iter(chunks.values())).keys()) if chunks else [""]
     for k, item in chunks.items():
         if isCloneBand(k, multibanded_types):
             #No independent reconstruction for this band--its chunk is cloned (model included) from
             #its pointcloud_reference band below, once that band's own chunk is finished.
             continue
-        for fb in ["front","back"]:
+        for fb in sides:
             if  item.get(fb,None) is None:
                 continue
 
@@ -319,7 +348,13 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                                 "output":projectdir,
                                 "projectname":projectname,
                                 "chunkname":f"{projectname}_{fb}{k}"}))
-    for fb in ["front","back"]:
+    for fb in sides:
+        visvis = chunks.get("visvis",None)
+        if not (visvis and fb in visvis.keys()):
+            #No visvis chunk for this side (e.g. this side exists for some other band's photos but not
+            #visvis's)--nothing to reorient or align chunks onto, so skip it rather than queuing a task
+            #against a chunk that was never built.
+            continue
         chunklist = [f"{projectname}_{fb}{band}" for band in chunks.keys()
                      if fb in chunks[band].keys() and band != "visvis" and not isCloneBand(band, multibanded_types)]
 
@@ -337,7 +372,7 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
         if not isCloneBand(k, multibanded_types):
             continue
         sourceband = cloneSourceBand(k, multibanded_types)
-        for fb in ["front","back"]:
+        for fb in sides:
             if item.get(fb,None) is None:
                 continue
             if chunks.get(sourceband,{}).get(fb) is None:
@@ -349,7 +384,7 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                                     "chunkname":f"{projectname}_{fb}{k}",
                                     "sourcechunk":f"{projectname}_{fb}{sourceband}"}))
     for k, item in chunks.items():
-        for fb in ["front","back"]:
+        for fb in sides:
             if  item.get(fb,None) is None:
                 continue
 
@@ -359,8 +394,8 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                             "chunkname":f"{projectname}_{fb}{k}",
                             "replace_these":chunks[k][fb]["references"],
                             "to_replace_with":chunks[k][fb]["files"]}))
-           
-    for i in ["front","back"]:
+
+    for i in sides:
         #Build the visvis reference orthomosaic first so its projection/footprint can be reused below to
         #frame the other bands' orthomosaics to matching pixel dimensions.
         visvis = chunks.get("visvis",None)
@@ -397,7 +432,10 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                             "projectname":projectname,
                             "chunkname":f"{projectname}_{i}{k}",
                             "referencechunk":f"{projectname}_{i}visvis"}))
-    for fb in ["front","back"]:
+    for fb in sides:
+        visvis = chunks.get("visvis",None)
+        if not (visvis and fb in visvis.keys()):
+            continue
         tasks.put(MetashapeTask_BuildTextures({"input":sourcedir,
             "output":projectdir,
             "projectname":projectname,
@@ -409,8 +447,8 @@ def setupTasksPhaseTwo(chunks:dict,sourcedir,projectname,projectdir,tasklist = N
                 "chunkname":f"{projectname}_{fb}visvis",
                 "extension":".ply",
                 "conform_to_shape": False}))
-            
-    return tasks 
+
+    return tasks
 
 def build_multibanded_cmd(args):
     """
@@ -427,10 +465,12 @@ def build_multibanded_cmd(args):
     sourcedir = args.sourcedir
     projectname = args.projectname
     Configurator.getConfig().setProperty("photogrammetry","palette","Multibanded")
-    chunks = sortFilesIntoBandsByName(Path(sourcedir))
+    sides = determineSides(Path(sourcedir))
+    getGlobalLogger(__name__).info("Detected sides: %s", sides if sides != [""] else "(none--treating photos as a single sideless set)")
+    chunks = sortFilesIntoBandsByName(Path(sourcedir), sides)
     chunks = setupReferences(chunks, Path(projdir))
     if chunks != None:
-        tasks = setupTasksPhaseOne(chunks, Path(sourcedir),projectname,Path(projdir))
+        tasks = setupTasksPhaseOne(chunks, Path(sourcedir),projectname,Path(projdir),sides)
         executeTasklist(tasks)
         convertOrthomosaicsToGray(projectname,chunks,Path(projdir,"output"))
        
