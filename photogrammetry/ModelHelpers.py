@@ -2,6 +2,7 @@
 The code in MetashapeTools.py should focus on orchestration, and most number-crunching should happen here."""
 
 import math
+import numpy as np
 import Metashape
 from util.util import load_palettes, TexturePageScalingCutoffs
 from util.PipelineLogging import getLogger as getGlobalLogger
@@ -429,8 +430,41 @@ def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
             break
     return removed_above_threshold
 
-def find_axes_from_markers_in_plane(chunk,palette:dict):
+def fit_plane_normal(points:list)->Metashape.Vector:
+    """Least-squares best-fit plane through 3 or more (approximately) coplanar points, returned as a unit
+    normal vector.
 
+    Using every available point instead of an arbitrary 3 of them averages out each individual marker's
+    placement/detection error instead of the result being entirely at the mercy of whichever 3 happen to
+    get picked. Concretely: on a shoot where the marker rulers ended up several centimeters out of true
+    coplanarity, a 3-point fit came out about 20 degrees off from a fit using all 7 available markers.
+    The fit is also order-independent (unlike a single cross product across 3 named points), and its sign
+    is arbitrary--either normal direction is an equally valid fit--which is fine here since the caller
+    resolves that ambiguity afterward via flip_axis_toward_cameras.
+
+    Parameters:
+    -----------------
+    points: a list of 3+ Metashape.Vector positions expected to lie approximately in a common plane.
+    """
+    coords = np.array([[p.x,p.y,p.z] for p in points])
+    centroid = coords.mean(axis=0)
+    _,_,vt = np.linalg.svd(coords-centroid)
+    normal = vt[-1]
+    return Metashape.Vector(normal/np.linalg.norm(normal))
+
+def find_axes_from_markers_in_plane(chunk,palette:dict):
+    """
+    NOTE ON AXIS CONVENTION: this returns the perpendicular (table-normal/"up") axis as axes[2], i.e. Z,
+    not axes[1]/Y like find_axes_from_markers below does. That's deliberate, not an inconsistency to fix:
+    MetashapeTask_BuildOrthomosaic calls chunk.buildOrthomosaic() with no explicit `projection` argument,
+    so Metashape falls back to its own default projection, which looks straight down the chunk's Z axis.
+    If the perpendicular axis ends up in the Y slot instead, buildOrthomosaic() still "succeeds" but
+    produces a degenerate/edge-on orthomosaic instead of a top-down one. find_axes_from_markers (the
+    xpos/zpos-style palette variant, used by MetashapeTask_Reorient for mesh/PLY-export-only workflows
+    that never call buildOrthomosaic) uses Y-up instead, likely to match 3D viewers like Blender that
+    default to Y-up--fine there since no orthomosaic is ever built from that result. Don't unify the two
+    without re-solving this constraint.
+    """
     if not chunk.markers:
         LOGGER.info("No markers to align on chunk %s.",chunk.label)
         return [],[],[]
@@ -438,7 +472,6 @@ def find_axes_from_markers_in_plane(chunk,palette:dict):
         LOGGER.warning("Can't find the markers in a plane if there is no plane specified in the marker palette.")
         return [],[],[]
     plane,xaxispts = [[] for _ in range(2)]
-    markers = chunk.markers
 
     for m in palette["plane"]:
         pt = get_numbered_target(m, chunk)
@@ -451,21 +484,31 @@ def find_axes_from_markers_in_plane(chunk,palette:dict):
             print(f"X-Axis: Appending marker {pt.label} id: {pt.key} with position: {pt.position}")
             xaxispts.append({"name":pt.label,"id":pt.key,"pos":pt.position})
 
-    if len(xaxispts)>=1 and len(plane)>2:
-        #Wooooo we can calculate this.
-        LOGGER.info("Calculating plane from %s, %s, %s",plane[0]["name"],plane[1]["name"],plane[2]["name"])
-        veca = plane[1]["pos"]-plane[0]["pos"]
-        vecb = plane[2]["pos"]-plane[0]["pos"]
-        z_axis = Metashape.Vector.cross(vecb,veca)
-        z_axis.normalize()
+    if len(xaxispts)>=2 and len(plane)>=3:
+        LOGGER.info("Fitting a plane through %s markers: %s",len(plane),[p["name"] for p in plane])
+        z_axis = fit_plane_normal([p["pos"] for p in plane])
+        #z_axis is the axis actually perpendicular to the marker plane--straight "up" off the table--so
+        #it's the one with a reliable camera-position bias to check against (see flip_axis_toward_cameras).
+        #Resolve its sign *before* deriving x_axis/y_axis from it, so those come out consistent with
+        #whichever way is really "up" instead of the arbitrary sign fit_plane_normal happened to produce.
+        z_axis = flip_axis_toward_cameras(palette,z_axis,xaxispts[0]["pos"],chunk)
         LOGGER.info("Z-axis is %s."%z_axis)
         x_axis = xaxispts[1]["pos"]-xaxispts[0]["pos"]
+        #x_axis is only guaranteed to be *approximately* in-plane, by however precisely that ruler was
+        #actually laid down--same as every other marker used for the plane fit above. Project out
+        #whatever out-of-plane component it has so the resulting frame is exactly orthogonal. This is
+        #sign-independent (z_axis vs -z_axis project out the same component), so it doesn't matter that
+        #z_axis was just flipped.
+        x_axis = x_axis - z_axis*(x_axis*z_axis)
         x_axis.normalize()
         LOGGER.info("X-axis is %s."%x_axis)
+        #y_axis lies *within* the marker plane (perpendicular to x_axis, not to the table), so unlike
+        #z_axis it has no reliable camera-position bias--don't try to sign-check it separately. Deriving
+        #it from the now-corrected z_axis keeps the frame consistently right-handed.
         y_axis  = Metashape.Vector.cross(z_axis,x_axis)
         y_axis.normalize()
-        LOGGER.info("Y-axis is %s."%z_axis)
-        axes = find_axes_check_y_direction(palette,[x_axis,y_axis,z_axis],xaxispts[0]["pos"],chunk)
+        LOGGER.info("Y-axis is %s."%y_axis)
+        axes = [x_axis,y_axis,z_axis]
         return axes,plane,xaxispts
 
     else:
@@ -494,15 +537,21 @@ def rotate_boundingbox(chunk,xyz_degrees:list):
         region.rot = region.rot*rotmat
         chunk.region = region
 
-def find_axes_check_y_direction(palette:dict, axes:list, origin, chunk)->list:
-    #assuming axes is a list of normalized vectors, x,y,z. origin is the 3d position of any one marker on
-    #the plane the axes were derived from--used below as a reference point the cameras should be looking
-    #back toward. It doesn't need to be a vertex shared by the x and z axis definitions; any point
-    #(approximately) on the plane works equally well here.
-    # Cross product only guarantees a y-axis perpendicular to the marker plane--which can be either straight "up" from the plane or straight "down" from the plane.
-    # assuming that your triangle is on a flat surface with your object, it ought to be "up", but is dependendt on the order in which
-    # the markers are configured above. This double checks the axis and flips it if it is facing away from the average position vector of cameras which can "see"
-    # the markers.
+def flip_axis_toward_cameras(palette:dict, axis:Metashape.Vector, origin, chunk)->Metashape.Vector:
+    """Returns `axis` (a normalized vector), flipped if necessary so it points toward the average position
+    of cameras that can see this palette's scalebar markers rather than away from them (e.g. into the
+    table). origin is the 3d position of any one marker on the plane the axis was derived from--used as a
+    reference point the cameras should be looking back toward. It doesn't need to be a vertex shared by
+    the x and z axis definitions; any point (approximately) on the plane works equally well here.
+
+    IMPORTANT: only call this on the axis that is actually perpendicular to the marker plane (straight
+    "up" off the table). Every camera has to be on the same side of an opaque table, so that axis has a
+    strong, reliable bias to check against (observed: |dot product| of 0.83-0.96 across several real
+    shoots). An axis that lies *within* the marker plane (e.g. pointing along one ruler, or along the
+    cross product of the true "up" axis with an in-plane axis) has no such bias--cameras orbiting the
+    object don't favor one in-plane direction over another--and checking one of those instead gives a
+    weak, near-coin-flip signal (observed: 0.27-0.49) that flips the wrong way as often as not.
+    """
     markernumbers = set(pt for bar in palette["scalebars"]["bars"] for pt in bar["points"])
     observing_cameras = set()
     for markernum in markernumbers:
@@ -514,12 +563,12 @@ def find_axes_check_y_direction(palette:dict, axes:list, origin, chunk)->list:
         avg_cam = sum(cam_positions, Metashape.Vector([0,0,0])) * (1.0/len(cam_positions))
         toward_cameras = avg_cam - origin
         toward_cameras.normalize()
-        if axes[1] * toward_cameras < 0:
-            print("y-axis pointed away from the cameras (i.e. into the table)--flipping it.")
-            axes[1] = -1.0*axes[1]
+        if axis * toward_cameras < 0:
+            print("axis pointed away from the cameras (i.e. into the table)--flipping it.")
+            axis = -1.0*axis
     else:
-        print("WARNING: no aligned cameras to check y-axis direction against--sign is not verified.")
-    return axes
+        print("WARNING: no aligned cameras to check axis direction against--sign is not verified.")
+    return axis
 
 def find_axes_from_markers(chunk,palette:dict):
     """Given a chunk with a model on it, and detected markers, use the palette definiton to try to figure out the x, y and z axes.
@@ -554,7 +603,10 @@ def find_axes_from_markers(chunk,palette:dict):
     ux.normalize()
     uz.normalize()
     yaxis.normalize()
-    axes = find_axes_check_y_direction(palette,[ux,yaxis,uz],xaxis[0],chunk)
+    #Unlike find_axes_from_markers_in_plane, yaxis here *is* the axis perpendicular to the marker plane
+    #(ux and uz are both in-plane edge directions), so it's the correct one to check against cameras.
+    yaxis = flip_axis_toward_cameras(palette,yaxis,xaxis[0],chunk)
+    axes = [ux,yaxis,uz]
     print(f"returning axes {axes}")
     return axes
 

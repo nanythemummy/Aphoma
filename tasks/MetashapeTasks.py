@@ -440,10 +440,10 @@ class MetashapeTask_BuildModel(MetashapeTask):
                 self.chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData, 
                                         face_count = facecountconst,
                                         face_count_custom = targetfacecount)
-                getLogger(__name__).info("Cleaning up blobs on Model.")
-                ModelHelpers.cleanup_blobs(self.chunk)
-                getLogger(__name__).info("Closing Holes.")
-                ModelHelpers.close_holes(self.chunk)
+                #getLogger(__name__).info("Cleaning up blobs on Model.")
+                #ModelHelpers.cleanup_blobs(self.chunk)
+                #getLogger(__name__).info("Closing Holes.")
+                #ModelHelpers.close_holes(self.chunk)
             try:
                 self.doc.save()
             except OSError as e:
@@ -736,6 +736,11 @@ class MetashapeTask_BuildOrthomosaic(MetashapeTask):
         if success:
             # Only build orthomosaic if there is a model and no orthomosaic yet
             if self.chunk.model and not self.chunk.orthomosaic:
+                #No `projection` is passed below (unless referencechunk gives us one to reuse), so
+                #Metashape falls back to its default projection--which looks straight down the chunk's Z
+                #axis. The chunk's transform must therefore have its table-normal/"up" axis in the Z slot
+                #(not Y) or this silently builds a degenerate, edge-on orthomosaic instead of a top-down
+                #one. See the NOTE ON AXIS CONVENTION in ModelHelpers.find_axes_from_markers_in_plane.
                 getLogger(__name__).info("Building Orthomosaic.")
                 scalex = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x")
                 scaley = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y")
