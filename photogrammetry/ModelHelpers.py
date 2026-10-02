@@ -447,7 +447,7 @@ def fit_plane_normal(points:list)->Metashape.Vector:
     points: a list of 3+ Metashape.Vector positions expected to lie approximately in a common plane.
     """
     coords = np.array([[p.x,p.y,p.z] for p in points])
-    centroid = coords.mean(axis=0)
+    centroid = coords.mean(axis=0) #take the mean of x, y, z
     _,_,vt = np.linalg.svd(coords-centroid)
     normal = vt[-1]
     return Metashape.Vector(normal/np.linalg.norm(normal))
