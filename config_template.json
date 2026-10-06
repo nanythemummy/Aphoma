@@ -71,12 +71,13 @@
                 "reconstruction_uncertainty_max_selection":0.5,
                 "tiepoint_count_warning_ratio":0.5,
                 "marker_consistency_threshold":0.2
+                
             },
             "multibanded":{
                 "irir":{
                     "desc":"Reflected Infared",
                     "path":"irir",
-                    "pointcloud_reference":"visvis",
+                    "pointcloud_reference":"irir",
                     "graychannel":"b",
                     "eightbit":"False",
                     "grayscale_ortho":"True",
@@ -84,7 +85,7 @@
                 "uvuv":{
                     "desc":"Reflected Ultraviolet",
                     "path":"uvuv",
-                    "pointcloud_reference":"visvis",
+                    "pointcloud_reference":"uvvis",
                     "grayscale_ortho":"True",
                     "eightbit":"True",
                     "graychannel":"b",
@@ -92,7 +93,7 @@
                 "uvvis":{
                     "desc":"Visible Flourescence",
                     "path":"uvvis",
-                    "pointcloud_reference":"visvis",
+                    "pointcloud_reference":"uvvis",
                     "grayscale_ortho":"True",
                     "eightbit":"True",
                     "graychannel":"b",
@@ -114,6 +115,7 @@
                     "graychannel":"b",
                     "brightness":1.0}
                 },
+     
             "custom_face_count":0,
             "low_res_poly_count":100000,
             "texture_size":4096,

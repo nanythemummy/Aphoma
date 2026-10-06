@@ -649,6 +649,7 @@ class MetashapeTask_ChangeImagePathsPerChunk(MetashapeTask):
                             photocopy = c.photo.copy()
                             photocopy.path  = newpath
                             c.photo = photocopy
+                            c.label = Path(newpath).stem
                             getGlobalLogger(__name__).info("replacing %s with %s",metashapepath,newpath)
                             break
             marker = self.chunk.addMarker() #this is a nasty hack because metashape doesn't save paths if that's all you do before you save.

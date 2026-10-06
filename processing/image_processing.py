@@ -284,4 +284,19 @@ def convertToGrayscaleAdjustBrightness(inputpath:Path, outputpath:Path, togray=T
         #if eightbit:
         #    out = out.convert("L")
         exif = im.getexif()
-        out.save(outputpath)
+        #Callers may pass the same path for inputpath and outputpath (e.g. convertOrthomosaicsToGray,
+        #which brightens/grays an orthomosaic in place). Saving directly to outputpath here would write
+        #to a file that's still open for reading via the enclosing `with PILImage.open(inputpath) as im`
+        #block--harmless on macOS/Linux, but Windows enforces exclusive file locks and raises
+        #"[WinError 32] The process cannot access the file because it is being used by another process."
+        #TIFF in particular is read lazily by Pillow, so im's file handle stays open for its whole
+        #lifetime, not just until the array read above--moving the save earlier wouldn't avoid this.
+        #Write to a temp file in the same directory and swap it in afterward instead: this sidesteps the
+        #same-file lock entirely, and as a bonus leaves the original file intact if the save fails
+        #partway, rather than a corrupted half-written image.
+        outputpath = Path(outputpath)
+        #Keep outputpath's real suffix (.tif, etc) at the end rather than after it, or Pillow can't infer
+        #the save format from the temp filename and raises "unknown file extension".
+        tmppath = outputpath.with_name(f".{outputpath.stem}.tmp{outputpath.suffix}")
+        out.save(tmppath)
+    os.replace(tmppath, outputpath)
