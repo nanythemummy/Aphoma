@@ -8,20 +8,19 @@
             "SmartSelectDroplet":"util/MaskBySmartSelect.exe",
             "FuzzySelectDroplet":"util/MaskByFuzzySelect.exe",
             "ExifTool":"c:\\exiftool\\exiftool.exe",
-            "thresholding_lower_gray_threshold":230,
-            "canny_lower_intensity_threshold": 0,
-            "canny_higher_intensity_threshold": 80,
+            "thresholding_lower_gray_threshold":220,
+            "canny_lower_intensity_threshold": 25,
+            "canny_higher_intensity_threshold": 70,
             "Droplet_Output":"C:\\tempmasks",
-            "Camera":"",
-            "Lens":"",
-            "Source_Type": [".CR2",".NEF"],
+            "Camera":"Ortery Camera",
+            "Lens":"Canon_1",
+            "Source_Type":[".cr2",".nef",".tif",".jpg"],
             "Destination_Type": [".jpg",".tif"],
             "Build_From_Format":".jpg",
-            "ListenerDefaultMasking":"SmartSelectDroplet",
+            "ListenerDefaultMasking":"Canny",
             "CV2_Export_Type":".png",
-            "Roboflow_API_Key":"",
-            "Exiftool_Path":"/opt/homebrew/bin/exiftool"
-
+            "Roboflow_API_Key":""
+           
         },
 
         "ortery":
@@ -69,45 +68,54 @@
                 "reprojection_max_selection_per_iteration":0.1,
                 "reprojection_max_selection":0.5,
                 "projection_accuracy_max_selection":0.5,
-                "reconstruction_uncertainty_max_selection":0.5
+                "reconstruction_uncertainty_max_selection":0.5,
+                "tiepoint_count_warning_ratio":0.5,
+                "marker_consistency_threshold":0.2
+                
             },
-        "multibanded":[
-                        {"name":"irir",
-                        "desc":"Reflected Infared",
-                        "path":"irir",
-                        "pointcloud_reference":"irir",
-                        "colorchannel":"b",
-                        "grayscale_ortho":"True",
-                        "brightness":1.0},
-                        {"name":"uvuv",
-                        "desc":"Reflected Ultraviolet",
-                        "path":"uvuv",
-                        "pointcloud_reference":"uvvis",
-                        "grayscale_ortho":"True",
-                        "colorchannel":"b",
-                        "brightness":1.9},
-                        {"name":"uvvis",
-                        "desc":"Visible Flourescence",
-                        "path":"uvvis",
-                        "pointcloud_reference":"uvvis",
-                        "grayscale_ortho":"True",
-                        "colorchannel":"rgb",
-                        "brightness":1.9},
-                        {"name":"visir",
-                        "desc":"Visible Induced IR",
-                        "path":"visir",
-                        "grayscale_ortho":"True",
-                        "pointcloud_reference":"visvis",
-                        "colorchannel":"b",
-                        "brightness":1.0},
-                        {"name":"visvis",
-                        "desc":"Visible Light",
-                        "path":"visvis",
-                        "grayscale_ortho":"False",
-                        "pointcloud_reference":"uvvis",
-                        "colorchannel":"rgb",
-                        "brightness":1.0}
-                    ],
+            "multibanded":{
+                "irir":{
+                    "desc":"Reflected Infared",
+                    "path":"irir",
+                    "pointcloud_reference":"irir",
+                    "graychannel":"b",
+                    "eightbit":"False",
+                    "grayscale_ortho":"True",
+                    "brightness":1.0},
+                "uvuv":{
+                    "desc":"Reflected Ultraviolet",
+                    "path":"uvuv",
+                    "pointcloud_reference":"uvvis",
+                    "grayscale_ortho":"True",
+                    "eightbit":"True",
+                    "graychannel":"b",
+                    "brightness":1.9},
+                "uvvis":{
+                    "desc":"Visible Flourescence",
+                    "path":"uvvis",
+                    "pointcloud_reference":"uvvis",
+                    "grayscale_ortho":"True",
+                    "eightbit":"True",
+                    "graychannel":"b",
+                    "brightness":1.9},
+                "visir":{
+                    "desc":"Visible Induced IR",
+                    "path":"visir",
+                    "grayscale_ortho":"True",
+                    "pointcloud_reference":"visvis",
+                    "eightbit":"True",
+                    "graychannel":"b",
+                    "brightness":1.0},
+                "visvis":{
+                    "desc":"Visible Light",
+                    "path":"visvis",
+                    "grayscale_ortho":"False",
+                    "eightbit":"False",
+                    "pointcloud_reference":"visvis",
+                    "graychannel":"b",
+                    "brightness":1.0}
+                },
+     
             "custom_face_count":0,
             "low_res_poly_count":100000,
             "texture_size":4096,
@@ -121,7 +129,8 @@
             "cut_x":100.0,
             "cut_y":100.0,
             "cut_z":25.0,
-            "cut_from_top":false
+            "cut_from_top":false,
+            "fail_on_unaligned":false
         }
 
     }

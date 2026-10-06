@@ -2,6 +2,7 @@
 The code in MetashapeTools.py should focus on orchestration, and most number-crunching should happen here."""
 
 import math
+import numpy as np
 import Metashape
 from util.util import load_palettes, TexturePageScalingCutoffs
 from util.PipelineLogging import getLogger as getGlobalLogger
@@ -48,7 +49,7 @@ def convert_unit_to_meters(unit:str,val:float)->float:
     else:
         return val*1.0
     
-def getNumberedTarget(targetnumber:int, chunk):
+def get_numbered_target(targetnumber:int, chunk):
     name = f"target {targetnumber}"
     desiredmarker = None
     for marker in chunk.markers:
@@ -160,8 +161,8 @@ def build_scalebars_from_list(chunk,scalebardefinitions):
     """
     set_chunk_accuracy(chunk)
     for definition in scalebardefinitions:
-        marker1 = getNumberedTarget(definition['points'][0], chunk)
-        marker2 = getNumberedTarget(definition['points'][1], chunk)
+        marker1 = get_numbered_target(definition['points'][0], chunk)
+        marker2 = get_numbered_target(definition['points'][1], chunk)
         if marker1 and marker2:
             #either make a new scalebar or find one that already exists between the two markers and reset the distance between them.
             scalebar = None
@@ -263,7 +264,7 @@ def removeComponentsUnderFaceThreshold(chunk,threshold):
     chunk.model.removeComponents(threshold)
     return chunk.model.statistics()
     
-def detect_markers(chunk, markertype:str):
+def detect_markers(chunk, palette:dict):
     """Given a metashape chunk, detect the markers that occur in that chunk. These will be stored by metashape under chunk->markers
     Parameters:
     --------------
@@ -273,12 +274,17 @@ def detect_markers(chunk, markertype:str):
 
     set_chunk_accuracy(chunk)
     # remove any existing markers from this chunk
-    if len(chunk.markers):
-        chunk.remove(chunk.markers)
+
+    templist = [p['points'] for p in palette["scalebars"]["bars"]]
+    expectedmarkers = list(set(f"target {pt}" for sublist in templist for pt in sublist))
+    if len(chunk.markers)>0:
+        for m in chunk.markers.copy():
+            if m.label in expectedmarkers:
+                 chunk.remove(m)
 
     print("Detecting and assigning 12-bit targets")
     # detect markers using defaults (12-bit markers, tolerance: 50, filter_mask: False, etc.)
-    chunk.detectMarkers(target_type=targetTypes[markertype], filter_mask=False) 
+    chunk.detectMarkers(target_type=targetTypes[palette["type"]], filter_mask=False) 
 
     # bail if we have no markers
     if len(chunk.markers) ==  0:
@@ -288,62 +294,95 @@ def detect_markers(chunk, markertype:str):
     # update markers
     chunk.refineMarkers()
 
-def optimize_cameras(chunk, final_optimization=False):
+def optimize_cameras(chunk, final_optimization=False, calibration_mode="full"):
     """Runs the optimize cameras function in metashape.
-    
+
     Parameters:
     ----------------
     chunk: the chunk with the cameras to optimize.
-    final_optimization: A different set of camera parameters are used the final time this is called in the error reduction cycle. 
-    Pass in true if you would like that.
+    final_optimization: A different set of camera parameters are used the final time this is called in the error reduction cycle.
+    Pass in true if you would like that. Ignored unless calibration_mode is "full".
+    calibration_mode: one of:
+        "full" (default) - self-calibrate every intrinsic parameter
+        "reduced" - self-calibrate only f/cx/cy/k1/k2, skipping the higher-order distortion terms
+            (k3, p1, p2, and the final_optimization-only b1/b2/k4/p3) that are most prone to trading off
+            against depth on a near-planar subject and producing "doming".
+        "fixed" - fit no intrinsic parameters at all; use for a chunk whose sensor already has a
+            calibration copied in from another chunk via copy_calibration(), so only camera positions
+            are solved.
     """
-    
+    fit_core = calibration_mode != "fixed"
+    fit_full_only = fit_core and calibration_mode == "full"
+    fit_extended = fit_full_only and final_optimization
     #runs the optimize camera function, setting a handfull of the statistical fitting options to true only if the parameter is true,
     #which ought to occur on the final iteration of a process.
-    chunk.optimizeCameras(fit_f=True,
-                          fit_cx=True,
-                          fit_cy=True,
-                          fit_b1=final_optimization,
-                          fit_b2=final_optimization,
-                          fit_k1=True,
-                          fit_k2=True,
-                          fit_k3=True,
-                          fit_k4=final_optimization,
-                          fit_p1 = True,
-                          fit_p2=True,
-                          fit_p3=final_optimization,
+    chunk.optimizeCameras(fit_f=fit_core,
+                          fit_cx=fit_core,
+                          fit_cy=fit_core,
+                          fit_b1=fit_extended,
+                          fit_b2=fit_extended,
+                          fit_k1=fit_core,
+                          fit_k2=fit_core,
+                          fit_k3=fit_full_only,
+                          fit_k4=fit_extended,
+                          fit_p1 = fit_full_only,
+                          fit_p2=fit_full_only,
+                          fit_p3=fit_extended,
                           adaptive_fitting=False,
                           tiepoint_covariance=False)
 
-def refine_sparse_cloud(doc,chunk,error_thresholds:dict):
-    """Performs the error reduction/optimization algorithm as described by Neffra Matthews and Noble,Tommy. "In the Round Tutorial", 2018. 
-    
+def copy_calibration(source_chunk, dest_chunk):
+    """Copies the (self-calibrated) sensor calibration from source_chunk onto dest_chunk's matching
+    sensor(s) and marks them fixed there, so a subsequent optimize_cameras(calibration_mode="fixed") call
+    on dest_chunk only solves camera positions instead of re-deriving its own lens model.
+
+    Intended for cases where multiple chunks were shot with the same physical camera/lens (e.g. the
+    different bands of a multibanded board) and should share one calibration instead of each
+    independently self-calibrating--and independently doming--on its own.
+
+    Parameters:
+    -----------------
+    source_chunk: the chunk whose sensor calibration(s) should be copied.
+    dest_chunk: the chunk to copy the calibration onto.
+    """
+    if len(source_chunk.sensors) != len(dest_chunk.sensors):
+        LOGGER.warning("Sensor count mismatch copying calibration from %s (%s sensors) to %s (%s sensors); copying by position anyway.",
+                       source_chunk.label, len(source_chunk.sensors), dest_chunk.label, len(dest_chunk.sensors))
+    for source_sensor, dest_sensor in zip(source_chunk.sensors, dest_chunk.sensors):
+        dest_sensor.user_calib = source_sensor.calibration.copy()
+        dest_sensor.fixed_calibration = True
+
+def refine_sparse_cloud(doc,chunk,error_thresholds:dict,calibration_mode="full"):
+    """Performs the error reduction/optimization algorithm as described by Neffra Matthews and Noble,Tommy. "In the Round Tutorial", 2018.
+
     Parameters:
     ---------------
     doc: The metashape document...this is so we can save between various stages.
     chunk: the chunk on which we are currently operating.
     config: the config.json subdictionary under the key "photogrammetry"
+    calibration_mode: passed through to optimize_cameras()--see its docstring. Defaults to "full",
+        i.e. unchanged behavior.
 
     """
     LOGGER.info("Refining sparse cloud on chunk %s", chunk)
-    #copied from the script RefineSparseCloud.py     
-    optimize_cameras(chunk,False)
+    #copied from the script RefineSparseCloud.py
+    optimize_cameras(chunk,False,calibration_mode)
     doc.save()
     #get number of points before refinement:
-    
+
     #Remove points with reconstruction uncertainty error above threshold.
     remove_above_error_threshold(chunk,
                               Metashape.TiePoints.Filter.ReconstructionUncertainty,
                               error_thresholds["reconstruction_uncertainty"],
                               error_thresholds["reconstruction_uncertainty_max_selection"])
-    optimize_cameras(chunk,False)
+    optimize_cameras(chunk,False,calibration_mode)
     doc.save()
     #Remove points with a projection accuracy error aabove threshold.
     remove_above_error_threshold(chunk,
                             Metashape.TiePoints.Filter.ProjectionAccuracy,
                             error_thresholds["projection_accuracy"],
                             error_thresholds["projection_accuracy_max_selection"])
-    optimize_cameras(chunk,False)
+    optimize_cameras(chunk,False,calibration_mode)
     doc.save()
     #remove points with a reprojection error of above threshold, only removing a set percentage of overall points at a time.
     num_points = len(chunk.tie_points.points)
@@ -354,9 +393,9 @@ def refine_sparse_cloud(doc,chunk,error_thresholds:dict):
                                     Metashape.TiePoints.Filter.ReprojectionError,
                                     error_thresholds["reprojection_error"],
                                     error_thresholds["reprojection_max_selection_per_iteration"])
-        optimize_cameras(chunk,False)
+        optimize_cameras(chunk,False,calibration_mode)
         num_points = len(chunk.tie_points.points)
-    optimize_cameras(chunk,True)
+    optimize_cameras(chunk,True,calibration_mode)
     doc.save()
 
 def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
@@ -391,7 +430,41 @@ def remove_above_error_threshold(chunk, filtertype,max_error,max_points):
             break
     return removed_above_threshold
 
+def fit_plane_normal(points:list)->Metashape.Vector:
+    """Least-squares best-fit plane through 3 or more (approximately) coplanar points, returned as a unit
+    normal vector.
+
+    Using every available point instead of an arbitrary 3 of them averages out each individual marker's
+    placement/detection error instead of the result being entirely at the mercy of whichever 3 happen to
+    get picked. Concretely: on a shoot where the marker rulers ended up several centimeters out of true
+    coplanarity, a 3-point fit came out about 20 degrees off from a fit using all 7 available markers.
+    The fit is also order-independent (unlike a single cross product across 3 named points), and its sign
+    is arbitrary--either normal direction is an equally valid fit--which is fine here since the caller
+    resolves that ambiguity afterward via flip_axis_toward_cameras.
+
+    Parameters:
+    -----------------
+    points: a list of 3+ Metashape.Vector positions expected to lie approximately in a common plane.
+    """
+    coords = np.array([[p.x,p.y,p.z] for p in points])
+    centroid = coords.mean(axis=0) #take the mean of x, y, z
+    _,_,vt = np.linalg.svd(coords-centroid)
+    normal = vt[-1]
+    return Metashape.Vector(normal/np.linalg.norm(normal))
+
 def find_axes_from_markers_in_plane(chunk,palette:dict):
+    """
+    NOTE ON AXIS CONVENTION: this returns the perpendicular (table-normal/"up") axis as axes[2], i.e. Z,
+    not axes[1]/Y like find_axes_from_markers below does. That's deliberate, not an inconsistency to fix:
+    MetashapeTask_BuildOrthomosaic calls chunk.buildOrthomosaic() with no explicit `projection` argument,
+    so Metashape falls back to its own default projection, which looks straight down the chunk's Z axis.
+    If the perpendicular axis ends up in the Y slot instead, buildOrthomosaic() still "succeeds" but
+    produces a degenerate/edge-on orthomosaic instead of a top-down one. find_axes_from_markers (the
+    xpos/zpos-style palette variant, used by MetashapeTask_Reorient for mesh/PLY-export-only workflows
+    that never call buildOrthomosaic) uses Y-up instead, likely to match 3D viewers like Blender that
+    default to Y-up--fine there since no orthomosaic is ever built from that result. Don't unify the two
+    without re-solving this constraint.
+    """
     if not chunk.markers:
         LOGGER.info("No markers to align on chunk %s.",chunk.label)
         return [],[],[]
@@ -399,33 +472,44 @@ def find_axes_from_markers_in_plane(chunk,palette:dict):
         LOGGER.warning("Can't find the markers in a plane if there is no plane specified in the marker palette.")
         return [],[],[]
     plane,xaxispts = [[] for _ in range(2)]
-    markers = chunk.markers
 
-    for m in markers:
-        print(f"markername = {m.label}")
-        if not m.position is None:
-            lookfor = (int)(m.label.split()[1])
-            if lookfor in palette["plane"]:
-                print(f"Plane: Appending marker {m.label} id: {m.key} with position: {m.position}")
-                plane.append({"name":m.label, "id":m.key,"pos":m.position})
-            if lookfor in palette["xaxis"]:
-                print(f"X-Axis: Appending marker {m.label} id: {m.key} with position: {m.position}")
-                xaxispts.append({"name":m.label,"id":m.key,"pos":m.position})
-    if len(xaxispts)>=1 and len(plane)>2:
-        #Wooooo we can calculate this.
-        LOGGER.info("Calculating plane from %s, %s, %s",plane[0]["name"],plane[1]["name"],plane[2]["name"])
-        veca = plane[1]["pos"]-plane[0]["pos"]
-        vecb = plane[2]["pos"]-plane[0]["pos"]
-        z_axis = Metashape.Vector.cross(vecb,veca)*-1.0
-        z_axis.normalize()
+    for m in palette["plane"]:
+        pt = get_numbered_target(m, chunk)
+        if pt is not None and pt.position is not None:
+            print(f"Plane: Appending marker {pt.label} id: {pt.key} with position: {pt.position}")
+            plane.append({"name":pt.label, "id":pt.key,"pos":pt.position})
+    for m in palette["xaxis"]:
+        pt = get_numbered_target(m, chunk)
+        if pt is not None and pt.position is not None:
+            print(f"X-Axis: Appending marker {pt.label} id: {pt.key} with position: {pt.position}")
+            xaxispts.append({"name":pt.label,"id":pt.key,"pos":pt.position})
+
+    if len(xaxispts)>=2 and len(plane)>=3:
+        LOGGER.info("Fitting a plane through %s markers: %s",len(plane),[p["name"] for p in plane])
+        z_axis = fit_plane_normal([p["pos"] for p in plane])
+        #z_axis is the axis actually perpendicular to the marker plane--straight "up" off the table--so
+        #it's the one with a reliable camera-position bias to check against (see flip_axis_toward_cameras).
+        #Resolve its sign *before* deriving x_axis/y_axis from it, so those come out consistent with
+        #whichever way is really "up" instead of the arbitrary sign fit_plane_normal happened to produce.
+        z_axis = flip_axis_toward_cameras(palette,z_axis,xaxispts[0]["pos"],chunk)
         LOGGER.info("Z-axis is %s."%z_axis)
         x_axis = xaxispts[1]["pos"]-xaxispts[0]["pos"]
+        #x_axis is only guaranteed to be *approximately* in-plane, by however precisely that ruler was
+        #actually laid down--same as every other marker used for the plane fit above. Project out
+        #whatever out-of-plane component it has so the resulting frame is exactly orthogonal. This is
+        #sign-independent (z_axis vs -z_axis project out the same component), so it doesn't matter that
+        #z_axis was just flipped.
+        x_axis = x_axis - z_axis*(x_axis*z_axis)
         x_axis.normalize()
         LOGGER.info("X-axis is %s."%x_axis)
+        #y_axis lies *within* the marker plane (perpendicular to x_axis, not to the table), so unlike
+        #z_axis it has no reliable camera-position bias--don't try to sign-check it separately. Deriving
+        #it from the now-corrected z_axis keeps the frame consistently right-handed.
         y_axis  = Metashape.Vector.cross(z_axis,x_axis)
         y_axis.normalize()
-        LOGGER.info("Y-axis is %s."%z_axis)
-        return[x_axis,y_axis,z_axis],plane,xaxispts
+        LOGGER.info("Y-axis is %s."%y_axis)
+        axes = [x_axis,y_axis,z_axis]
+        return axes,plane,xaxispts
 
     else:
         LOGGER.error("Not enough markers to orient model." )
@@ -453,7 +537,40 @@ def rotate_boundingbox(chunk,xyz_degrees:list):
         region.rot = region.rot*rotmat
         chunk.region = region
 
-def find_axes_from_markers(chunk,palette:str):
+def flip_axis_toward_cameras(palette:dict, axis:Metashape.Vector, origin, chunk)->Metashape.Vector:
+    """Returns `axis` (a normalized vector), flipped if necessary so it points toward the average position
+    of cameras that can see this palette's scalebar markers rather than away from them (e.g. into the
+    table). origin is the 3d position of any one marker on the plane the axis was derived from--used as a
+    reference point the cameras should be looking back toward. It doesn't need to be a vertex shared by
+    the x and z axis definitions; any point (approximately) on the plane works equally well here.
+
+    IMPORTANT: only call this on the axis that is actually perpendicular to the marker plane (straight
+    "up" off the table). Every camera has to be on the same side of an opaque table, so that axis has a
+    strong, reliable bias to check against (observed: |dot product| of 0.83-0.96 across several real
+    shoots). An axis that lies *within* the marker plane (e.g. pointing along one ruler, or along the
+    cross product of the true "up" axis with an in-plane axis) has no such bias--cameras orbiting the
+    object don't favor one in-plane direction over another--and checking one of those instead gives a
+    weak, near-coin-flip signal (observed: 0.27-0.49) that flips the wrong way as often as not.
+    """
+    markernumbers = set(pt for bar in palette["scalebars"]["bars"] for pt in bar["points"])
+    observing_cameras = set()
+    for markernum in markernumbers:
+        tm = get_numbered_target(markernum, chunk)
+        if tm is not None:
+            observing_cameras.update(tm.projections.keys())
+    cam_positions = [cam.center for cam in observing_cameras if cam.center]
+    if cam_positions:
+        avg_cam = sum(cam_positions, Metashape.Vector([0,0,0])) * (1.0/len(cam_positions))
+        toward_cameras = avg_cam - origin
+        toward_cameras.normalize()
+        if axis * toward_cameras < 0:
+            print("axis pointed away from the cameras (i.e. into the table)--flipping it.")
+            axis = -1.0*axis
+    else:
+        print("WARNING: no aligned cameras to check axis direction against--sign is not verified.")
+    return axis
+
+def find_axes_from_markers(chunk,palette:dict):
     """Given a chunk with a model on it, and detected markers, use the palette definiton to try to figure out the x, y and z axes.
     
     Parameters:
@@ -468,17 +585,15 @@ def find_axes_from_markers(chunk,palette:str):
         return []
     xaxis = []
     zaxis = []
-    markers = chunk.markers
-    markers.reverse() #generally higher numbers are on the inside, so search from inside out.
-    for m in markers:
-        if not m.position==None:
-            lookforlabel = (int)(m.label.split()[1]) #get the number of the label to look for it in the list of axes.
-            if lookforlabel in palette["axes"]["xpos"] or lookforlabel in palette["axes"]["xneg"]:
-                xaxis.append(m.position)
-            if lookforlabel in palette["axes"]["zpos"] or lookforlabel in palette["axes"]["zneg"]:
-                zaxis.append(m.position)
-            if len(xaxis)>=2 and len(zaxis)>=2:
-                break
+    expectedaxes =palette["axes"]
+    for m in expectedaxes["xpos"]+expectedaxes["xneg"]:
+        pt = get_numbered_target(m, chunk)
+        if pt is not None and pt.position is not None:
+            xaxis.append(pt.position)
+    for z in expectedaxes["zpos"]+expectedaxes["zneg"]:
+        pt = get_numbered_target(z, chunk)
+        if pt is not None and pt.position is not None:
+            zaxis.append(pt.position)
     if len(xaxis)<2 or len(zaxis) <2:
         print("Not enough data to determine x and z axes.")
         return []
@@ -488,7 +603,13 @@ def find_axes_from_markers(chunk,palette:str):
     ux.normalize()
     uz.normalize()
     yaxis.normalize()
-    return [ux,yaxis,uz]
+    #Unlike find_axes_from_markers_in_plane, yaxis here *is* the axis perpendicular to the marker plane
+    #(ux and uz are both in-plane edge directions), so it's the correct one to check against cameras.
+    yaxis = flip_axis_toward_cameras(palette,yaxis,xaxis[0],chunk)
+    axes = [ux,yaxis,uz]
+    print(f"returning axes {axes}")
+    return axes
+
 def move_model_to_world_origin(chunk):
     
     """Uses the center of the bounding box as a substitute for the center of the model, and translates the model to world zero based

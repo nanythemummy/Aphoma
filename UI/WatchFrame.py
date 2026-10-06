@@ -71,19 +71,20 @@ class WatchFrame(PipelineFrameBase):
         
     def task(self,args:WatchFormItems):
         try:
+            self.schedule_on_main_thread(self.disable_enable_all, True)
             self.cancel_event.clear()
             maskoption = args.masking_option.get()
             mask_option = UIConsts.MASKOPTIONS[maskoption]
             Configurator.getConfig().setProperty("processing","ListenerDefaultMasking", MaskingOptions.numToFriendlyString(mask_option))
             #phscripts.Watcher(args.input_dir.get(), False) 
-            self.stopbutton.configure(state="normal")
+            self.schedule_on_main_thread(self.stopbutton.configure, state="normal")
             phscripts.startWatcher(args.input_dir.get(),self.cancel_event) 
 
         except Exception as e:
-            messagebox.showerror("Build Exception",e)
+            self.schedule_on_main_thread(messagebox.showerror, "Build Exception", str(e))
             raise e
         finally:
-            self.disable_enable_all(False)
+            self.schedule_on_main_thread(self.disable_enable_all, False)
 
     def __init__(self,container):
 

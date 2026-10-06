@@ -31,6 +31,7 @@ class ErrorCodes(Enum):
     EXTERNAL_EXECUTABLE_MISSING = 26
     INVALID_BLENDER_SCRIPT_DIRECTORY=27
     BLENDER_SCRIPT_FAILURE = 28
+    MARKER_CONSISTENCY_FAILURE = 29
 
 
     @classmethod
@@ -63,7 +64,8 @@ class ErrorCodes(Enum):
                 "No masks were found",
                 "Missing external executable",
                 "Invalid blender script directory. Check config.",
-                "Blender Script Failure"]
+                "Blender Script Failure",
+                "Marker shape inconsistent with anchor band."]
     @classmethod
     def numToFriendlyString(cls, num): 
         if isinstance(num, ErrorCodes):

@@ -72,7 +72,8 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
             code = ErrorCodes.NONE
         if self.usemasks and not self.maskpath.exists():
             return False, ErrorCodes.NO_MASKS_AVAILABLE
-        if len(self.photos)==0 or len([i for i in self.photos if Path(i).is_file() and Path(i).suffix.upper()==".JPG"])==0:
+        pics = [i for i in self.photos if Path(i).is_file() and Path(i).suffix.upper()==".JPG"]
+        if len(self.photos)==0 or len(pics)==0:
             return False, ErrorCodes.INVALID_FILE
         if not self.input.exists():
             return False, ErrorCodes.INVALID_FILE
@@ -81,8 +82,12 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
     def loadPhotos(self):
         if len(self.photos)>0:
             for i in self.photos:
+                #self.photos entries are already complete paths (e.g. references built under the
+                #project dir's references/ folder, not under self.input)--joining against self.input
+                #here only ever "worked" because Path(a, b) discards a once b is absolute, which broke
+                #as soon as a caller passed relative sourcedir/projectdir arguments.
                 if Path(i).suffix.upper() ==".JPG":
-                    self.chunk.addPhotos(str(Path(self.input,i)))
+                    self.chunk.addPhotos(str(Path(i)))
         else:
             subdirs = [p for p in self.input.iterdir() if p.is_dir()]
             if len(subdirs)==0:
@@ -166,10 +171,13 @@ class MetashapeTask_AlignPhotos(MetashapeTask):
                 return success, code
             unaligned = self.checkAlignment()
             if len(unaligned)>0:
-                success = False
-                code = ErrorCodes.UNALIGNED_CAMERAS
-                getLogger(__name__).error("failing execution due to unaligned cameras %s on chunk %s", self.chunk.label, unaligned)
-                return success, code
+                failonunaligned= Configurator.getConfig().getProperty("photogrammetry","fail_on_unaligned")
+                if failonunaligned:
+                    success = False
+                    code = ErrorCodes.UNALIGNED_CAMERAS
+                    getLogger(__name__).error("failing execution due to unaligned cameras %s on chunk %s", self.chunk.label, unaligned)
+                else:
+                    getLogger(__name__).warning("There are unaligned cameras %s on chunk %s", self.chunk.label, unaligned)
         return success, code
 
 class MetashapeTask_AddScales(MetashapeTask):
@@ -275,14 +283,25 @@ class MetashapeTask_AlignChunks(MetashapeTask):
         for chunk in self.doc.chunks:
             if len(names)==0 or chunk.label in names:
                 chunklist.append(chunk.key)
+        if self.chunk.key not in chunklist:
+            chunklist.append(self.chunk.key) #the referrence chunk must be in the list. This code should only be run with self.chunk=reference.
         return chunklist
 
     @timed(Statistic_Event_Types.EVENT_ALIGN_CHUNKS)
     def execute(self):
+        if self.chunk.orthomosaic:
+            #self.chunk is the reference/anchor chunk for this alignment (e.g. visvis for a given
+            #side). An orthomosaic already existing on it means this side's pipeline already finished
+            #on an earlier run, including whatever alignment was needed. Re-solving alignChunks() again
+            #here re-fits every other band against the anchor's *current* markers, which isn't perfectly
+            #numerically idempotent--repeated re-runs against an already-finished project were observed
+            #to measurably degrade previously-good cross-band marker alignment over several passes.
+            getLogger(__name__).info("Chunk %s already has an orthomosaic; skipping re-alignment.",self.chunkname)
+            return True, ErrorCodes.NONE
         if self.alignType == AlignmentTypes.ALIGN_BY_MARKERS:
             chunkstoalign = self.buildChunklist()
-            markerlist = [marker.key for marker in self.chunk.markers]
-            self.doc.alignChunks(chunkstoalign,self.chunk.key,method=1,markers=markerlist)
+            markerlist =list(range(len(self.chunk.markers))) #this may be version dependent. The code I'm running on the mac may have used keys instead of indices.
+            self.doc.alignChunks(chunkstoalign,self.chunk.key,method=1,fit_scale=True,markers=markerlist)
             self.doc.save()
         return True, ErrorCodes.NONE
     
@@ -328,7 +347,7 @@ class MetashapeTask_DetectMarkers(MetashapeTask):
                 if self.palette_name:
                     getLogger(__name__).info("Finding markers as defined in %s.", self.palette_name)
                     if not self.chunk.markers:
-                        ModelHelpers.detect_markers(self.chunk,self.palette_info["type"])
+                        ModelHelpers.detect_markers(self.chunk,self.palette_info)
                         self.doc.save()
             except Exception as e:
                 getLogger(__name__).error(e)
@@ -358,23 +377,26 @@ class MetashapeTask_ErrorReduction(MetashapeTask):
         input:str a directory of pictures to operate on.
         output:str a place to put the results--this is the parent folder of the picture folder, usually.
         chunkname:str label of the chunk to operate on.
+        calibration_mode:str optional, one of "full" (default), "reduced", or "fixed"--see
+            ModelHelpers.optimize_cameras() for what each does. Defaults to "full", i.e. today's behavior.
         For it to run successfully, it the chunk it is operating on must have tie points but no model.
 
     """
     def __init__(self,argdict:dict):
         super().__init__(argdict)
-        
+        self.calibration_mode = argdict.get("calibration_mode","full")
+
     def __repr__(self):
         return "Metashape Task: Error Reduction Workflow"
-    
+
     @timed(Statistic_Event_Types.EVENT_BUILD_MODEL)
     def execute(self):
         success,code = super().execute()
         if success:
-            try:     
-                if self.chunk.tie_points and not self.chunk.model:  
+            try:
+                if self.chunk.tie_points and not self.chunk.model:
                     thresholds = Configurator.getConfig().getProperty("photogrammetry","error_thresholds")
-                    ModelHelpers.refine_sparse_cloud(self.doc, self.chunk,thresholds)
+                    ModelHelpers.refine_sparse_cloud(self.doc, self.chunk,thresholds,self.calibration_mode)
             except Exception as e:
                 getLogger(__name__).error(e)
                 code = ErrorCodes.UNKNOWN
@@ -418,10 +440,10 @@ class MetashapeTask_BuildModel(MetashapeTask):
                 self.chunk.buildModel(source_data = Metashape.DataSource.DepthMapsData, 
                                         face_count = facecountconst,
                                         face_count_custom = targetfacecount)
-                getLogger(__name__).info("Cleaning up blobs on Model.")
-                ModelHelpers.cleanup_blobs(self.chunk)
-                getLogger(__name__).info("Closing Holes.")
-                ModelHelpers.close_holes(self.chunk)
+                #getLogger(__name__).info("Cleaning up blobs on Model.")
+                #ModelHelpers.cleanup_blobs(self.chunk)
+                #getLogger(__name__).info("Closing Holes.")
+                #ModelHelpers.close_holes(self.chunk)
             try:
                 self.doc.save()
             except OSError as e:
@@ -491,7 +513,6 @@ class MetashapeTask_BuildTextures(MetashapeTask):
 
 
 class MetashapeTask_Reorient(MetashapeTask):
-
     """
     Task object for reorienting a model in space based on a pre-defined x and y axis. It requires:
         input:str a directory of pictures to operate on.
@@ -585,6 +606,25 @@ class MetashapeTask_ExportModel(MetashapeTask):
         return success, code  
     
 class MetashapeTask_ExportOrthomosaic(MetashapeTask):
+    """
+    Task object for exporting a chunk's orthomosaic. It requires:
+        input: str - a directory of pictures to operate on.
+        output: str - a place to put the results (parent folder of the picture folder, usually).
+        chunkname: str - label of the chunk to operate on.
+        referencechunk: str, optional - label of another chunk (already exported) whose exact pixel
+            region/dimensions this export should be forced to match, so pixel-for-pixel overlay between
+            bands is guaranteed rather than assumed. buildOrthomosaic()'s region-to-pixel-grid rounding
+            doesn't always land on the same width/height twice even when given the same real-world
+            region (observed a consistent 1px discrepancy between a reference chunk's own build and a
+            chunk built by copying that reference's region)--this sidesteps that entirely by passing an
+            explicit region/width/height straight to exportRaster() instead of trusting it to
+            re-derive the same pixel grid from the region alone.
+    For it to run successfully, the chunk must have an orthomosaic.
+    """
+    def __init__(self, argdict: dict):
+        super().__init__(argdict)
+        self.referencechunkname = argdict.get("referencechunk", None)
+        self.referencechunk = None
 
     def __repr__(self):
         return "Metashape Task: Export Orthomosaic"
@@ -597,20 +637,49 @@ class MetashapeTask_ExportOrthomosaic(MetashapeTask):
                 getLogger(__name__).warning("Failing the orthomosaic export because there's no orthomosaic for chunk %s",self.chunkname)
                 success = False
                 code = ErrorCodes.NO_ORTHOMOSAIC
+            if success and self.referencechunkname:
+                for c in self.doc.chunks:
+                    if c.label == self.referencechunkname:
+                        self.referencechunk = c
+                        break
+                if self.referencechunk is None:
+                    getLogger(__name__).warning("Reference chunk %s for orthomosaic export sizing not found; %s will export at its own dimensions instead.",self.referencechunkname,self.chunkname)
         return success,code
-    
-    @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)      
+
+    @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)
     def execute(self):
         success, code = super().execute()
         if success:
             resolutionx = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x"))
             resolutiony = float(Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y"))
+            #Always pin the export to an explicit region/width/height taken from a chunk.orthomosaic's
+            #own already-built properties, rather than letting exportRaster() derive pixel dimensions
+            #from "resolution" alone--that derivation doesn't reliably reproduce chunk.orthomosaic's own
+            #declared width/height (observed a real, reproducible 1px mismatch between an orthomosaic's
+            #declared dimensions and what a resolution-only export actually wrote to disk, even for a
+            #chunk exporting its own orthomosaic with no reference chunk involved). Source chunk is the
+            #reference chunk if one was given (so sibling bands land on its exact pixel grid), else the
+            #chunk's own orthomosaic (so even a self-exporting chunk like visvis is pinned consistently).
+            if self.referencechunk is not None and self.referencechunk.orthomosaic is not None:
+                sourceortho = self.referencechunk.orthomosaic
+                getLogger(__name__).info("Forcing orthomosaic export for %s to match reference chunk %s's exact pixel grid (%sx%s).",
+                                          self.chunkname, self.referencechunkname, sourceortho.width, sourceortho.height)
+            else:
+                sourceortho = self.chunk.orthomosaic
+            region = Metashape.BBox()
+            region.min = Metashape.Vector([sourceortho.left, sourceortho.bottom])
+            region.max = Metashape.Vector([sourceortho.right, sourceortho.top])
+            exportargs = {
+                "format": Metashape.RasterFormat.RasterFormatTiles,
+                "image_format": Metashape.ImageFormat.ImageFormatTIFF,
+                "raster_transform": Metashape.RasterTransformType.RasterTransformNone,
+                "resolution": resolutionx,
+                "region": region,
+                "width": sourceortho.width,
+                "height": sourceortho.height,
+            }
             self.chunk.exportRaster(str(Path(self.output,self.outputfolder,f"{self.chunkname}_Orthomosaic.tif")),
-                                    format = Metashape.RasterFormat.RasterFormatTiles,
-                                    image_format=Metashape.ImageFormat.ImageFormatTIFF,
-                                    raster_transform = Metashape.RasterTransformType.RasterTransformNone,
-                                    resolution_x=resolutionx,
-                                    resolution_y = resolutiony)
+                                    **exportargs)
         return success, code
     
     def exit(self):
@@ -630,36 +699,68 @@ class MetashapeTask_BuildOrthomosaic(MetashapeTask):
         input: str - a directory of pictures to operate on.
         output: str - a place to put the results (parent folder of the picture folder, usually).
         chunkname: str - label of the chunk to operate on.
+        referencechunk: str, optional - label of another chunk whose already-built orthomosaic's
+            projection and footprint should be reused, so the two orthomosaics come out with matching
+            pixel dimensions. Without this, buildOrthomosaic() ignores chunk.region entirely and
+            auto-flattens/auto-crops to that chunk's own reconstructed geometry, which is why chunks
+            that should represent the same physical extent (e.g. different bands of the same board
+            face) can otherwise come out different sizes even after their regions are unified with
+            MetashapeTask_CopyBoundingBoxToChunks.
     For it to run successfully, the chunk must have a model and no orthomosaic.
     """
     def __init__(self, argdict: dict):
         super().__init__(argdict)
+        self.referencechunkname = argdict.get("referencechunk", None)
+        self.referencechunk = None
 
     def __repr__(self):
         return "Metashape Task: Build Orthomosaic"
-    
+
     def setup(self):
         success,code = super().setup()
         if not self.chunk.model:
             success = False
             code = ErrorCodes.NO_MODEL_FOUND
+        if success and self.referencechunkname:
+            for c in self.doc.chunks:
+                if c.label == self.referencechunkname:
+                    self.referencechunk = c
+                    break
+            if self.referencechunk is None:
+                getLogger(__name__).warning("Reference chunk %s for orthomosaic framing not found; %s will get its own auto-computed extent instead.",self.referencechunkname,self.chunkname)
         return success,code
-    
+
     @timed(Statistic_Event_Types.EVENT_BUILD_ORTHOMOSAIC)
     def execute(self):
         success, code = super().execute()
-        if success: 
+        if success:
             # Only build orthomosaic if there is a model and no orthomosaic yet
             if self.chunk.model and not self.chunk.orthomosaic:
+                #No `projection` is passed below (unless referencechunk gives us one to reuse), so
+                #Metashape falls back to its default projection--which looks straight down the chunk's Z
+                #axis. The chunk's transform must therefore have its table-normal/"up" axis in the Z slot
+                #(not Y) or this silently builds a degenerate, edge-on orthomosaic instead of a top-down
+                #one. See the NOTE ON AXIS CONVENTION in ModelHelpers.find_axes_from_markers_in_plane.
                 getLogger(__name__).info("Building Orthomosaic.")
                 scalex = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_x")
                 scaley = Configurator.getConfig().getProperty("photogrammetry","orthomosaic_mtopixel_y")
-                self.chunk.buildOrthomosaic(
-                    surface_data=Metashape.DataSource.ModelData,
-                    blending_mode=Metashape.BlendingMode.MosaicBlending,
-                    resolution_x=scalex,
-                    resolution_y=scaley
-                )
+                buildargs = {
+                    "surface_data":Metashape.DataSource.ModelData,
+                    "blending_mode":Metashape.BlendingMode.MosaicBlending,
+                    "resolution_x":scalex,
+                    "resolution_y":scaley,
+                }
+                if self.referencechunk is not None and self.referencechunk.orthomosaic is not None:
+                    #Reuse the reference chunk's exact projection/footprint so this orthomosaic comes out
+                    #with the same pixel dimensions instead of auto-cropping to this chunk's own geometry.
+                    refortho = self.referencechunk.orthomosaic
+                    region = Metashape.BBox()
+                    region.min = Metashape.Vector([refortho.left,refortho.bottom])
+                    region.max = Metashape.Vector([refortho.right,refortho.top])
+                    buildargs["projection"] = refortho.projection
+                    buildargs["region"] = region
+                    getLogger(__name__).info("Framing orthomosaic for %s to match reference chunk %s.",self.chunkname,self.referencechunkname)
+                self.chunk.buildOrthomosaic(**buildargs)
             try:
                 self.doc.save()
             except OSError as e:

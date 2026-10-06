@@ -2,11 +2,8 @@ from tkinter import END
 import platform
 from tkinter.scrolledtext import ScrolledText
 import sys
-import os
 import threading
-import time
 import logging
-
 
 
 class BuildConsole(ScrolledText):
@@ -38,6 +35,47 @@ class BuildConsole(ScrolledText):
         if platform.system() == 'Darwin':
             self.unbind_all("<Button-4>")
             self.unbind_all("<Button-5>")
+
+
+class ConsoleStream:
+    def __init__(self, text_widget, stream):
+        self.text_widget = text_widget
+        self.stream = stream
+        self._lock = threading.Lock()
+
+    def write(self, message):
+        if not message:
+            return 0
+
+        with self._lock:
+            self.stream.write(message)
+            normalized = self._normalize(message)
+            self.text_widget.after(0, self._append_to_widget, normalized)
+        return len(message)
+
+    def _normalize(self, message):
+        return message.replace("\r\n", "\n").replace("\r", "\n")
+
+    def _append_to_widget(self, message):
+        self.text_widget.configure(state="normal")
+        self.text_widget.insert(END, message)
+        self.text_widget.configure(state="disabled")
+        self.text_widget.yview(END)
+
+    def flush(self):
+        if self.stream is not None:
+            self.stream.flush()
+
+    def isatty(self):
+        return getattr(self.stream, "isatty", lambda: False)()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+def install_console_streams(text_widget):
+    sys.stdout = ConsoleStream(text_widget, sys.stdout)
+    sys.stderr = ConsoleStream(text_widget, sys.stderr)
 
 
 class TextHandler(logging.Handler):

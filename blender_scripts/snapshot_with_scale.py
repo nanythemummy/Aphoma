@@ -86,7 +86,7 @@ def build_position_scale(scalesizecm,  objectname):
     bpy.ops.object.modifier_add(type='BOOLEAN')
     newmodifier = bpy.context.object.modifiers["Boolean"]
     newmodifier.object=bpy.data.objects["fontobj"]
-    newmodifier.solver="FAST"
+    newmodifier.solver="EXACT"
     newmodifier.operation = "DIFFERENCE"
     bpy.ops.object.modifier_apply(modifier="Boolean")
     bpy.ops.object.select_all(action="DESELECT")

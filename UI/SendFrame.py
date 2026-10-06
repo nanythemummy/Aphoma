@@ -47,19 +47,19 @@ class SendFrame(PipelineFrameBase):
                 
     def task(self,args:SendFormItems):
         try:
-            self.disable_enable_all(True)
+            self.schedule_on_main_thread(self.disable_enable_all, True)
             self.state = "running"
             Configurator.getConfig().setProperty("ortery","networkdrive",args.target_dir.get())
             phscripts.PRUNE = args.should_prune.get()
             self.watcher = phscripts.PhotoSender(args.input_dir.get(), True, args.projectname.get()) 
             self.watcher.maskmode = 0
-            self.stopbutton.configure(state="normal")
+            self.schedule_on_main_thread(self.stopbutton.configure, state="normal")
             self.watcher.run()
         except Exception as e:
-            messagebox.showerror("Build Exception",e)
+            self.schedule_on_main_thread(messagebox.showerror, "Build Exception", str(e))
             raise e
         finally:
-            self.disable_enable_all(False)
+            self.schedule_on_main_thread(self.disable_enable_all, False)
 
     def __init__(self,container):
 

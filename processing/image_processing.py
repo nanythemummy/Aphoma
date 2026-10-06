@@ -23,6 +23,8 @@ from util.PipelineLogging import getLogger
 from processing import maskingAlgorithms
 from tasks import MaskingTasks
 
+PILImage.MAX_IMAGE_PIXELS = None
+
 
 def build_masks(imagepath,outputdir,mode):
     
@@ -251,11 +253,20 @@ def convertToGrayscaleAdjustBrightness(inputpath:Path, outputpath:Path, togray=T
         #uses CV2, and I think that might be easy to just write by hand. To do later.
 
         imarr = np.array(im)
+        alpha = None
+        if imarr.ndim == 3 and imarr.shape[2] == 4:
+            #Keep alpha out of all the color/brightness processing below--cv2's *2BGR/*2RGB conversion
+            #codes aren't meant for a 4th channel, and letting cv2.multiply(brightness) scale alpha
+            #(e.g. uvuv/uvvis's 1.9x) would corrupt transparency instead of just adjusting visible
+            #brightness. Orthomosaic exports can carry alpha now (transparent padding where an export
+            #was pinned to a wider reference chunk's pixel grid than its own reconstructed extent).
+            alpha = imarr[:,:,3]
+            imarr = imarr[:,:,:3]
         imarr = cv2.cvtColor(imarr,cv2.COLOR_RGB2BGR)
         output_image = imarr
         if togray:
             if not eightbit: #ie, if we want to keep the rgb channels, and just set them to the same thing,
-                output_image = np.zeros_like(imarr) 
+                output_image = np.zeros_like(imarr)
                 sourcechannel = imarr[:,:,util.ColorChannelConstants(channeltouse).value]
                 output_image[:,:,0]=sourcechannel
                 output_image[:,:,1]=sourcechannel
@@ -265,10 +276,27 @@ def convertToGrayscaleAdjustBrightness(inputpath:Path, outputpath:Path, togray=T
         output_image=cv2.multiply(output_image,brightness)
         if not togray or not eightbit:
            output_image= cv2.cvtColor(output_image,cv2.COLOR_BGR2RGB)
+           if alpha is not None:
+               output_image = np.dstack([output_image, alpha])
         #copy exif data to img_out
 
         out = PILImage.fromarray(output_image)
         #if eightbit:
         #    out = out.convert("L")
         exif = im.getexif()
-        out.save(outputpath)
+        #Callers may pass the same path for inputpath and outputpath (e.g. convertOrthomosaicsToGray,
+        #which brightens/grays an orthomosaic in place). Saving directly to outputpath here would write
+        #to a file that's still open for reading via the enclosing `with PILImage.open(inputpath) as im`
+        #block--harmless on macOS/Linux, but Windows enforces exclusive file locks and raises
+        #"[WinError 32] The process cannot access the file because it is being used by another process."
+        #TIFF in particular is read lazily by Pillow, so im's file handle stays open for its whole
+        #lifetime, not just until the array read above--moving the save earlier wouldn't avoid this.
+        #Write to a temp file in the same directory and swap it in afterward instead: this sidesteps the
+        #same-file lock entirely, and as a bonus leaves the original file intact if the save fails
+        #partway, rather than a corrupted half-written image.
+        outputpath = Path(outputpath)
+        #Keep outputpath's real suffix (.tif, etc) at the end rather than after it, or Pillow can't infer
+        #the save format from the temp filename and raises "unknown file extension".
+        tmppath = outputpath.with_name(f".{outputpath.stem}.tmp{outputpath.suffix}")
+        out.save(tmppath)
+    os.replace(tmppath, outputpath)
