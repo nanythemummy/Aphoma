@@ -60,6 +60,7 @@
             "model_quality":2,
             "mask_path": "Masks",
             "output_path":"Output",
+            "reference_path":"_reference",
             "mask_ext":".png",
             "error_thresholds":{
                 "reconstruction_uncertainty":15,

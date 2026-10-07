@@ -86,8 +86,10 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
         A dictionary that is the same chunks dictionary as passed in where each band key has a new references key pointing to a list of paths containing the references 
         for each band. 
     """
+    
     multibanded_types= Configurator.getConfig().getProperty("photogrammetry","multibanded")
-    referencepath = Path(basedir,"references")
+    refpath = Configurator.getConfig().getProperty("photogrammetry","reference_path")
+    referencepath = Path(basedir,refpath)
     if not referencepath.exists():
         os.mkdir(referencepath)
     for k,v in chunks.items():
@@ -111,13 +113,6 @@ def setupReferences(chunks:dict,basedir:Path)->dict:
                     getGlobalLogger(__name__).error("Reference channel images %s do not have identical numbers to current band %s",referencefiles,k)
                     return None
                 elif clone:
-                    #expectedpath.exists() above resolves case-insensitively (macOS), but the filesystem
-                    #being case-insensitive doesn't make expectedpath's *string* match referencefiles' own
-                    #on-disk filename case--and referencefiles' own pass through this loop (the "else"
-                    #branch below, on its own self-referencing iteration) names its reference file using
-                    #that real on-disk name verbatim. So look up referencefiles' actual (correctly-cased)
-                    #file for this same photo rather than re-deriving it via string substitution, or the
-                    #path built here can silently name a file referencefiles never actually creates.
                     realfile = next((f for f in chunks[referencefiles][fb]["files"] if f.name.lower()==expectedpath.name.lower()), expectedpath)
                     fbv["references"].append(Path(referencepath,f"{realfile.stem}_ref_{expectedpath.stem}{expectedpath.suffix}"))
                 else:
@@ -472,7 +467,8 @@ def build_multibanded_cmd(args):
     if chunks != None:
         tasks = setupTasksPhaseOne(chunks, Path(sourcedir),projectname,Path(projdir),sides)
         executeTasklist(tasks)
-        convertOrthomosaicsToGray(projectname,chunks,Path(projdir,"output"))
+        outputdir = Configurator.getConfig().getProperty("photogrammetry","output_path")
+        convertOrthomosaicsToGray(projectname,chunks,Path(projdir,outputdir))
        
 if __name__=="__main__":
     multibandparser = argparse.ArgumentParser()
