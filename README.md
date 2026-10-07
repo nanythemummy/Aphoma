@@ -1,3 +1,5 @@
+If you are looking for documentation for the multibanded_boards tool which builds orthomosaics from multibanded photographs, look here: [Multi-Banded Boards](Multibanded_README.md)
+
 # Aphoma Photogrammetry Asset Pipeline (UI and Command-line tools)
 
 Automated asset pipeline for building 3D Models with Photogrammetry, either using an ortery or pictures taken manually. It does the following:
@@ -31,13 +33,15 @@ In the Windows cmd terminal, powershell terminal, or Unix terminal, do the follo
   venv\scripts\activate.bat
   ```
 ### Install the dependencies 
-These are all in requirements text except for metashape, which you cannot get from pip. Download and Install the Metashape standalone python module from the [Agisoft Download Page](httpw://www.agisoft.com/downloads) Note that you must have a license for metashape professional for this to work. Note that if you are using Python 3.12, as of 6/14/2024, they have not made the module explicitly compatible with it yet. It does in fact work. You just need to rename the file from Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311-none-win_amd64 to Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64
-Now, install the wheel for metashape and then install the requirements in the normal way. The following assumes you downloaded the metashape wheel into the downloads directory.
+`requirements.txt` installs everything, including Metashape. You don't need to download the wheel separately or run a second `pip install` unless your institution blocks agisoft's doman, in which case you, do. In this case, download it, and run `pip install <path to wheel>'`.  
 
 ```
   pip install -r requirements.txt
-  pip install %USERPROFILE%\Downloads\Metashape-2.1.1-cp37.cp38.cp39.cp310.cp311.cp312-none-win_amd64.whl
 ```
+
+Note that you must have a license for Metashape Professional for this to work.
+
+If pip reports no matching distribution for your Python version, it's almost always because the wheel's filename doesn't list your interpreter's `cpXY` tag. The wheels currently referenced declare the `abi3` stable ABI (compatible tags `cp37` through `cp311`), which pip should treat as forward-compatible with newer Python versions automatically — but if you hit this on a very new Python release, download the wheel yourself from the Agisoft Download Page, rename it to add your version's tag to the dot-joined list (e.g. `...cp310.cp311.cp312-abi3-...`), and `pip install` that file directly instead of via `requirements.txt`.
 ## Using the UI
 Using the UI is much more straightforward than using the command line. You can start it at the moment by typing:
 ```
